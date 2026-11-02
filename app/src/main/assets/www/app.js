@@ -23,7 +23,15 @@
   var CLOCKS = [['24', '24시간'], ['12', '12시간'], ['off', '숨김']];
   var DIMS = ['없음', '약하게', '보통', '강하게'];
   var DIM_VALUES = [0.05, 0.22, 0.4, 0.58];
-  var NIGHT_FROM = 19, NIGHT_TO = 6;   // 19:00 – 06:00 uses the night background
+  var NIGHT_FROM = 19, NIGHT_TO = 6;
+  // Weather: Open-Meteo (free, no key). The TV has no location, so the city is chosen in Appearance.
+  var CITIES = [
+    ['seoul', '서울', 37.5665, 126.978], ['incheon', '인천', 37.4563, 126.7052], ['suwon', '수원', 37.2636, 127.0286],
+    ['chuncheon', '춘천', 37.8813, 127.7298], ['gangneung', '강릉', 37.7519, 128.8761], ['daejeon', '대전', 36.3504, 127.3845],
+    ['cheongju', '청주', 36.6424, 127.489], ['daegu', '대구', 35.8714, 128.6014], ['jeonju', '전주', 35.8242, 127.148],
+    ['gwangju', '광주', 35.1595, 126.8526], ['busan', '부산', 35.1796, 129.0756], ['ulsan', '울산', 35.5384, 129.3114],
+    ['changwon', '창원', 35.2279, 128.6811], ['jeju', '제주', 33.4996, 126.5312]
+  ];   // 19:00 – 06:00 uses the night background
   var PROFILE_NAMES = ['나', '가족', '아빠', '엄마', '아이', '손님', '거실', '침실'];
   var PROFILE_COLORS = ['#8fb4ff', '#ffb36b', '#7ee0b0', '#ff8fb1', '#c7a6ff', '#ffd76b'];
   // Apps put on the home screen first when a profile starts with no list yet.
@@ -34,7 +42,7 @@
   ];
   var CAT_NAMES = ['즐겨찾기', '영화·드라마', '예능', '음악', '키즈', '게임', '스포츠', '뉴스', '유틸리티', '기타'];
   // cats: the home screen's rows, in order. cat: pkg -> row id (an app without one sits in the first row).
-  var DEFAULTS = { design: 'glass', clock: '24', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null, locked: null };
+  var DEFAULTS = { design: 'glass', clock: '24', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null, locked: null, weather: null };
   Object.keys(DESIGNS.glass.p).forEach(function (k) { DEFAULTS[k] = DESIGNS.glass.p[k]; });
 
   // ---------- state ----------
@@ -178,6 +186,65 @@
     next.src = url;
   }
 
+  // ---------- weather ----------
+  var wx = { city: null, at: 0, data: null, busy: false };
+  function cityOf(id) { for (var i = 0; i < CITIES.length; i++) if (CITIES[i][0] === id) return CITIES[i]; return null; }
+  function wxText(code) {
+    if (code === 0) return '맑음';
+    if (code === 1) return '대체로 맑음';
+    if (code === 2) return '구름 조금';
+    if (code === 3) return '흐림';
+    if (code === 45 || code === 48) return '안개';
+    if (code >= 51 && code <= 57) return '이슬비';
+    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return code >= 80 ? '소나기' : '비';
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return '눈';
+    if (code >= 95) return '뇌우';
+    return '';
+  }
+  function wxIcon(code, day) {
+    var sun = '<circle cx="12" cy="12" r="4.2" fill="#ffd76b"/><g stroke="#ffd76b" stroke-width="1.6" stroke-linecap="round"><path d="M12 2.8v2.2M12 19v2.2M2.8 12H5M19 12h2.2M5.5 5.5l1.6 1.6M16.9 16.9l1.6 1.6M5.5 18.5l1.6-1.6M16.9 7.1l1.6-1.6"/></g>';
+    var moon = '<path d="M15.5 3.5a8.5 8.5 0 1 0 5 13.6A7 7 0 0 1 15.5 3.5Z" fill="#dfe6ff"/>';
+    var cloud = function (y, c) { return '<path d="M7 ' + (17 + y) + 'h10a4 4 0 0 0 .3-8 5.5 5.5 0 0 0-10.6 1.4A3.3 3.3 0 0 0 7 ' + (17 + y) + 'Z" fill="' + (c || '#e8edf7') + '"/>'; };
+    var drops = '<g stroke="#8fc1ff" stroke-width="1.6" stroke-linecap="round"><path d="M9 19.5l-1 2.5M13 19.5l-1 2.5M17 19.5l-1 2.5"/></g>';
+    var flakes = '<g fill="#fff"><circle cx="8.5" cy="21" r="1.1"/><circle cx="12.5" cy="22" r="1.1"/><circle cx="16.5" cy="21" r="1.1"/></g>';
+    var body;
+    if (code <= 1) body = day ? sun : moon;
+    else if (code === 2) body = '<g transform="translate(-3,-4) scale(.8)">' + (day ? sun : moon) + '</g>' + cloud(1);
+    else if (code === 3) body = cloud(0, '#cfd6e4');
+    else if (code === 45 || code === 48) body = '<g stroke="#dfe4ee" stroke-width="1.8" stroke-linecap="round"><path d="M4 9h16M3 13h18M5 17h14"/></g>';
+    else if ((code >= 71 && code <= 77) || code === 85 || code === 86) body = cloud(-3) + flakes;
+    else if (code >= 95) body = cloud(-3, '#aeb7c8') + '<path d="M12.5 15l-2.5 4h3l-2 4" fill="none" stroke="#ffd76b" stroke-width="1.6" stroke-linejoin="round"/>';
+    else body = cloud(-3, '#cfd6e4') + drops;
+    return '<svg viewBox="0 0 24 24" aria-hidden="true">' + body + '</svg>';
+  }
+  function showWeather() {
+    var el = $('weather'), c = cityOf(P.weather);
+    if (!c || !wx.data || wx.city !== P.weather) { el.hidden = true; return; }
+    var cur = wx.data.current || {}, day = wx.data.daily || {};
+    var hi = day.temperature_2m_max && day.temperature_2m_max[0], lo = day.temperature_2m_min && day.temperature_2m_min[0];
+    el.innerHTML = wxIcon(cur.weather_code, cur.is_day !== 0) + '<b>' + Math.round(cur.temperature_2m) + '°</b>' +
+      '<span>' + esc(c[1]) + ' · ' + wxText(cur.weather_code) + (hi !== undefined ? ' · 최고 ' + Math.round(hi) + '° 최저 ' + Math.round(lo) + '°' : '') + '</span>';
+    el.hidden = false;
+  }
+  // Fetches at most every 30 minutes (or when the city changes).
+  function refreshWeather(force) {
+    var c = cityOf(P.weather);
+    if (!c) { showWeather(); return; }
+    var fresh = wx.city === c[0] && Date.now() - wx.at < 30 * 60 * 1000;
+    if ((fresh && !force) || wx.busy) { showWeather(); return; }
+    wx.busy = true;
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + c[2] + '&longitude=' + c[3] +
+      '&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1';
+    fetch(url).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (d) {
+      wx = { city: c[0], at: Date.now(), data: d, busy: false };
+      showWeather();
+    }).catch(function () {
+      wx.busy = false;
+      if (wx.city !== c[0]) { wx.at = Date.now(); wx.city = null; }   // try again in 30 minutes
+      showWeather();
+    });
+  }
+
   // ---------- clock ----------
   function tick() {
     var d = new Date();
@@ -187,6 +254,7 @@
     else t.textContent = ('0' + h).slice(-2) + ':' + m;
     $('date').textContent = d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' });
     showBg(); // switches to/from the night background on time
+    refreshWeather(false);
   }
 
   // ---------- render ----------
@@ -589,6 +657,11 @@
       { name: '글꼴', val: labelOf(FONTS, P.font), change: function (d) { set({ font: cycle(FONTS, P.font, d) }); } },
       { name: '시계', val: labelOf(CLOCKS, P.clock), change: function (d) { set({ clock: cycle(CLOCKS, P.clock, d) }); } },
       { name: '앱 고르기', id: 'apps', sub: '홈 화면에 둘 앱과 순서', val: visibleApps().length + '개', action: true, act: function () { openPanel('apps', { back: { type: 'look', id: 'apps' } }); } },
+      { name: '날씨', sub: '시계 아래에 도시 날씨를 보여줘요', val: P.weather && cityOf(P.weather) ? cityOf(P.weather)[1] : '사용 안 함',
+        change: function (d) {
+          var ids = [null].concat(CITIES.map(function (c) { return c[0]; }));
+          set({ weather: ids[(ids.indexOf(P.weather || null) + d + ids.length) % ids.length] });
+        } },
       { name: '카테고리 줄', id: 'cats', sub: '앱을 소제목 달린 줄로 묶어요', val: P.cats.length > 1 || P.cats[0].name ? P.cats.length + '줄' : '사용 안 함', action: true,
         act: function () { openPanel('cats', { back: { type: 'look', id: 'cats' } }); } },
       { name: '새 앱 자동 추가', sub: '새로 설치한 앱을 홈 끝에 붙여요', val: P.autoAdd !== false ? '켜짐' : '꺼짐', change: function () { set({ autoAdd: P.autoAdd === false }); } }
@@ -1000,6 +1073,16 @@
     if (has(t, ['배경'])) { set({ bg: stepBg(P.bg, 1, false) }); done('다음 배경'); return; }
     if (has(t, ['어둡게', '어둡'])) { set({ dim: Math.min(3, P.dim + 1) }); done('배경 어둡게'); return; }
     if (has(t, ['밝게', '밝'])) { set({ dim: Math.max(0, P.dim - 1) }); done('배경 밝게'); return; }
+
+    // weather: "날씨 부산", "날씨 꺼"
+    if (has(t, ['날씨'])) {
+      if (has(t, ['꺼', '숨', '없'])) { set({ weather: null }); done('날씨 숨김'); return; }
+      var city = null;
+      CITIES.forEach(function (c) { if (t.indexOf(c[1]) >= 0) city = c; });
+      if (city) { set({ weather: city[0] }); refreshWeather(true); done(city[1] + ' 날씨'); return; }
+      if (!P.weather) { set({ weather: 'seoul' }); refreshWeather(true); done('서울 날씨'); return; }
+      refreshWeather(true); done('날씨 새로고침'); return;
+    }
 
     // clock & tiles
     if (has(t, ['시계'])) {
