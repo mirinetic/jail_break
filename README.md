@@ -22,14 +22,31 @@ TV 리모컨의 **메뉴 버튼**을 누르면 어디서든 꾸미기 패널이 
 
 `app/` 아래 코드가 바뀌어 푸시되면 GitHub Actions가 APK를 빌드해요.
 
-- **Releases → "Cove latest build" → `Cove.apk`** 에서 항상 최신 빌드를 받을 수 있어요.
+- **Releases → "Cove latest build" → `Cove.apk`** 에서 항상 최신 빌드를 받을 수 있어요. 바로가기: https://github.com/mirinetic/jail_break/releases/download/cove-latest/Cove.apk
 - 또는 **Actions → Build Cove APK → 최신 실행 → Artifacts → `Cove-apk`** (zip 안에 APK가 있어요)
 
 ## TV에 설치하기
 
-먼저 TV에서 **개발자 모드**를 켜요: 설정 → 시스템 → 정보 → **Android TV OS 빌드**를 7번 누르기. 메뉴 이름은 TV마다 조금 달라요.
+APK 주소 (항상 최신 빌드):
 
-### 방법 1. PC에서 ADB로 설치 (추천)
+```
+https://github.com/mirinetic/jail_break/releases/download/cove-latest/Cove.apk
+```
+
+### 방법 1. TV에서 바로 받기 (Downloader 앱, 추천)
+
+PC나 USB 없이 TV만으로 설치해요.
+
+1. TV의 Google Play 스토어에서 **Downloader**(개발사 AFTVnews)를 설치해요.
+2. **출처를 알 수 없는 앱 설치**를 Downloader에 허용해요: 설정 → 앱 → 보안 및 제한 → 출처를 알 수 없는 앱 → Downloader 켜기. 메뉴 이름은 TV마다 조금 달라요. 설치 중에 허용 창이 뜨면 거기서 허용해도 돼요.
+3. Downloader 주소창에 위 APK 주소를 입력하고 **Go**를 눌러요.
+4. 다운로드가 끝나면 **설치**를 눌러요. 새 버전도 같은 주소로 받아서 덮어 설치하면 설정이 유지돼요.
+
+주소가 길어서 리모컨으로 입력하기 번거로우면, PC나 폰에서 [tinyurl.com](https://tinyurl.com) 같은 서비스로 위 주소의 단축 URL을 만들어 입력하면 돼요.
+
+### 방법 2. PC에서 ADB로 설치
+
+먼저 TV에서 **개발자 모드**를 켜요: 설정 → 시스템 → 정보 → **Android TV OS 빌드**를 7번 누르기.
 
 1. TV 설정 → 시스템 → 개발자 옵션 → **USB 디버깅**(또는 네트워크 디버깅) 켜기
 2. TV의 IP 주소 확인: 설정 → 네트워크 → 연결된 와이파이
@@ -45,13 +62,9 @@ adb install -r Cove.apk
 
 TV에 "USB 디버깅을 허용할까요?"가 뜨면 **허용**을 눌러요. 숫자는 내 TV의 IP로 바꿔요.
 
-### 방법 2. USB 메모리
+### 방법 3. USB 메모리
 
 APK를 USB 메모리에 넣어 TV에 꽂고, TV의 파일 관리자 앱으로 열어 설치해요. 처음 한 번 "출처를 알 수 없는 앱 설치"를 그 파일 관리자에게 허용해야 해요.
-
-### 방법 3. Downloader 앱
-
-저장소가 공개(public)일 때만 가능해요. 플레이스토어에서 Downloader를 설치하고, Releases의 `Cove.apk` 주소를 입력해서 받아요.
 
 ## 홈 버튼 누르면 Cove가 뜨게 하기
 
