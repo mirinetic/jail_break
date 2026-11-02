@@ -32,24 +32,46 @@
   #msg.on { opacity:1; }
   .pairing { margin:auto 0; text-align:center; display:grid; gap:10px; }
   .pairing b { font-size:20px; }
+  .say { display:grid; grid-template-columns:1fr auto; gap:8px; }
+  .say input { font:inherit; font-size:16px; color:var(--ink); background:var(--pad); border:1px solid #2c3446; border-radius:14px; padding:14px; min-width:0; }
+  .say button { background:var(--accent); color:#0c1220; font-weight:600; padding:14px 18px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chips button { padding:10px 14px; border-radius:20px; display:flex; align-items:center; gap:8px; }
+  .chips i { width:12px; height:12px; border-radius:50%; display:inline-block; }
+  .chips button.cur { outline:2px solid var(--accent); }
+  .eg { font-size:12px; color:var(--dim); line-height:1.6; margin:0; }
 </style>
 </head>
 <body>
 <header id="head"><b>Cove</b><span><i></i><em id="status" style="font-style:normal">TV에 연결됨</em></span></header>
 
 <div id="main">
-  <div class="pad">
+  <div class="say">
+    <input id="sayText" type="text" enterkeyhint="send" autocomplete="off" placeholder="말하거나 입력하기 (키보드의 마이크 버튼)">
+    <button id="sayBtn">보내기</button>
+  </div>
+  <p class="eg" style="margin-top:8px">예: "넷플릭스 틀어줘", "미니멀로 바꿔", "배경 다음", "엄마 프로필", "유튜브 홈에서 빼줘"</p>
+
+  <div class="pad" style="margin-top:18px">
     <button class="up" data-key="up" aria-label="위">▲</button>
     <button class="left" data-key="left" aria-label="왼쪽">◀</button>
-    <button class="ok" data-key="ok">OK</button>
+    <button class="ok" data-key="ok" aria-label="OK, 길게 누르면 메뉴">OK</button>
     <button class="right" data-key="right" aria-label="오른쪽">▶</button>
     <button class="down" data-key="down" aria-label="아래">▼</button>
   </div>
-  <div class="row" style="margin-top:22px">
+  <p class="eg" style="text-align:center;margin-top:8px">OK를 길게 누르면 앱 메뉴(홈에서 빼기, 옮기기, 삭제)가 열려요</p>
+  <div class="row" style="margin-top:14px">
     <button data-key="back">뒤로</button>
     <button data-cmd="home">홈</button>
-    <button data-cmd="panel:look">꾸미기</button>
+    <button data-cmd="panel:drawer">모든 앱</button>
   </div>
+  <div class="row two" style="margin-top:10px">
+    <button data-cmd="panel:look">꾸미기</button>
+    <button data-cmd="panel:settings">설정</button>
+  </div>
+
+  <h2>프로필</h2>
+  <div class="chips" id="profiles" style="margin-top:18px"><span class="eg">불러오는 중…</span></div>
 
   <h2>디자인</h2>
   <div class="row" style="margin-top:18px">
@@ -63,9 +85,8 @@
     <button data-cmd="bg:prev">◀ 이전 배경</button>
     <button data-cmd="bg:next">다음 배경 ▶</button>
   </div>
-  <div class="row two" style="margin-top:10px">
+  <div style="margin-top:10px; display:grid">
     <button data-cmd="tiles:next">타일 스타일 바꾸기</button>
-    <button data-cmd="panel:settings">설정</button>
   </div>
 
   <h2>내 사진</h2>
@@ -101,18 +122,55 @@
   // Arrow keys repeat while held, like a real remote.
   var repeatTimer = null, repeatDelay = null;
   function stopRepeat() { clearTimeout(repeatDelay); clearInterval(repeatTimer); }
+  var okTimer = null, okLong = false;
   Array.prototype.forEach.call(document.querySelectorAll('[data-key]'), function (b) {
     var k = b.getAttribute('data-key');
     var arrow = ['up', 'down', 'left', 'right'].indexOf(k) >= 0;
+    if (k === 'ok') {
+      // OK fires on release; holding it ~0.5s sends "longok" (the app menu), like the TV remote.
+      b.addEventListener('pointerdown', function (e) {
+        e.preventDefault(); buzz(); okLong = false;
+        okTimer = setTimeout(function () { okLong = true; buzz(); post('/api/key?k=longok'); }, 520);
+      });
+      b.addEventListener('pointerup', function () { clearTimeout(okTimer); if (!okLong) post('/api/key?k=ok'); okLong = true; });
+      ['pointerleave', 'pointercancel'].forEach(function (ev) { b.addEventListener(ev, function () { clearTimeout(okTimer); okLong = true; }); });
+      return;
+    }
     b.addEventListener('pointerdown', function (e) {
       e.preventDefault(); buzz(); post('/api/key?k=' + k);
       if (arrow) { stopRepeat(); repeatDelay = setTimeout(function () { repeatTimer = setInterval(function () { post('/api/key?k=' + k); }, 140); }, 420); }
     });
     ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { b.addEventListener(ev, stopRepeat); });
   });
-  Array.prototype.forEach.call(document.querySelectorAll('[data-cmd]'), function (b) {
-    b.addEventListener('click', function () { buzz(); post('/api/cmd?c=' + encodeURIComponent(b.getAttribute('data-cmd'))); });
-  });
+  function bindCmd(b) {
+    b.addEventListener('click', function () { buzz(); post('/api/cmd?c=' + encodeURIComponent(b.getAttribute('data-cmd'))).then(function () { setTimeout(loadState, 400); }); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-cmd]'), bindCmd);
+
+  // Voice or typed commands. The phone keyboard's microphone turns speech into text; the TV understands the text.
+  function sendSay() {
+    var t = $('sayText').value.trim();
+    if (!t) return;
+    buzz();
+    post('/api/say', t).then(function (r) { if (r && r.ok) { msg('보냈어요: ' + t); $('sayText').value = ''; setTimeout(loadState, 500); } });
+  }
+  $('sayBtn').addEventListener('click', sendSay);
+  $('sayText').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); sendSay(); } });
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+  function loadState() {
+    if (!token) return;
+    fetch('/api/state?t=' + encodeURIComponent(token)).then(function (r) {
+      state(true); paired(r.status !== 403);
+      return r.ok ? r.json() : null;
+    }).then(function (root) {
+      if (!root || !Array.isArray(root.profiles)) { $('profiles').innerHTML = '<span class="eg">TV에서 프로필을 만들면 여기에 나타나요</span>'; return; }
+      $('profiles').innerHTML = root.profiles.map(function (p) {
+        return '<button data-cmd="profile:' + esc(p.id) + '" class="' + (p.id === root.current ? 'cur' : '') + '"><i style="background:' + esc(p.color) + '"></i>' + esc(p.name) + '</button>';
+      }).join('');
+      Array.prototype.forEach.call($('profiles').querySelectorAll('[data-cmd]'), bindCmd);
+    }).catch(function () { state(false); });
+  }
 
   $('pick').addEventListener('click', function () { $('file').click(); });
   $('file').addEventListener('change', function () {
@@ -130,7 +188,7 @@
   });
 
   if (!token) paired(false);
-  else fetch('/api/state?t=' + encodeURIComponent(token)).then(function (r) { state(true); paired(r.status !== 403); }).catch(function () { state(false); });
+  else loadState();
 })();
 </script>
 </body>

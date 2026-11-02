@@ -14,6 +14,13 @@
     <header class="top">
       <div class="clock" id="clock"><div class="time" id="time"></div><div class="date" id="date"></div></div>
       <nav class="quick">
+        <button class="qbtn focusable profile" data-act="profiles" aria-label="프로필">
+          <span class="pdot" id="pDot"></span><span id="pName">나</span>
+        </button>
+        <button class="qbtn focusable" data-act="drawer" aria-label="모든 앱">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><rect x="4" y="4" width="4.2" height="4.2" rx="1.2"/><rect x="9.9" y="4" width="4.2" height="4.2" rx="1.2"/><rect x="15.8" y="4" width="4.2" height="4.2" rx="1.2"/><rect x="4" y="9.9" width="4.2" height="4.2" rx="1.2"/><rect x="9.9" y="9.9" width="4.2" height="4.2" rx="1.2"/><rect x="15.8" y="9.9" width="4.2" height="4.2" rx="1.2"/><rect x="4" y="15.8" width="4.2" height="4.2" rx="1.2"/><rect x="9.9" y="15.8" width="4.2" height="4.2" rx="1.2"/><rect x="15.8" y="15.8" width="4.2" height="4.2" rx="1.2"/></g></svg>
+          <span>모든 앱</span>
+        </button>
         <button class="qbtn focusable" data-act="look" aria-label="꾸미기">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0 0 18c1.1 0 1.7-.8 1.7-1.6 0-.5-.2-.8-.4-1.1-.3-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="11" r="1.3" fill="currentColor"/><circle cx="10" cy="7.3" r="1.3" fill="currentColor"/><circle cx="14.5" cy="7.3" r="1.3" fill="currentColor"/><circle cx="17" cy="11" r="1.3" fill="currentColor"/></svg>
           <span>꾸미기</span>
@@ -27,6 +34,12 @@
     <section id="tiles" class="tiles"></section>
     <p id="empty" class="empty" hidden>꾸미기 › 앱 고르기에서 홈 화면에 둘 앱을 선택하세요.</p>
   </main>
+
+  <section id="drawer" hidden>
+    <div class="d-head"><h2>모든 앱</h2><span id="dCount"></span></div>
+    <div class="dgrid" id="dGrid"></div>
+    <div class="p-hint"><span><kbd>OK</kbd>실행</span><span><kbd>OK 길게</kbd>메뉴</span><span><kbd>뒤로</kbd>닫기</span></div>
+  </section>
 
   <aside id="panel" hidden>
     <div class="p-head"><div class="p-kicker" id="pKicker"></div><h2 id="pTitle"></h2></div>

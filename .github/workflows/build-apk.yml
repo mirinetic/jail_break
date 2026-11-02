@@ -10,19 +10,26 @@ on:
       - "gradle.properties"
       - ".github/workflows/build-apk.yml"
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Roll back: build this version tag (e.g. v1.0.3) or commit. Leave empty to build the branch."
+        required: false
+        default: ""
 
 permissions:
   contents: write
 
 concurrency:
-  group: build-apk-${{ github.ref }}
-  cancel-in-progress: true
+  group: build-apk
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: actions/setup-java@v4
         with:
@@ -31,26 +38,56 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Every build gets a new, higher version number (the run number), so a rollback build of old code
+      # still installs over the newer one and keeps the TV's settings.
       - name: Build APK
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk Cove.apk
 
+      - name: Describe this build
+        id: info
+        env:
+          ROLLBACK_REF: ${{ inputs.ref }}
+        run: |
+          SUBJECT="$(git log -1 --format=%s)"
+          SHORT="$(git rev-parse --short HEAD)"
+          if [ -n "$ROLLBACK_REF" ]; then NOTES="Rollback to ${ROLLBACK_REF} (${SHORT}): ${SUBJECT}"; else NOTES="${SUBJECT} (${SHORT})"; fi
+          VERSION="1.0.${GITHUB_RUN_NUMBER}"
+          python3 -c 'import json,os,sys; json.dump({"versionCode": int(os.environ["GITHUB_RUN_NUMBER"]), "versionName": sys.argv[1], "notes": sys.argv[2]}, open("version.json","w"), ensure_ascii=False)' "$VERSION" "$NOTES"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          printf '%s' "$NOTES" > notes.txt
+          cat version.json
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Cove-apk
-          path: Cove.apk
+          name: Cove-${{ steps.info.outputs.version }}
+          path: |
+            Cove.apk
+            version.json
 
-      # Keeps one always-current download link: Releases > "Cove latest build" > Cove.apk
-      - name: Publish latest build
+      - name: Keep this version (v1.0.N release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.info.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" Cove.apk version.json \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Cove ${VERSION}" \
+            --notes-file notes.txt \
+            --target "$(git rev-parse HEAD)"
+
+      # One always-current download link: .../releases/download/cove-latest/Cove.apk (also read by in-app update)
+      - name: Publish as latest
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete cove-latest --yes --cleanup-tag || true
-          gh release create cove-latest Cove.apk \
+          gh release delete cove-latest --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag || true
+          gh release create cove-latest Cove.apk version.json \
+            --repo "${GITHUB_REPOSITORY}" \
             --title "Cove latest build" \
-            --notes "Built from ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}. Install on an Android TV / Google TV by sideloading Cove.apk." \
-            --target "${GITHUB_SHA}" \
+            --notes-file notes.txt \
+            --target "$(git rev-parse HEAD)" \
             --prerelease

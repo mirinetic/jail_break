@@ -27,8 +27,16 @@ class MainActivity : Activity() {
     lateinit var apps: AppRepository
         private set
 
+    lateinit var updater: Updater
+        private set
+
+    /** The phone remote server, so the settings screen can show whether it is running. */
+    var remote: RemoteServer? = null
+        private set
+
     private lateinit var web: WebView
-    private var server: RemoteServer? = null
+    private var okDown = false
+    private var okLong = false
 
     private val packageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -37,11 +45,18 @@ class MainActivity : Activity() {
         }
     }
 
+    private val installReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            updater.onStatus(intent)
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = Store(this)
         apps = AppRepository(this)
+        updater = Updater(this)
         val content = LocalContent(this, apps, store)
 
         web = WebView(this).apply {
@@ -69,7 +84,7 @@ class MainActivity : Activity() {
         web.loadUrl(LocalContent.ORIGIN + "/index.html")
         web.requestFocus()
 
-        server = RemoteServer(this).also { it.start() }
+        remote = RemoteServer(this).also { it.start() }
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -77,10 +92,13 @@ class MainActivity : Activity() {
             addAction(Intent.ACTION_PACKAGE_CHANGED)
             addDataScheme("package")
         }
+        val installFilter = IntentFilter(Updater.ACTION_STATUS)
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(packageReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(installReceiver, installFilter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(packageReceiver, filter)
+            registerReceiver(installReceiver, installFilter)
         }
     }
 
@@ -105,6 +123,25 @@ class MainActivity : Activity() {
             KeyEvent.KEYCODE_MENU -> "menu"
             else -> null
         } ?: return super.dispatchKeyEvent(event)
+
+        // OK acts on release, so holding it can open the app menu instead ("longok").
+        if (key == "ok") {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> if (event.repeatCount == 0) {
+                    okDown = true
+                    okLong = false
+                } else if (okDown && !okLong) {
+                    okLong = true
+                    js("Cove.key('longok',0)")
+                }
+                KeyEvent.ACTION_UP -> {
+                    if (okDown && !okLong) js("Cove.key('ok',0)")
+                    okDown = false
+                    okLong = false
+                }
+            }
+            return true
+        }
         if (event.action == KeyEvent.ACTION_DOWN) js("Cove.key('$key',${event.repeatCount})")
         return true
     }
@@ -122,10 +159,12 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        server?.stop()
-        try {
-            unregisterReceiver(packageReceiver)
-        } catch (_: IllegalArgumentException) {
+        remote?.stop()
+        for (receiver in listOf(packageReceiver, installReceiver)) {
+            try {
+                unregisterReceiver(receiver)
+            } catch (_: IllegalArgumentException) {
+            }
         }
         web.destroy()
         super.onDestroy()

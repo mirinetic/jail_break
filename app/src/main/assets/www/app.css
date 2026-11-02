@@ -44,6 +44,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   transition: transform .18s var(--ease), background .18s, color .18s; }
 .qbtn svg { width: 1.6rem; height: 1.6rem; }
 .qbtn.focus { background: #fff; color: #11141b; transform: scale(1.06); }
+.qbtn.profile { padding-left: .9rem; }
+.pdot { width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--pc, #8fb4ff); box-shadow: inset 0 0 0 .15rem rgba(255,255,255,.35); flex: none; }
 
 .tiles { margin-top: auto; display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr)); gap: 2.2rem 1.8rem; }
 .tile { position: relative; display: grid; gap: .8rem; transition: transform .2s var(--ease); }
@@ -97,6 +99,22 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .empty { margin: auto; font-size: 1.6rem; color: var(--ink-dim); background: rgba(0,0,0,.35); padding: 1.2rem 2rem; border-radius: 1rem; }
 [data-clock="off"] .clock { visibility: hidden; }
 
+/* move mode: the tile being moved */
+.tile.moving .face { box-shadow: 0 0 0 .3rem #ffd76b, 0 0 2.4rem .4rem rgba(255,215,107,.55); }
+.tile.moving { animation: nudge 1.2s ease-in-out infinite; }
+@keyframes nudge { 50% { transform: scale(1.1) translateY(-.4rem); } }
+
+/* ---------- all apps ---------- */
+#drawer { position: fixed; inset: 0; background: rgba(8,10,16,.82); -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+  padding: 3.4rem 4.6rem 2.4rem; display: flex; flex-direction: column; gap: 1.8rem; animation: fade .25s ease; }
+@keyframes fade { from { opacity: 0; } }
+.d-head { display: flex; align-items: baseline; gap: 1.2rem; }
+.d-head h2 { margin: 0; font-size: 2.6rem; font-weight: 500; }
+.d-head span { color: var(--ink-dim); font-size: 1.3rem; }
+.dgrid { flex: 1; overflow: hidden; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2rem 1.6rem; align-content: start; padding: 1rem .6rem; }
+.dgrid .face { background: var(--brand); }
+.dgrid .face.glassy { background: rgba(255,255,255,.1); }
+
 /* ---------- side panel ---------- */
 #panel { position: fixed; top: 0; right: 0; bottom: 0; width: 36rem; background: var(--panel);
   -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); border-left: .08rem solid rgba(255,255,255,.08);
@@ -114,6 +132,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .row .thumb { width: 4.6rem; height: 2.6rem; border-radius: .4rem; object-fit: cover; }
 .row .check { width: 1.6rem; height: 1.6rem; border-radius: .4rem; border: .12rem solid rgba(255,255,255,.4); display: grid; place-items: center; font-size: 1.1rem; flex: none; }
 .row .check.on { background: var(--accent); border-color: var(--accent); color: #0c1220; }
+.row .dot { width: 1.4rem; height: 1.4rem; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 .12rem rgba(255,255,255,.35); }
 .row .appicon { width: 2.4rem; height: 2.4rem; border-radius: .5rem; object-fit: contain; flex: none; }
 .row.sel { background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 .1rem rgba(255,255,255,.2); }
 .row.sel .arrow { opacity: 1; }
@@ -124,6 +143,11 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .pair { display: grid; grid-template-columns: 11rem 1fr; gap: 1.6rem; align-items: center; padding: 1.4rem; border-radius: 1.2rem; background: rgba(255,255,255,.06); }
 .pair .qr { width: 11rem; height: 11rem; border-radius: .8rem; overflow: hidden; background: #fff; }
 .pair .qr svg { width: 100%; height: 100%; display: block; }
+.diag { display: grid; gap: .5rem; font-size: 1.05rem; color: var(--ink-dim); line-height: 1.5; }
+.diag .ok { color: #7ee0b0; } .diag .bad { color: #ffb1a8; }
+.help { display: grid; gap: .8rem; padding: 1.4rem; border-radius: 1.2rem; background: rgba(255,255,255,.06); font-size: 1.1rem; line-height: 1.55; color: var(--ink-dim); }
+.help b { color: var(--ink); font-weight: 500; }
+.help code { display: block; font-family: monospace; font-size: .95rem; color: var(--ink); background: rgba(0,0,0,.35); padding: .7rem .9rem; border-radius: .6rem; word-break: break-all; }
 .pair p { margin: 0; font-size: 1.15rem; color: var(--ink-dim); line-height: 1.5; }
 .pair b { display: block; color: var(--ink); font-size: 1.25rem; margin: .5rem 0; word-break: break-all; font-weight: 500; }
 

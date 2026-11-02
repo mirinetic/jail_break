@@ -1,6 +1,7 @@
 /* Cove home screen.
    Runs inside the Android app (window.CoveNative is the bridge to the TV) and also in a normal desktop
-   browser with sample apps, so the look can be tried without a TV (arrow keys, Enter, Esc). */
+   browser with sample apps, so the look can be tried without a TV:
+   arrows move, Enter = OK, Shift+Enter or L = hold OK, Esc = Back, M = Menu. */
 (function () {
   'use strict';
 
@@ -22,69 +23,106 @@
   var CLOCKS = [['24', '24시간'], ['12', '12시간'], ['off', '숨김']];
   var DIMS = ['없음', '약하게', '보통', '강하게'];
   var DIM_VALUES = [0.05, 0.22, 0.4, 0.58];
-  // Apps put on the home screen first when Cove starts for the first time.
+  var NIGHT_FROM = 19, NIGHT_TO = 6;   // 19:00 – 06:00 uses the night background
+  var PROFILE_NAMES = ['나', '가족', '아빠', '엄마', '아이', '손님', '거실', '침실'];
+  var PROFILE_COLORS = ['#8fb4ff', '#ffb36b', '#7ee0b0', '#ff8fb1', '#c7a6ff', '#ffd76b'];
+  // Apps put on the home screen first when a profile starts with no list yet.
   var FAVOURITES = [
     'com.netflix.ninja', 'com.google.android.youtube.tv', 'com.amazon.amazonvideo.livingroom', 'com.disney.disneyplus',
     'com.wbd.stream', 'com.apple.atve.androidtv.appletv', 'com.spotify.tv.android', 'com.google.android.youtube.tvmusic',
     'com.google.android.videos', 'com.plexapp.android', 'tv.twitch.android.app', 'com.google.android.youtube.tvkids'
   ];
-  var DEFAULTS = { design: 'glass', clock: '24', apps: null };
+  var DEFAULTS = { design: 'glass', clock: '24', apps: null, autoAdd: true, nightBg: null };
   Object.keys(DESIGNS.glass.p).forEach(function (k) { DEFAULTS[k] = DESIGNS.glass.p[k]; });
 
   // ---------- state ----------
-  var P = {};            // appearance settings
+  var ROOT = null;       // {v:2, current, known:[pkg], profiles:[{id,name,color,prefs}]}
+  var P = {};            // the current profile's appearance settings (an object inside ROOT)
   var APPS = [];         // installed apps [{pkg,label,color,banner}]
   var BYPKG = {};
   var PHOTOS = [];       // photo ids sent from the phone
-  var layer = 'home';    // 'home' | 'panel'
+  var base = 'home';     // 'home' | 'drawer'
+  var panel = null;      // {type, i, pkg?, back?}
+  var moving = null;     // pkg being moved on the home screen
   var focusEl = null;
-  var lastTile = null;   // pkg of the last focused tile, kept across re-renders
-  var panel = null;      // {type, i}
-  var resetArmed = false;
+  var lastFocus = { home: null, drawer: null };
+  var cols = 5;
+  var armed = '';        // name of a row waiting for a second OK (reset, delete)
+  var helpOpen = false;
+  var update = null;     // {phase, ...result}
 
   var $ = function (id) { return document.getElementById(id); };
-
-  // ---------- storage & native ----------
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+  function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
+
+  // ---------- storage ----------
+  function withDefaults(p) { var o = clone(DEFAULTS); Object.keys(p || {}).forEach(function (k) { o[k] = p[k]; }); return o; }
+  function profileById(id) { for (var i = 0; i < ROOT.profiles.length; i++) if (ROOT.profiles[i].id === id) return ROOT.profiles[i]; return null; }
+  function current() { return profileById(ROOT.current); }
 
   function loadPrefs() {
     var raw = '{}';
     try { raw = N ? N.loadPrefs() : (localStorage.getItem('cove.prefs') || '{}'); } catch (e) {}
     var saved = {};
     try { saved = JSON.parse(raw) || {}; } catch (e) {}
-    P = clone(DEFAULTS);
-    Object.keys(saved).forEach(function (k) { P[k] = saved[k]; });
+    if (saved.v === 2 && Array.isArray(saved.profiles) && saved.profiles.length) ROOT = saved;
+    else ROOT = { v: 2, current: 'p1', known: null, profiles: [{ id: 'p1', name: '나', color: PROFILE_COLORS[0], prefs: saved }] }; // first run or old single-profile settings
+    ROOT.profiles.forEach(function (pr) { pr.prefs = withDefaults(pr.prefs); });
+    if (!current()) ROOT.current = ROOT.profiles[0].id;
+    P = current().prefs;
   }
 
   var saveTimer = null;
   function savePrefs() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(function () {
-      var s = JSON.stringify(P);
+      var s = JSON.stringify(ROOT);
       try { if (N) N.savePrefs(s); else localStorage.setItem('cove.prefs', s); } catch (e) {}
     }, 250);
   }
 
+  function defaultApps() {
+    var first = FAVOURITES.filter(function (p) { return BYPKG[p]; });
+    APPS.forEach(function (a) { if (first.indexOf(a.pkg) < 0) first.push(a.pkg); });
+    return first.slice(0, 10);
+  }
+
+  // Reads the installed apps. Apps installed since last time join the home screen of every profile
+  // that has "새 앱 자동 추가" on.
   function loadApps() {
     try { APPS = N ? JSON.parse(N.apps()) : sampleApps(); } catch (e) { APPS = []; }
     BYPKG = {};
     APPS.forEach(function (a) { BYPKG[a.pkg] = a; });
-    if (!Array.isArray(P.apps)) {
-      var first = FAVOURITES.filter(function (p) { return BYPKG[p]; });
-      APPS.forEach(function (a) { if (first.indexOf(a.pkg) < 0) first.push(a.pkg); });
-      P.apps = first.slice(0, 10);
-      savePrefs();
+    var pkgs = APPS.map(function (a) { return a.pkg; });
+    var changed = false, fresh = [];
+    if (Array.isArray(ROOT.known)) {
+      fresh = pkgs.filter(function (p) { return ROOT.known.indexOf(p) < 0; });
+      fresh.forEach(function (p) {
+        ROOT.profiles.forEach(function (pr) {
+          if (pr.prefs.autoAdd !== false && Array.isArray(pr.prefs.apps) && pr.prefs.apps.indexOf(p) < 0) { pr.prefs.apps.push(p); changed = true; }
+        });
+      });
     }
+    if (!Array.isArray(ROOT.known) || ROOT.known.join() !== pkgs.join()) { ROOT.known = pkgs; changed = true; }
+    ROOT.profiles.forEach(function (pr) { if (!Array.isArray(pr.prefs.apps)) { pr.prefs.apps = defaultApps(); changed = true; } });
+    if (changed) savePrefs();
+    if (fresh.length && P.autoAdd !== false) toast('새 앱을 홈에 추가했어요: ' + fresh.map(function (p) { return BYPKG[p].label; }).join(', '));
   }
 
   function loadPhotos() {
     try { PHOTOS = N ? JSON.parse(N.photos()) : []; } catch (e) { PHOTOS = []; }
-    if (P.bg && P.bg.type === 'photo' && PHOTOS.indexOf(P.bg.id) < 0) P.bg = clone(DESIGNS[P.design].p.bg);
+    ROOT.profiles.forEach(function (pr) {
+      var p = pr.prefs;
+      if (p.bg && p.bg.type === 'photo' && PHOTOS.indexOf(p.bg.id) < 0) p.bg = clone(DESIGNS[p.design].p.bg);
+      if (p.nightBg && p.nightBg.type === 'photo' && PHOTOS.indexOf(p.nightBg.id) < 0) p.nightBg = null;
+    });
   }
 
   function visibleApps() { return (P.apps || []).filter(function (p) { return BYPKG[p]; }); }
   function iconUrl(a) { return N ? '/icon/' + encodeURIComponent(a.pkg) : a.icon; }
   function bannerUrl(a) { return N ? '/banner/' + encodeURIComponent(a.pkg) : a.bannerUrl; }
+  function sortedApps() { return APPS.slice().sort(function (a, b) { return a.label.localeCompare(b.label, 'ko'); }); }
 
   // ---------- backgrounds ----------
   function bgList() {
@@ -94,21 +132,31 @@
   }
   function bgUrl(b) { return b.type === 'photo' ? '/photo/' + b.id + '.jpg' : 'bg/' + b.id + '.jpg'; }
   function bgName(b) {
+    if (!b) return '사용 안 함';
     if (b.type === 'photo') return '내 사진 ' + (PHOTOS.indexOf(b.id) + 1);
     for (var i = 0; i < PRESETS.length; i++) if (PRESETS[i][0] === b.id) return PRESETS[i][1];
     return b.id;
   }
-  function sameBg(a, b) { return a && b && a.type === b.type && a.id === b.id; }
+  function sameBg(a, b) { return !!a && !!b && a.type === b.type && a.id === b.id; }
+  function isNight() { var h = new Date().getHours(); return h >= NIGHT_FROM || h < NIGHT_TO; }
+  function activeBg() { return (P.nightBg && isNight()) ? P.nightBg : P.bg; }
+  function stepBg(cur, d, allowNone) {
+    var list = bgList();
+    if (allowNone) list.unshift(null);
+    var i = -1;
+    list.forEach(function (b, k) { if ((b === null && !cur) || sameBg(b, cur)) i = k; });
+    return list[(i + d + list.length) % list.length];
+  }
 
   var shownBg = '';
   function showBg() {
-    var url = bgUrl(P.bg);
+    var url = bgUrl(activeBg());
     if (url === shownBg) return;
     shownBg = url;
     var a = $('bgA'), b = $('bgB');
     var next = a.classList.contains('on') ? b : a, prev = next === a ? b : a;
     next.onload = function () { next.classList.add('on'); prev.classList.remove('on'); };
-    next.onerror = function () { if (!sameBg(P.bg, DEFAULTS.bg)) { P.bg = clone(DEFAULTS.bg); render(); } };
+    next.onerror = function () { if (!sameBg(P.bg, DEFAULTS.bg)) { P.bg = clone(DEFAULTS.bg); P.nightBg = null; render(); } };
     next.src = url;
   }
 
@@ -117,17 +165,13 @@
     var d = new Date();
     var h = d.getHours(), m = ('0' + d.getMinutes()).slice(-2);
     var t = $('time');
-    if (P.clock === '12') {
-      t.innerHTML = ((h % 12) || 12) + ':' + m + '<small>' + (h < 12 ? '오전' : '오후') + '</small>';
-    } else {
-      t.textContent = ('0' + h).slice(-2) + ':' + m;
-    }
+    if (P.clock === '12') t.innerHTML = ((h % 12) || 12) + ':' + m + '<small>' + (h < 12 ? '오전' : '오후') + '</small>';
+    else t.textContent = ('0' + h).slice(-2) + ':' + m;
     $('date').textContent = d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' });
+    showBg(); // switches to/from the night background on time
   }
 
   // ---------- render ----------
-  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
-
   function render() {
     var home = $('home');
     document.body.setAttribute('data-font', P.font);
@@ -136,40 +180,55 @@
     home.setAttribute('data-labels', P.labels ? 'on' : 'off');
     home.setAttribute('data-clock', P.clock === 'off' ? 'off' : 'on');
     document.documentElement.style.setProperty('--dim', DIM_VALUES[P.dim] || 0.22);
-    showBg();
+    var pr = current();
+    $('pName').textContent = pr.name;
+    $('pDot').style.setProperty('--pc', pr.color);
     tick();
     renderTiles();
-    if (layer === 'panel') renderPanel();
+    if (base === 'drawer') renderDrawer();
+    if (panel) renderPanel();
+  }
+
+  function tileHtml(a, opts) {
+    var useBanner = opts.banner && a.banner;
+    var inner = useBanner
+      ? '<img class="banner" src="' + bannerUrl(a) + '" alt="">'
+      : '<img class="icon" src="' + iconUrl(a) + '" alt="" onerror="this.outerHTML=\'<span class=initial>' + esc(a.label.charAt(0)) + '</span>\'">';
+    var brand = (opts.forceBrand || (opts.banner && !a.banner)) ? ' brand' : '';
+    return '<div class="tile focusable' + (moving === a.pkg ? ' moving' : '') + '" data-pkg="' + esc(a.pkg) + '">' +
+      '<div class="face' + brand + '" style="--brand:' + esc(a.color || '#2a2f3a') + '">' + inner + '</div>' +
+      '<div class="label">' + esc(a.label) + '</div></div>';
   }
 
   function renderTiles() {
     var ids = visibleApps();
     var n = ids.length;
-    var cols = P.layout === 'icons' ? (n <= 8 ? 4 : n <= 10 ? 5 : 6) : (n <= 8 ? 4 : n <= 10 ? 5 : 6);
+    cols = n <= 8 ? 4 : n <= 10 ? 5 : 6;
     var box = $('tiles');
     box.style.setProperty('--cols', cols);
-    box.innerHTML = ids.map(function (pkg) {
-      var a = BYPKG[pkg];
-      var useBanner = P.tiles === 'banner' && a.banner;
-      var inner = useBanner
-        ? '<img class="banner" src="' + bannerUrl(a) + '" alt="">'
-        : '<img class="icon" src="' + iconUrl(a) + '" alt="" onerror="this.outerHTML=\'<span class=initial>' + esc(a.label.charAt(0)) + '</span>\'">';
-      var brand = (P.tiles === 'banner' && !a.banner) ? ' brand' : '';
-      return '<div class="tile focusable" data-pkg="' + esc(pkg) + '">' +
-        '<div class="face' + brand + '" style="--brand:' + esc(a.color || '#2a2f3a') + '">' + inner + '</div>' +
-        '<div class="label">' + esc(a.label) + '</div></div>';
-    }).join('');
+    box.innerHTML = ids.map(function (pkg) { return tileHtml(BYPKG[pkg], { banner: P.tiles === 'banner' }); }).join('');
     $('empty').hidden = n > 0;
-    if (layer === 'home') {
-      var keep = lastTile && box.querySelector('[data-pkg="' + cssEsc(lastTile) + '"]');
-      setFocus(keep || box.querySelector('.tile') || document.querySelector('.qbtn'));
-    }
+    if (base === 'home' && !panel) restoreFocus('home');
   }
-  function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
 
-  // ---------- home navigation ----------
+  function renderDrawer() {
+    var list = sortedApps();
+    $('dCount').textContent = list.length + '개';
+    $('dGrid').innerHTML = list.map(function (a) { return tileHtml(a, { banner: true, forceBrand: !a.banner }); }).join('');
+    if (!panel) restoreFocus('drawer');
+  }
+
+  function restoreFocus(where) {
+    var root = where === 'drawer' ? $('dGrid') : $('tiles');
+    var keep = lastFocus[where] && root.querySelector('[data-pkg="' + cssEsc(lastFocus[where]) + '"]');
+    if (moving) keep = root.querySelector('[data-pkg="' + cssEsc(moving) + '"]') || keep;
+    setFocus(keep || root.querySelector('.tile') || (where === 'home' ? document.querySelector('.qbtn[data-act="drawer"]') : null));
+  }
+
+  // ---------- focus & navigation ----------
   function focusables() {
-    return Array.prototype.slice.call(document.querySelectorAll('#home .focusable'));
+    var sel = base === 'drawer' ? '#drawer .focusable' : '#home .focusable';
+    return Array.prototype.slice.call(document.querySelectorAll(sel));
   }
 
   function setFocus(el) {
@@ -177,20 +236,27 @@
     focusEl = el || null;
     if (!focusEl) return;
     focusEl.classList.add('focus');
-    if (focusEl.classList.contains('tile')) {
-      lastTile = focusEl.getAttribute('data-pkg');
-      if (P.layout === 'minimal') {
-        var row = $('tiles'), r = focusEl.getBoundingClientRect(), rr = row.getBoundingClientRect();
-        if (r.left < rr.left + 40) row.scrollLeft -= (rr.left + 40 - r.left);
-        else if (r.right > rr.right - 40) row.scrollLeft += (r.right - rr.right + 40);
-      }
+    var pkg = focusEl.getAttribute('data-pkg');
+    if (pkg) lastFocus[base] = pkg;
+    keepVisible(focusEl);
+  }
+
+  function keepVisible(el) {
+    if (base === 'drawer') {
+      var g = $('dGrid'), r = el.getBoundingClientRect(), gr = g.getBoundingClientRect();
+      if (r.top < gr.top + 20) g.scrollTop -= (gr.top + 20 - r.top);
+      else if (r.bottom > gr.bottom - 20) g.scrollTop += (r.bottom - gr.bottom + 20);
+    } else if (P.layout === 'minimal' && el.classList.contains('tile')) {
+      var row = $('tiles'), rr = row.getBoundingClientRect(), tr = el.getBoundingClientRect();
+      if (tr.left < rr.left + 40) row.scrollLeft -= (rr.left + 40 - tr.left);
+      else if (tr.right > rr.right - 40) row.scrollLeft += (tr.right - rr.right + 40);
     }
   }
 
   // Moves focus to the nearest element in the pressed direction.
   function move(dir) {
     var els = focusables();
-    if (!focusEl || els.indexOf(focusEl) < 0) { setFocus(els[els.length > 2 ? 2 : 0]); return; }
+    if (!focusEl || els.indexOf(focusEl) < 0) { setFocus(els.filter(function (e) { return e.classList.contains('tile'); })[0] || els[0]); return; }
     var a = focusEl.getBoundingClientRect();
     var ax = a.left + a.width / 2, ay = a.top + a.height / 2;
     var best = null, bestScore = Infinity;
@@ -209,18 +275,99 @@
     if (best) setFocus(best);
   }
 
-  function activate(el) {
-    if (!el) return;
-    var pkg = el.getAttribute('data-pkg');
-    if (pkg) { launch(pkg); return; }
-    var act = el.getAttribute('data-act');
-    if (act) openPanel(act);
-  }
-
+  // ---------- actions ----------
   function launch(pkg) {
     var a = BYPKG[pkg];
     if (N) { if (!N.launch(pkg)) toast('앱을 열 수 없어요'); }
     else toast((a ? a.label : pkg) + ' 실행 (미리보기에서는 실제로 열리지 않아요)');
+  }
+
+  function set(changes) {
+    Object.keys(changes).forEach(function (k) { P[k] = changes[k]; });
+    armed = '';
+    savePrefs();
+    render();
+  }
+  function applyDesign(id) { var p = clone(DESIGNS[id].p); p.design = id; set(p); }
+  function onHome(pkg) { return visibleApps().indexOf(pkg) >= 0; }
+  function addToHome(pkg) { var l = visibleApps(); if (l.indexOf(pkg) < 0) l.push(pkg); set({ apps: l }); }
+  function removeFromHome(pkg) { var l = visibleApps(), i = l.indexOf(pkg); if (i >= 0) l.splice(i, 1); set({ apps: l }); }
+
+  function openDrawer() {
+    closePanelQuiet();
+    base = 'drawer';
+    $('drawer').hidden = false;
+    renderDrawer();
+  }
+  function closeDrawer() {
+    base = 'home';
+    $('drawer').hidden = true;
+    restoreFocus('home');
+  }
+
+  function startMove(pkg) {
+    if (base !== 'home' || !onHome(pkg)) return;
+    moving = pkg;
+    lastFocus.home = pkg;
+    renderTiles();
+    toast('방향키로 옮기고 OK를 누르세요');
+  }
+  function shiftMoving(dir) {
+    var list = visibleApps(), i = list.indexOf(moving);
+    if (i < 0) { moving = null; renderTiles(); return; }
+    var j = dir === 'left' ? i - 1 : dir === 'right' ? i + 1 : (P.layout === 'minimal' ? i : dir === 'up' ? i - cols : i + cols);
+    if (j < 0 || j >= list.length || j === i) return;
+    list.splice(i, 1); list.splice(j, 0, moving);
+    P.apps = list;
+    savePrefs();
+    renderTiles();
+  }
+  function endMove() { moving = null; renderTiles(); toast('위치를 저장했어요'); }
+
+  // ---------- profiles ----------
+  function switchProfile(id, quiet) {
+    if (!profileById(id)) return;
+    ROOT.current = id;
+    P = current().prefs;
+    lastFocus.home = null;
+    moving = null;
+    savePrefs();
+    render();
+    if (!quiet) toast(current().name + ' 프로필로 바꿨어요');
+  }
+  function addProfile() {
+    var used = ROOT.profiles.map(function (p) { return p.name; });
+    var name = PROFILE_NAMES.filter(function (n) { return used.indexOf(n) < 0; })[0] || ('프로필 ' + (ROOT.profiles.length + 1));
+    var pr = { id: 'p' + Date.now().toString(36), name: name, color: PROFILE_COLORS[ROOT.profiles.length % PROFILE_COLORS.length], prefs: clone(P) };
+    ROOT.profiles.push(pr);
+    switchProfile(pr.id, true);
+    toast('"' + name + '" 프로필을 만들었어요. 지금 화면 설정을 그대로 복사했어요');
+  }
+  function renameProfile(name) {
+    name = String(name).trim().slice(0, 12);
+    if (!name) return;
+    current().name = name;
+    savePrefs(); render();
+    toast('프로필 이름을 "' + name + '"(으)로 바꿨어요');
+  }
+  function cycleName(d) {
+    var others = ROOT.profiles.filter(function (p) { return p.id !== ROOT.current; }).map(function (p) { return p.name; });
+    var names = PROFILE_NAMES.filter(function (n) { return others.indexOf(n) < 0; });
+    var i = names.indexOf(current().name);
+    current().name = names[(i + d + names.length) % names.length];
+    savePrefs(); render();
+  }
+  function cycleColor(d) {
+    var i = PROFILE_COLORS.indexOf(current().color);
+    current().color = PROFILE_COLORS[(i + d + PROFILE_COLORS.length) % PROFILE_COLORS.length];
+    savePrefs(); render();
+  }
+  function deleteProfile() {
+    if (ROOT.profiles.length < 2) return;
+    var name = current().name;
+    ROOT.profiles = ROOT.profiles.filter(function (p) { return p.id !== ROOT.current; });
+    switchProfile(ROOT.profiles[0].id, true);
+    toast('"' + name + '" 프로필을 지웠어요');
   }
 
   // ---------- panels ----------
@@ -233,67 +380,56 @@
     for (var i = 0; i < list.length; i++) if (list[i][0] === String(key)) return list[i][1];
     return key;
   }
-  function set(changes) {
-    Object.keys(changes).forEach(function (k) { P[k] = changes[k]; });
-    resetArmed = false;
-    savePrefs();
-    render();
-  }
-  function applyDesign(id) {
-    var p = clone(DESIGNS[id].p);
-    p.design = id;
-    set(p);
+  // A row that needs OK twice (reset, delete).
+  function twice(id, fn) {
+    if (armed !== id) { armed = id; renderPanel(); return; }
+    armed = '';
+    fn();
   }
 
   function lookRows() {
     var rows = [
-      { name: '디자인', sub: DESIGNS[P.design].desc, val: DESIGNS[P.design].name,
-        change: function (d) { applyDesign(cycle(DESIGN_IDS, P.design, d)); } },
-      { name: '배경', val: bgName(P.bg), thumb: bgUrl(P.bg),
-        change: function (d) {
-          var list = bgList(), i = -1;
-          list.forEach(function (b, k) { if (sameBg(b, P.bg)) i = k; });
-          set({ bg: list[(i + d + list.length) % list.length] });
-        } },
+      { name: '디자인', sub: DESIGNS[P.design].desc, val: DESIGNS[P.design].name, change: function (d) { applyDesign(cycle(DESIGN_IDS, P.design, d)); } },
+      { name: '배경', val: bgName(P.bg), thumb: bgUrl(P.bg), change: function (d) { set({ bg: stepBg(P.bg, d, false) }); } },
+      { name: '밤 배경', sub: '오후 7시부터 오전 6시까지', val: bgName(P.nightBg), thumb: P.nightBg ? bgUrl(P.nightBg) : '', change: function (d) { set({ nightBg: stepBg(P.nightBg, d, true) }); } },
       { name: '배경 어둡게', val: DIMS[P.dim], change: function (d) { set({ dim: Math.max(0, Math.min(3, P.dim + d)) }); } },
       { name: '타일', val: labelOf(TILES, P.tiles), change: function (d) { set({ tiles: cycle(TILES, P.tiles, d) }); } },
       { name: '앱 이름', val: P.labels ? '표시' : '숨김', change: function () { set({ labels: !P.labels }); } },
       { name: '글꼴', val: labelOf(FONTS, P.font), change: function (d) { set({ font: cycle(FONTS, P.font, d) }); } },
       { name: '시계', val: labelOf(CLOCKS, P.clock), change: function (d) { set({ clock: cycle(CLOCKS, P.clock, d) }); } },
-      { name: '앱 고르기', sub: '홈 화면에 둘 앱과 순서', val: visibleApps().length + '개', action: true,
-        act: function () { openPanel('apps'); } }
+      { name: '앱 고르기', id: 'apps', sub: '홈 화면에 둘 앱과 순서', val: visibleApps().length + '개', action: true, act: function () { openPanel('apps', { back: { type: 'look', id: 'apps' } }); } },
+      { name: '새 앱 자동 추가', sub: '새로 설치한 앱을 홈 끝에 붙여요', val: P.autoAdd !== false ? '켜짐' : '꺼짐', change: function () { set({ autoAdd: P.autoAdd === false }); } }
     ];
     if (P.bg.type === 'photo') {
-      rows.push({ name: '이 사진 삭제', danger: true, action: true, act: function () {
-        if (N) N.deletePhoto(P.bg.id);
-        loadPhotos();
-        set({ bg: clone(DESIGNS[P.design].p.bg) });
-        toast('사진을 지웠어요');
+      rows.push({ name: '이 사진 삭제', danger: true, action: true, val: armed === 'photo' ? '한 번 더 누르면 삭제' : '', act: function () {
+        twice('photo', function () {
+          if (N) N.deletePhoto(P.bg.id);
+          loadPhotos();
+          set({ bg: clone(DESIGNS[P.design].p.bg) });
+          toast('사진을 지웠어요');
+        });
       } });
     }
-    rows.push({ name: '처음 상태로', danger: true, action: true, val: resetArmed ? '한 번 더 누르면 초기화' : '',
+    rows.push({ name: '처음 상태로', sub: '이 프로필의 꾸미기만 되돌려요', danger: true, action: true, val: armed === 'reset' ? '한 번 더 누르면 초기화' : '',
       act: function () {
-        if (!resetArmed) { resetArmed = true; renderPanel(); return; }
-        var apps = P.apps;
-        P = clone(DEFAULTS); P.apps = apps;
-        resetArmed = false; savePrefs(); render(); toast('처음 상태로 되돌렸어요');
+        twice('reset', function () {
+          var apps = P.apps, auto = P.autoAdd;
+          current().prefs = withDefaults({ apps: apps, autoAdd: auto });
+          P = current().prefs;
+          savePrefs(); render(); toast('처음 상태로 되돌렸어요');
+        });
       } });
     return rows;
   }
 
   function appRows() {
     var vis = visibleApps();
-    var hidden = APPS.filter(function (a) { return vis.indexOf(a.pkg) < 0; }).map(function (a) { return a.pkg; });
+    var hidden = sortedApps().filter(function (a) { return vis.indexOf(a.pkg) < 0; }).map(function (a) { return a.pkg; });
     return vis.concat(hidden).map(function (pkg) {
       var a = BYPKG[pkg], pos = vis.indexOf(pkg);
       return {
         pkg: pkg, name: a.label, appicon: iconUrl(a), check: pos >= 0, val: pos >= 0 ? (pos + 1) + '번째' : '',
-        act: function () {
-          var list = visibleApps(), i = list.indexOf(pkg);
-          if (i >= 0) list.splice(i, 1); else list.push(pkg);
-          set({ apps: list });
-          selectPkg(pkg);
-        },
+        act: function () { if (onHome(pkg)) removeFromHome(pkg); else addToHome(pkg); selectPkg(pkg); },
         change: function (d) {
           var list = visibleApps(), i = list.indexOf(pkg), j = i + d;
           if (i < 0 || j < 0 || j >= list.length) return;
@@ -310,68 +446,146 @@
     renderPanel();
   }
 
-  function overrideRow() {
+  function appMenuRows() {
+    var pkg = panel.pkg, home = onHome(pkg), rows = [];
+    rows.push({ name: '실행', action: true, act: function () { closePanel(); launch(pkg); } });
+    rows.push(home
+      ? { name: '홈에서 빼기', action: true, act: function () { removeFromHome(pkg); closePanel(); toast('홈에서 뺐어요. 모든 앱에서 다시 추가할 수 있어요'); } }
+      : { name: '홈에 추가', action: true, act: function () { addToHome(pkg); closePanel(); toast('홈 끝에 추가했어요'); } });
+    if (home && base === 'home') rows.push({ name: '위치 옮기기', action: true, act: function () { closePanel(); startMove(pkg); } });
+    rows.push({ name: '앱 정보', sub: '저장공간, 권한, 강제 종료', action: true, act: function () { if (N) N.appInfo(pkg); else toast('TV에서만 열 수 있어요'); } });
+    rows.push({ name: '앱 삭제', sub: 'TV의 삭제 확인 화면이 열려요', danger: true, action: true, act: function () { closePanel(); if (N) N.uninstall(pkg); else toast('TV에서만 삭제할 수 있어요'); } });
+    return rows;
+  }
+
+  function profileRows() {
+    var rows = ROOT.profiles.map(function (pr) {
+      return { name: pr.name, dot: pr.color, val: pr.id === ROOT.current ? '사용 중' : '', action: pr.id !== ROOT.current,
+        act: function () { if (pr.id !== ROOT.current) { switchProfile(pr.id); closePanel(); } } };
+    });
+    rows.push({ name: '새 프로필 추가', sub: '지금 화면 설정을 복사해서 만들어요', action: true, act: addProfile });
+    rows.push({ name: '이름', sub: '폰 리모컨에서 "이름을 민수로 바꿔"라고 해도 돼요', val: current().name, change: cycleName });
+    rows.push({ name: '색', dot: current().color, val: '', change: cycleColor });
+    if (ROOT.profiles.length > 1) {
+      rows.push({ name: '이 프로필 삭제', danger: true, action: true, val: armed === 'delprofile' ? '한 번 더 누르면 삭제' : '',
+        act: function () { twice('delprofile', deleteProfile); } });
+    }
+    return rows;
+  }
+
+  function overrideStatus() {
     var st = { service: false, enabled: true };
     try { if (N) st = JSON.parse(N.overrideStatus()); } catch (e) {}
-    var val = !st.service ? '접근성 권한 필요' : (st.enabled ? '켜짐' : '꺼짐');
-    return { name: '홈 버튼으로 Cove 열기', sub: '기본 홈 화면이 뜨면 Cove로 바꿔요', val: val, action: true,
-      act: function () {
-        if (!N) { toast('TV에서만 바꿀 수 있어요'); return; }
-        if (!st.service) { N.openAccessibility(); toast('접근성에서 "Cove 홈 버튼 전환"을 켜 주세요'); return; }
-        N.setOverride(!st.enabled); renderPanel();
-      } };
+    return st;
+  }
+
+  function updateLabel() {
+    if (!update) return '';
+    if (update.phase === 'checking') return '확인 중…';
+    if (update.phase === 'download') return '받는 중…';
+    if (update.phase === 'confirm') return '설치 화면 확인';
+    if (!update.ok) return '확인 실패';
+    return update.available ? (update.latestName + ' 설치하기') : '최신 버전이에요';
   }
 
   function settingsRows() {
+    var st = overrideStatus();
     return [
-      overrideRow(),
+      { name: '홈 버튼으로 Cove 열기', action: true,
+        sub: !st.service ? 'OK를 누르면 접근성 설정으로 이동해요' : st.enabled ? 'OK를 누르면 잠시 꺼요' : 'OK를 누르면 다시 켜요',
+        val: !st.service ? '권한 필요' : st.enabled ? '켜짐' : '일시 중지',
+        act: function () {
+          if (!N) { toast('TV에서만 바꿀 수 있어요'); return; }
+          if (!st.service) { N.openAccessibility(); toast('접근성에서 "Cove 홈 버튼 전환"을 켜 주세요'); return; }
+          N.setOverride(!st.enabled); renderPanel();
+        } },
+      { name: '권한이 켜지지 않을 때', sub: '안드로이드 "제한된 설정" 안내', val: helpOpen ? '닫기' : '보기', action: true,
+        act: function () { helpOpen = !helpOpen; renderPanel(); } },
+      { name: 'Cove 앱 정보 열기', sub: '여기서 "제한된 설정 허용"을 찾아요', action: true,
+        act: function () { if (N) N.appInfo(N.selfPackage()); else toast('TV에서만 열 수 있어요'); } },
+      { name: '업데이트 확인', sub: '새 버전이 있으면 바로 설치해요', val: updateLabel(), action: true,
+        act: function () {
+          if (!N) { toast('TV에서만 확인할 수 있어요'); return; }
+          if (update && update.ok && update.available && update.phase === 'result') { update.phase = 'download'; renderPanel(); N.installUpdate(); }
+          else { update = { phase: 'checking' }; renderPanel(); N.checkUpdate(); }
+        } },
       { name: 'TV 설정 열기', action: true, act: function () { if (N) N.openTvSettings(); } },
       { name: '버전', val: N ? N.version() : '미리보기' }
     ];
   }
 
-  function rowsFor(type) { return type === 'apps' ? appRows() : type === 'settings' ? settingsRows() : lookRows(); }
+  function rowsFor(type) {
+    if (type === 'apps') return appRows();
+    if (type === 'settings') return settingsRows();
+    if (type === 'profiles') return profileRows();
+    if (type === 'app') return appMenuRows();
+    return lookRows();
+  }
 
-  function openPanel(type) {
-    if (type !== 'look' && type !== 'apps' && type !== 'settings') return;
+  function openPanel(type, opts) {
+    if (['look', 'apps', 'settings', 'profiles', 'app'].indexOf(type) < 0) return;
     if (type === 'look' || type === 'settings') loadPhotos();
-    layer = 'panel';
-    panel = { type: type, i: 0 };
-    resetArmed = false;
+    if (moving) { moving = null; renderTiles(); }
+    opts = opts || {};
+    panel = { type: type, i: 0, pkg: opts.pkg, back: opts.back };
+    armed = '';
+    if (type !== 'settings') helpOpen = false;
+    if (focusEl) focusEl.classList.remove('focus');
     $('panel').hidden = false;
     renderPanel();
   }
+  function closePanelQuiet() { panel = null; armed = ''; $('panel').hidden = true; }
   function closePanel() {
-    if (panel && panel.type === 'apps') { openPanel('look'); panel.i = 7; renderPanel(); return; }
-    layer = 'home';
-    panel = null;
-    $('panel').hidden = true;
-    renderTiles();
+    var back = panel && panel.back;
+    closePanelQuiet();
+    if (back) {
+      openPanel(back.type);
+      var rows = rowsFor(back.type);
+      for (var i = 0; i < rows.length; i++) if (rows[i].id === back.id) panel.i = i;
+      renderPanel();
+      return;
+    }
+    if (base === 'drawer') restoreFocus('drawer'); else restoreFocus('home');
+  }
+
+  function remoteBlock() {
+    var info = { url: '', qr: '', running: false, error: '', port: 8765, ips: [] };
+    try { info = N ? JSON.parse(N.remoteInfo()) : { url: 'http://192.168.0.10:8765/?t=preview', qr: '', running: true, error: '', port: 8765, ips: ['wlan0 192.168.0.10'] }; } catch (e) {}
+    var addr = info.url.replace(/\?.*$/, '');
+    var status = info.running
+      ? '<span class="ok">● 리모컨 서버 실행 중</span>'
+      : '<span class="bad">● 리모컨 서버가 꺼져 있어요' + (info.error ? ' (' + esc(info.error) + ')' : '') + '</span>';
+    var tips = '연결이 안 되면 폰이 같은 와이파이인지 확인하세요. 게스트 와이파이나 모바일 데이터에서는 연결되지 않아요.';
+    var ips = (info.ips || []).length > 1 ? '<div>TV 주소: ' + info.ips.map(esc).join(' · ') + '</div>' : '';
+    if (!info.url) {
+      return '<div class="pair"><div></div><div class="diag">' + status + '<div>와이파이나 유선 네트워크에 연결되면 폰 리모컨 QR이 여기 나타나요.</div>' + ips + '</div></div>';
+    }
+    return '<div class="pair"><div class="qr">' + info.qr + '</div><div class="diag">' +
+      '<p>폰 카메라로 QR을 찍으면 리모컨이 열려요.</p><b>' + esc(addr) + '</b>' + status + '<div>' + tips + '</div>' + ips + '</div></div>';
+  }
+
+  function helpBlock() {
+    var pkg = N ? N.selfPackage() : 'com.mirinetic.cove';
+    return '<div class="help"><div><b>왜 꺼지나요?</b> Downloader나 USB로 설치한 앱은 안드로이드 13부터 접근성 권한이 막혀요. 켜자마자 다시 꺼진다면 이 경우예요.</div>' +
+      '<div><b>1.</b> 아래 "Cove 앱 정보 열기" → 메뉴에서 "제한된 설정 허용" → 접근성에서 다시 켜기</div>' +
+      '<div><b>2.</b> 그 메뉴가 없으면 PC에서 ADB로 실행:</div>' +
+      '<code>adb shell appops set ' + esc(pkg) + ' ACCESS_RESTRICTED_SETTINGS allow</code></div>';
   }
 
   function renderPanel() {
     if (!panel) return;
     var rows = rowsFor(panel.type);
     panel.i = Math.max(0, Math.min(rows.length - 1, panel.i));
-    var titles = { look: ['Appearance', '꾸미기'], apps: ['Apps', '앱 고르기'], settings: ['Settings', '설정'] };
+    var titles = { look: ['Appearance', '꾸미기'], apps: ['Apps', '앱 고르기'], settings: ['Settings', '설정'], profiles: ['Profiles', '프로필'], app: ['App', ''] };
     $('pKicker').textContent = titles[panel.type][0];
-    $('pTitle').textContent = titles[panel.type][1];
-
-    var extra = '';
-    if (panel.type === 'settings') {
-      var info = { url: '', qr: '' };
-      try { info = N ? JSON.parse(N.remoteInfo()) : { url: 'http://192.168.0.10:8765/?t=preview', qr: '' }; } catch (e) {}
-      extra = info.url
-        ? '<div class="pair"><div class="qr">' + info.qr + '</div><div><p>폰 카메라로 QR을 찍으면 리모컨이 열려요. 폰과 TV가 같은 와이파이여야 해요.</p><b>' +
-          esc(info.url.replace(/\?.*$/, '')) + '</b></div></div>'
-        : '<div class="pair"><div></div><p>와이파이나 유선 네트워크에 연결되면 폰 리모컨 QR이 여기 나타나요.</p></div>';
-    }
-    $('pExtra').innerHTML = extra;
+    $('pTitle').textContent = panel.type === 'app' ? (BYPKG[panel.pkg] ? BYPKG[panel.pkg].label : '') : titles[panel.type][1];
+    $('pExtra').innerHTML = panel.type === 'settings' ? (helpOpen ? helpBlock() : remoteBlock()) : '';
 
     $('pRows').innerHTML = rows.map(function (r, i) {
       var cls = 'row' + (i === panel.i ? ' sel' : '') + (r.action ? ' action' : '') + (r.danger ? ' danger' : '');
       var left = (r.check !== undefined ? '<span class="check' + (r.check ? ' on' : '') + '">' + (r.check ? '✓' : '') + '</span>' : '') +
-        (r.appicon ? '<img class="appicon" src="' + r.appicon + '" alt="">' : '');
+        (r.appicon ? '<img class="appicon" src="' + r.appicon + '" alt="">' : '') +
+        (r.dot ? '<span class="dot" style="background:' + esc(r.dot) + '"></span>' : '');
       var val = r.change && !r.action && r.check === undefined
         ? '<span class="arrow">‹</span><b>' + esc(r.val) + '</b><span class="arrow">›</span>'
         : (r.val ? '<b>' + esc(r.val) + '</b>' : '') + (r.action ? '<span class="arrow">›</span>' : '');
@@ -381,7 +595,6 @@
         '<div class="val">' + val + '</div></div>';
     }).join('');
 
-    // keep the selected row in view in long lists
     var box = $('pRows'), sel = box.querySelector('.sel');
     if (sel) {
       var top = sel.offsetTop, bottom = top + sel.offsetHeight;
@@ -391,16 +604,17 @@
 
     var hints = { look: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '닫기']],
       apps: [['OK', '표시 / 숨김'], ['◀ ▶', '순서 옮기기'], ['뒤로', '돌아가기']],
-      settings: [['OK', '선택'], ['뒤로', '닫기']] };
+      profiles: [['OK', '선택'], ['◀ ▶', '이름·색 바꾸기'], ['뒤로', '닫기']],
+      settings: [['OK', '선택'], ['뒤로', '닫기']], app: [['OK', '선택'], ['뒤로', '닫기']] };
     $('pHint').innerHTML = hints[panel.type].map(function (h) { return '<span><kbd>' + h[0] + '</kbd>' + h[1] + '</span>'; }).join('');
   }
 
   function panelKey(k) {
     var rows = rowsFor(panel.type), r = rows[panel.i];
-    if (k === 'up') { panel.i = Math.max(0, panel.i - 1); resetArmed = false; renderPanel(); }
-    else if (k === 'down') { panel.i = Math.min(rows.length - 1, panel.i + 1); resetArmed = false; renderPanel(); }
+    if (k === 'up') { panel.i = Math.max(0, panel.i - 1); armed = ''; renderPanel(); }
+    else if (k === 'down') { panel.i = Math.min(rows.length - 1, panel.i + 1); armed = ''; renderPanel(); }
     else if (k === 'left' || k === 'right') { if (r && r.change) r.change(k === 'left' ? -1 : 1); }
-    else if (k === 'ok') { if (!r) return; if (r.act) r.act(); else if (r.change) r.change(1); }
+    else if (k === 'ok' || k === 'longok') { if (!r) return; if (r.act) r.act(); else if (r.change) r.change(1); }
     else if (k === 'back' || k === 'menu') closePanel();
   }
 
@@ -411,50 +625,188 @@
     t.textContent = msg;
     t.classList.add('on');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.classList.remove('on'); }, 2600);
+    toastTimer = setTimeout(function () { t.classList.remove('on'); }, 2800);
   }
 
-  // ---------- entry points (called by the Android app and the phone remote) ----------
+  // ---------- keys ----------
   function key(k) {
-    if (layer === 'panel') { panelKey(k); return; }
+    if (panel) { panelKey(k); return; }
+    if (moving) {
+      if (k === 'ok' || k === 'back' || k === 'longok') endMove();
+      else if (['up', 'down', 'left', 'right'].indexOf(k) >= 0) shiftMoving(k);
+      return;
+    }
+    var pkg = focusEl && focusEl.getAttribute('data-pkg');
+    if (base === 'drawer') {
+      if (k === 'back') closeDrawer();
+      else if (k === 'ok') { if (pkg) launch(pkg); }
+      else if (k === 'longok' || k === 'menu') { if (pkg) openPanel('app', { pkg: pkg }); }
+      else move(k);
+      return;
+    }
     if (k === 'menu') { openPanel('look'); return; }
     if (k === 'back') { var first = document.querySelector('#tiles .tile'); if (first) setFocus(first); return; }
-    if (k === 'ok') { activate(focusEl); return; }
+    if (k === 'longok') { if (pkg) openPanel('app', { pkg: pkg }); return; }
+    if (k === 'ok') {
+      if (pkg) { launch(pkg); return; }
+      var act = focusEl && focusEl.getAttribute('data-act');
+      if (act === 'drawer') openDrawer(); else if (act) openPanel(act);
+      return;
+    }
     move(k);
   }
 
+  // ---------- voice / typed commands from the phone ----------
+  // Simple keyword rules, all on the TV. Korean app names are mapped to the English words in app labels.
+  var ALIAS = [
+    ['넷플릭스', 'netflix'], ['유튜브', 'youtube'], ['뮤직', 'music'], ['키즈', 'kids'], ['디즈니', 'disney'], ['프라임', 'prime'],
+    ['비디오', 'video'], ['스포티파이', 'spotify'], ['애플', 'apple'], ['티빙', 'tving'], ['웨이브', 'wavve'], ['쿠팡', 'coupang'],
+    ['왓챠', 'watcha'], ['트위치', 'twitch'], ['플렉스', 'plex'], ['맥스', 'max'], ['구글', 'google'], ['플레이', 'play'],
+    ['스토어', 'store'], ['크롬', 'chrome'], ['티비', 'tv'], ['라이브', 'live'], ['파라마운트', 'paramount'], ['훌루', 'hulu']
+  ];
+  function norm(s) { return String(s).toLowerCase().replace(/[\s.,!?~'"·:;()\-]/g, ''); }
+  function has(t, words) { for (var i = 0; i < words.length; i++) if (t.indexOf(words[i]) >= 0) return true; return false; }
+
+  function findApp(t) {
+    var en = t;
+    ALIAS.forEach(function (a) { en = en.split(a[0]).join(a[1]); });
+    var best = null, len = 0;
+    APPS.forEach(function (a) {
+      var l = norm(a.label);
+      if (l.length >= 2 && (en.indexOf(l) >= 0 || t.indexOf(l) >= 0) && l.length > len) { best = a; len = l.length; }
+    });
+    return best;
+  }
+
+  function say(text) {
+    var raw = String(text || '').trim();
+    var t = norm(raw);
+    if (!t) return;
+    var done = function (msg) { toast('🎙 "' + raw + '" → ' + msg); };
+
+    // profile rename: "이름을 민수로 바꿔"
+    var m = raw.match(/이름(?:을|를)?\s*(.+?)\s*(?:으로|로)\s*(?:바꿔|변경|해)/);
+    if (m) { renameProfile(m[1]); return; }
+
+    // profiles by name
+    for (var i = 0; i < ROOT.profiles.length; i++) {
+      var pn = norm(ROOT.profiles[i].name);
+      if (pn && t.indexOf(pn) >= 0 && (has(t, ['프로필', '모드']) || t === pn)) { switchProfile(ROOT.profiles[i].id, true); done(ROOT.profiles[i].name + ' 프로필'); return; }
+    }
+    if (has(t, ['새프로필', '프로필추가', '프로필만들'])) { addProfile(); return; }
+
+    // screens
+    if (has(t, ['모든앱', '전체앱', '앱목록'])) { openDrawer(); done('모든 앱'); return; }
+    if (has(t, ['꾸미기'])) { openPanel('look'); done('꾸미기'); return; }
+    if (has(t, ['프로필'])) { openPanel('profiles'); done('프로필'); return; }
+    if (has(t, ['업데이트'])) { openPanel('settings'); if (N) { update = { phase: 'checking' }; renderPanel(); N.checkUpdate(); } done('업데이트 확인'); return; }
+    if (has(t, ['닫아', '닫기', '홈으로', '처음화면'])) { window.Cove.home(); done('홈'); return; }
+
+    // designs
+    if (has(t, ['글래스', 'glass', '유리'])) { applyDesign('glass'); done('Glass 디자인'); return; }
+    if (has(t, ['아이콘', 'icons'])) { applyDesign('icons'); done('Icons 디자인'); return; }
+    if (has(t, ['미니멀', 'minimal', '심플'])) { applyDesign('minimal'); done('Minimal 디자인'); return; }
+
+    // background
+    for (var b = 0; b < PRESETS.length; b++) {
+      var key0 = norm(PRESETS[b][1]).slice(0, 2);
+      if (t.indexOf(norm(PRESETS[b][1])) >= 0 || (has(t, ['배경']) && t.indexOf(key0) >= 0)) {
+        set({ bg: { type: 'preset', id: PRESETS[b][0] } }); done(PRESETS[b][1] + ' 배경'); return;
+      }
+    }
+    if (has(t, ['배경']) && has(t, ['이전', '전'])) { set({ bg: stepBg(P.bg, -1, false) }); done('이전 배경'); return; }
+    if (has(t, ['배경'])) { set({ bg: stepBg(P.bg, 1, false) }); done('다음 배경'); return; }
+    if (has(t, ['어둡게', '어둡'])) { set({ dim: Math.min(3, P.dim + 1) }); done('배경 어둡게'); return; }
+    if (has(t, ['밝게', '밝'])) { set({ dim: Math.max(0, P.dim - 1) }); done('배경 밝게'); return; }
+
+    // clock & tiles
+    if (has(t, ['시계'])) {
+      if (has(t, ['숨', '꺼', '없'])) set({ clock: 'off' });
+      else if (has(t, ['12'])) set({ clock: '12' });
+      else set({ clock: '24' });
+      done('시계 ' + labelOf(CLOCKS, P.clock)); return;
+    }
+    if (has(t, ['타일'])) { set({ tiles: cycle(TILES, P.tiles, 1) }); done('타일 ' + labelOf(TILES, P.tiles)); return; }
+
+    // apps
+    var app = findApp(t);
+    if (app) {
+      if (has(t, ['빼', '숨겨', '지워'])) { removeFromHome(app.pkg); done(app.label + ' 홈에서 빼기'); return; }
+      if (has(t, ['추가', '넣어'])) { addToHome(app.pkg); done(app.label + ' 홈에 추가'); return; }
+      done(app.label + ' 실행');
+      launch(app.pkg);
+      return;
+    }
+
+    // remote keys
+    var dirs = [['위', 'up'], ['아래', 'down'], ['왼쪽', 'left'], ['오른쪽', 'right'], ['선택', 'ok'], ['확인', 'ok'], ['뒤로', 'back']];
+    for (var d = 0; d < dirs.length; d++) if (t === dirs[d][0] || t === dirs[d][0] + '로') { key(dirs[d][1]); return; }
+    if (has(t, ['설정'])) { openPanel('settings'); done('설정'); return; }
+
+    toast('🎙 "' + raw + '" 명령을 이해하지 못했어요');
+  }
+
+  // ---------- entry points (called by the Android app and the phone remote) ----------
   window.Cove = {
     key: key,
-    home: function () { if (layer === 'panel') { panel = null; layer = 'home'; $('panel').hidden = true; } lastTile = null; renderTiles(); },
+    say: say,
+    toast: toast,
+    home: function () {
+      closePanelQuiet();
+      moving = null;
+      if (base === 'drawer') { base = 'home'; $('drawer').hidden = true; }
+      lastFocus.home = null;
+      renderTiles();
+    },
     resume: function () { loadApps(); loadPhotos(); render(); },
     appsChanged: function () { loadApps(); render(); },
-    toast: toast,
     photoAdded: function (id) { loadPhotos(); set({ bg: { type: 'photo', id: id } }); toast('폰에서 보낸 사진을 배경으로 설정했어요'); },
+    updateResult: function (json) {
+      try { update = JSON.parse(json); } catch (e) { update = { ok: false }; }
+      update.phase = 'result';
+      if (panel && panel.type === 'settings') renderPanel();
+      toast(!update.ok ? '업데이트 정보를 받지 못했어요. 인터넷 연결을 확인해 주세요'
+        : update.available ? '새 버전 ' + update.latestName + '이(가) 있어요. "업데이트 확인"을 한 번 더 누르면 설치해요'
+        : '최신 버전을 쓰고 있어요');
+    },
+    updateProgress: function (phase) {
+      if (!update) update = {};
+      if (phase === 'permission') { update.phase = 'result'; toast('Cove에 "출처를 알 수 없는 앱 설치"를 허용한 뒤 다시 눌러 주세요'); }
+      else if (phase === 'download') { update.phase = 'download'; toast('새 버전을 받는 중이에요'); }
+      else if (phase === 'confirm') { update.phase = 'confirm'; toast('설치 화면에서 "업데이트"를 눌러 주세요'); }
+      else { update.phase = 'result'; update.ok = false; toast('업데이트를 설치하지 못했어요'); }
+      if (panel && panel.type === 'settings') renderPanel();
+    },
     remote: function (cmd) {
       var parts = cmd.split(':');
-      if (parts[0] === 'panel') { if (layer === 'panel' && panel.type === parts[1]) closePanel(); else openPanel(parts[1]); }
+      if (parts[0] === 'panel') {
+        if (parts[1] === 'drawer') { if (base === 'drawer') closeDrawer(); else openDrawer(); }
+        else if (panel && panel.type === parts[1]) closePanel();
+        else openPanel(parts[1]);
+      }
       else if (parts[0] === 'design' && DESIGNS[parts[1]]) applyDesign(parts[1]);
-      else if (parts[0] === 'bg') { var list = bgList(), i = -1; list.forEach(function (b, k) { if (sameBg(b, P.bg)) i = k; });
-        set({ bg: list[(i + (parts[1] === 'prev' ? -1 : 1) + list.length) % list.length] }); }
+      else if (parts[0] === 'bg') set({ bg: stepBg(P.bg, parts[1] === 'prev' ? -1 : 1, false) });
       else if (parts[0] === 'tiles') set({ tiles: cycle(TILES, P.tiles, 1) });
+      else if (parts[0] === 'profile' && profileById(parts[1])) switchProfile(parts[1]);
       else if (parts[0] === 'home') window.Cove.home();
     }
   };
 
   // Desktop preview: keyboard instead of the TV remote.
   document.addEventListener('keydown', function (e) {
-    var map = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'ok', Escape: 'back', Backspace: 'back', m: 'menu' };
+    var map = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: e.shiftKey ? 'longok' : 'ok', Escape: 'back', Backspace: 'back', m: 'menu', l: 'longok' };
     if (map[e.key]) { e.preventDefault(); key(map[e.key]); }
   });
 
   // ---------- sample apps for the desktop preview ----------
   function sampleApps() {
     var list = [['Netflix', '#e50914', 'N'], ['YouTube', '#ff0033', '▶'], ['Prime Video', '#1a98ff', 'P'], ['Disney+', '#113ccf', 'D+'],
-      ['Spotify', '#1ed760', '♪'], ['Max', '#002be7', 'M'], ['Apple TV', '#1c1c1e', ''], ['Twitch', '#9146ff', 'T'],
-      ['Plex', '#e5a00d', '›'], ['YouTube Music', '#ff0033', '♫'], ['Google TV', '#4285f4', 'G'], ['Settings', '#5f6368', '⚙']];
+      ['Spotify', '#1ed760', '♪'], ['Max', '#002be7', 'M'], ['Apple TV', '#1c1c1e', 'A'], ['Twitch', '#9146ff', 'T'],
+      ['Plex', '#e5a00d', '›'], ['YouTube Music', '#ff0033', '♫'], ['Google TV', '#4285f4', 'G'], ['Settings', '#5f6368', '⚙'],
+      ['YouTube Kids', '#ff4e45', 'K'], ['TVING', '#ff153c', 'T'], ['Wavve', '#1f4ef5', 'W'], ['Chrome', '#1a73e8', 'C']];
     return list.map(function (x, i) {
       var svg = function (w, h, fs) {
-        return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '"><rect width="100%" height="100%" rx="' + (w === h ? 40 : 0) + '" fill="' + x[1] + '"/><text x="50%" y="54%" font-family="sans-serif" font-weight="700" font-size="' + fs + '" fill="#fff" text-anchor="middle" dominant-baseline="middle">' + (x[2] || x[0].charAt(0)) + '</text></svg>');
+        return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '"><rect width="100%" height="100%" rx="' + (w === h ? 40 : 0) + '" fill="' + x[1] + '"/><text x="50%" y="54%" font-family="sans-serif" font-weight="700" font-size="' + fs + '" fill="#fff" text-anchor="middle" dominant-baseline="middle">' + x[2] + '</text></svg>');
       };
       return { pkg: 'sample.app' + i, label: x[0], color: x[1], banner: i % 3 !== 2, icon: svg(192, 192, 90), bannerUrl: svg(640, 360, 120) };
     });

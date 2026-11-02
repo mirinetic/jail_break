@@ -13,6 +13,7 @@ import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.Executors
+import org.json.JSONObject
 
 /**
  * The phone remote. A tiny web server on the TV (port 8765) that serves the remote page and turns
@@ -24,7 +25,8 @@ class RemoteServer(private val activity: MainActivity) {
     companion object {
         const val PORT = 8765
         private const val MAX_PHOTO = 25 * 1024 * 1024
-        private val KEYS = setOf("up", "down", "left", "right", "ok", "back", "menu")
+        private const val MAX_TEXT = 2000
+        private val KEYS = setOf("up", "down", "left", "right", "ok", "longok", "back", "menu")
         private val COMMAND = Regex("[a-z0-9:_-]{1,40}")
 
         fun lanIp(): String? = try {
@@ -39,8 +41,25 @@ class RemoteServer(private val activity: MainActivity) {
             null
         }
 
+        /** Every LAN address the TV has, shown on the settings screen to help when the phone cannot connect. */
+        fun allIps(): List<String> = try {
+            NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+                .filter { it.isUp && !it.isLoopback }
+                .flatMap { nif -> nif.inetAddresses.toList().filterIsInstance<Inet4Address>().map { "${nif.name} ${it.hostAddress}" } }
+        } catch (e: Exception) {
+            emptyList()
+        }
+
         fun url(store: Store): String? = lanIp()?.let { "http://$it:$PORT/?t=${store.token}" }
     }
+
+    @Volatile
+    var running = false
+        private set
+
+    @Volatile
+    var error: String? = null
+        private set
 
     @Volatile
     private var socket: ServerSocket? = null
@@ -53,12 +72,17 @@ class RemoteServer(private val activity: MainActivity) {
                 server.reuseAddress = true
                 server.bind(InetSocketAddress(PORT))
                 socket = server
+                running = true
+                error = null
                 while (!server.isClosed) {
                     val client = server.accept()
                     pool.execute { serve(client) }
                 }
-            } catch (_: IOException) {
+            } catch (e: IOException) {
                 // Closed on shutdown, or the port is taken. The rest of Cove keeps working without the phone remote.
+                if (socket == null) error = e.message ?: e.javaClass.simpleName
+            } finally {
+                running = false
             }
         }
     }
@@ -107,6 +131,17 @@ class RemoteServer(private val activity: MainActivity) {
                         val cmd = uri.getQueryParameter("c").orEmpty()
                         if (COMMAND.matches(cmd)) activity.js("Cove.remote('$cmd')")
                         json(out, 200, """{"ok":true}""")
+                    }
+                    method == "POST" && path == "/api/say" -> {
+                        if (length <= 0 || length > MAX_TEXT) {
+                            json(out, 413, """{"error":"size"}""")
+                        } else {
+                            val body = ByteArray(length)
+                            DataInputStream(input).readFully(body)
+                            val text = String(body, Charsets.UTF_8).trim()
+                            if (text.isNotEmpty()) activity.js("Cove.say(${JSONObject.quote(text)})")
+                            json(out, 200, """{"ok":true}""")
+                        }
                     }
                     method == "POST" && path == "/api/photo" -> {
                         if (length <= 0 || length > MAX_PHOTO) {
