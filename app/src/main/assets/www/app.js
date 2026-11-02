@@ -34,7 +34,7 @@
   ];
   var CAT_NAMES = ['즐겨찾기', '영화·드라마', '예능', '음악', '키즈', '게임', '스포츠', '뉴스', '유틸리티', '기타'];
   // cats: the home screen's rows, in order. cat: pkg -> row id (an app without one sits in the first row).
-  var DEFAULTS = { design: 'glass', clock: '24', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null };
+  var DEFAULTS = { design: 'glass', clock: '24', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null, locked: null };
   Object.keys(DESIGNS.glass.p).forEach(function (k) { DEFAULTS[k] = DESIGNS.glass.p[k]; });
 
   // ---------- state ----------
@@ -52,6 +52,8 @@
   var armed = '';        // name of a row waiting for a second OK (reset, delete)
   var helpOpen = false;
   var update = null;     // {phase, ...result}
+  var pinState = null;   // {mode:'check'|'new'|'confirm', title, onOk, entry, first, i}
+  var unlockedUntil = 0; // a correct PIN keeps things open for 5 minutes
 
   var $ = function (id) { return document.getElementById(id); };
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -65,6 +67,7 @@
     if (!Array.isArray(o.cats) || !o.cats.length) o.cats = [{ id: 'c1', name: '' }];
     if (!o.cat || typeof o.cat !== 'object') o.cat = {};
     if (!Array.isArray(o.recent)) o.recent = [];
+    if (!Array.isArray(o.locked)) o.locked = [];
     return o;
   }
   function profileById(id) { for (var i = 0; i < ROOT.profiles.length; i++) if (ROOT.profiles[i].id === id) return ROOT.profiles[i]; return null; }
@@ -211,7 +214,8 @@
       : '<img class="icon" src="' + iconUrl(a) + '" alt="" onerror="this.outerHTML=\'<span class=initial>' + esc(a.label.charAt(0)) + '</span>\'">';
     var brand = (opts.forceBrand || (opts.banner && !a.banner)) ? ' brand' : '';
     return '<div class="tile focusable' + (moving === a.pkg && !opts.recent ? ' moving' : '') + '" data-pkg="' + esc(a.pkg) + '"' + (opts.recent ? ' data-recent="1"' : '') + '>' +
-      '<div class="face' + brand + '" style="--brand:' + esc(a.color || '#2a2f3a') + '">' + inner + '</div>' +
+      '<div class="face' + brand + '" style="--brand:' + esc(a.color || '#2a2f3a') + '">' + inner +
+      (P.locked.indexOf(a.pkg) >= 0 && hasPin() ? '<span class="lock"><svg viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="#fff" stroke-width="2"/><rect x="5" y="10" width="14" height="11" rx="2" fill="#fff"/></svg></span>' : '') + '</div>' +
       '<div class="label">' + esc(a.label) + '</div></div>';
   }
 
@@ -315,6 +319,10 @@
 
   // ---------- actions ----------
   function launch(pkg) {
+    if (P.locked.indexOf(pkg) >= 0 && hasPin() && !unlocked()) {
+      openPin({ mode: 'check', title: '"' + (BYPKG[pkg] ? BYPKG[pkg].label : pkg) + '" 열기', onOk: function () { launch(pkg); } });
+      return;
+    }
     var a = BYPKG[pkg];
     P.recent = [pkg].concat(P.recent.filter(function (x) { return x !== pkg; })).slice(0, 12);
     savePrefs();
@@ -323,6 +331,7 @@
   }
 
   function set(changes) {
+    if (locked('설정 바꾸기', function () { set(changes); })) return;
     Object.keys(changes).forEach(function (k) { P[k] = changes[k]; });
     armed = '';
     savePrefs();
@@ -334,6 +343,7 @@
   function removeFromHome(pkg) { var l = visibleApps(), i = l.indexOf(pkg); if (i >= 0) l.splice(i, 1); set({ apps: l }); }
 
   function openDrawer() {
+    if (locked('모든 앱', openDrawer)) return;
     closePanelQuiet();
     base = 'drawer';
     $('drawer').hidden = false;
@@ -345,8 +355,9 @@
     restoreFocus('home');
   }
 
-  function setCat(pkg, id) { P.cat[pkg] = id; savePrefs(); render(); }
+  function setCat(pkg, id) { if (locked('줄 바꾸기', function () { setCat(pkg, id); })) return; P.cat[pkg] = id; savePrefs(); render(); }
   function addCat(name) {
+    if (locked('줄 추가', function () { addCat(name); })) return null;
     if (P.cats.length === 1 && !P.cats[0].name) P.cats[0].name = '즐겨찾기';
     var used = P.cats.map(function (c) { return c.name; });
     name = name || CAT_NAMES.filter(function (n) { return used.indexOf(n) < 0; })[0] || ('줄 ' + (P.cats.length + 1));
@@ -357,6 +368,7 @@
     return c;
   }
   function renameCat(id, name) {
+    if (locked('줄 이름 바꾸기', function () { renameCat(id, name); })) return;
     var c = catById(id);
     name = String(name).trim().slice(0, 14);
     if (!c || !name) return;
@@ -373,6 +385,7 @@
   }
 
   function startMove(pkg) {
+    if (locked('위치 옮기기', function () { startMove(pkg); })) return;
     if (base !== 'home' || !onHome(pkg)) return;
     moving = pkg;
     lastFocus.home = pkg;
@@ -411,9 +424,95 @@
   }
   function endMove() { moving = null; renderTiles(); toast('위치를 저장했어요'); }
 
+  // ---------- PIN ----------
+  // A household PIN (stored as a hash). It keeps children out of grown-up profiles, settings and chosen apps;
+  // it is a speed bump, not real security (the TV's own settings stay reachable).
+  var PIN_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'x', '0', 'del'];
+  function hashPin(pin) {
+    var h = 2166136261, str = 'cove:' + pin;
+    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return h.toString(16);
+  }
+  function hasPin() { return !!ROOT.pinHash; }
+  function unlocked() { return !hasPin() || Date.now() < unlockedUntil; }
+  function requirePin(title, fn) { if (unlocked()) fn(); else openPin({ mode: 'check', title: title, onOk: fn }); }
+  // True (and asks for the PIN) when the current profile protects its settings.
+  function locked(title, retry) {
+    if (current().guard && !unlocked()) { openPin({ mode: 'check', title: title, onOk: retry }); return true; }
+    return false;
+  }
+  function openPin(st) {
+    pinState = st; st.entry = ''; st.i = 0; st.bad = '';
+    $('pin').hidden = false;
+    renderPin();
+  }
+  function closePin() { pinState = null; $('pin').hidden = true; }
+  function renderPin() {
+    var st = pinState;
+    $('pinTitle').textContent = st.mode === 'new' ? '새 PIN 4자리' : st.mode === 'confirm' ? '한 번 더 입력하세요' : (st.title || 'PIN을 입력하세요');
+    var sub = $('pinSub');
+    sub.textContent = st.bad || (st.mode === 'check' ? 'PIN 4자리를 입력하세요' : '잊어버리면 Cove 앱 데이터를 지워야 해요');
+    sub.className = st.bad ? 'bad' : '';
+    var dots = '';
+    for (var d = 0; d < 4; d++) dots += '<i class="' + (d < st.entry.length ? 'on' : '') + '"></i>';
+    $('pinDots').innerHTML = dots;
+    $('pinKeys').innerHTML = PIN_KEYS.map(function (k, i) {
+      var label = k === 'x' ? '취소' : k === 'del' ? '지우기' : k;
+      return '<span class="' + (i === st.i ? 'sel' : '') + (k.length > 1 ? ' small' : '') + '">' + label + '</span>';
+    }).join('');
+  }
+  function pinPress(v) {
+    var st = pinState;
+    if (!st) return;
+    if (v === 'x') { closePin(); return; }
+    if (v === 'del') { st.entry = st.entry.slice(0, -1); renderPin(); return; }
+    if (st.entry.length >= 4) return;
+    st.entry += v; st.bad = '';
+    if (st.entry.length < 4) { renderPin(); return; }
+    pinSubmit();   // right away, so fast typing (or a pasted "12341234") is never dropped
+  }
+  function pinSubmit() {
+    var st = pinState;
+    if (!st) return;
+    if (st.mode === 'check') {
+      if (hashPin(st.entry) === ROOT.pinHash) { unlockedUntil = Date.now() + 5 * 60 * 1000; closePin(); if (st.onOk) st.onOk(); }
+      else { st.entry = ''; st.bad = 'PIN이 맞지 않아요'; renderPin(); var d = $('pinDots'); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake'); }
+    } else if (st.mode === 'new') {
+      st.first = st.entry; st.entry = ''; st.mode = 'confirm'; renderPin();
+    } else {
+      if (st.entry === st.first) {
+        ROOT.pinHash = hashPin(st.entry); savePrefs();
+        unlockedUntil = Date.now() + 5 * 60 * 1000;
+        closePin(); toast('PIN을 저장했어요');
+        if (st.onOk) st.onOk();
+        if (panel) renderPanel();
+      } else { st.mode = 'new'; st.entry = ''; st.bad = '두 번 입력한 PIN이 달라요. 처음부터 다시 입력하세요'; renderPin(); }
+    }
+  }
+  function pinKey(k) {
+    var st = pinState;
+    if (k.charAt(0) === 'n' && k.length === 2) { pinPress(k.charAt(1)); return; }
+    if (k === 'back') { if (st.entry) pinPress('del'); else closePin(); return; }
+    if (k === 'ok' || k === 'longok') { pinPress(PIN_KEYS[st.i]); return; }
+    var r = Math.floor(st.i / 3), c = st.i % 3;
+    if (k === 'up') r = Math.max(0, r - 1); else if (k === 'down') r = Math.min(3, r + 1);
+    else if (k === 'left') c = Math.max(0, c - 1); else if (k === 'right') c = Math.min(2, c + 1);
+    st.i = r * 3 + c; renderPin();
+  }
+  function needPinFirst() { toast('설정에서 잠금 PIN을 먼저 만들어 주세요'); }
+
   // ---------- profiles ----------
   function switchProfile(id, quiet) {
-    if (!profileById(id)) return;
+    var pr = profileById(id);
+    if (!pr) return;
+    if (pr.lockIn && id !== ROOT.current && hasPin()) {
+      openPin({ mode: 'check', title: '"' + pr.name + '" 프로필 열기', onOk: function () { doSwitch(id, quiet); } });
+      return;
+    }
+    doSwitch(id, quiet);
+  }
+  function doSwitch(id, quiet) {
+    if (profileById(id).guard) unlockedUntil = 0;   // a protected profile is locked again as soon as it opens
     ROOT.current = id;
     P = current().prefs;
     lastFocus.home = null;
@@ -423,6 +522,7 @@
     if (!quiet) toast(current().name + ' 프로필로 바꿨어요');
   }
   function addProfile() {
+    if (locked('프로필 추가', addProfile)) return;
     var used = ROOT.profiles.map(function (p) { return p.name; });
     var name = PROFILE_NAMES.filter(function (n) { return used.indexOf(n) < 0; })[0] || ('프로필 ' + (ROOT.profiles.length + 1));
     var pr = { id: 'p' + Date.now().toString(36), name: name, color: PROFILE_COLORS[ROOT.profiles.length % PROFILE_COLORS.length], prefs: clone(P) };
@@ -431,6 +531,7 @@
     toast('"' + name + '" 프로필을 만들었어요. 지금 화면 설정을 그대로 복사했어요');
   }
   function renameProfile(name) {
+    if (locked('프로필 이름 바꾸기', function () { renameProfile(name); })) return;
     name = String(name).trim().slice(0, 12);
     if (!name) return;
     current().name = name;
@@ -438,6 +539,7 @@
     toast('프로필 이름을 "' + name + '"(으)로 바꿨어요');
   }
   function cycleName(d) {
+    if (locked('프로필 이름 바꾸기', function () { cycleName(d); })) return;
     var others = ROOT.profiles.filter(function (p) { return p.id !== ROOT.current; }).map(function (p) { return p.name; });
     var names = PROFILE_NAMES.filter(function (n) { return others.indexOf(n) < 0; });
     var i = names.indexOf(current().name);
@@ -445,15 +547,17 @@
     savePrefs(); render();
   }
   function cycleColor(d) {
+    if (locked('프로필 색 바꾸기', function () { cycleColor(d); })) return;
     var i = PROFILE_COLORS.indexOf(current().color);
     current().color = PROFILE_COLORS[(i + d + PROFILE_COLORS.length) % PROFILE_COLORS.length];
     savePrefs(); render();
   }
   function deleteProfile() {
     if (ROOT.profiles.length < 2) return;
+    if (locked('프로필 삭제', deleteProfile)) return;
     var name = current().name;
     ROOT.profiles = ROOT.profiles.filter(function (p) { return p.id !== ROOT.current; });
-    switchProfile(ROOT.profiles[0].id, true);
+    doSwitch(ROOT.profiles[0].id, true);
     toast('"' + name + '" 프로필을 지웠어요');
   }
 
@@ -544,6 +648,14 @@
     if (home && base === 'home') rows.push({ name: '위치 옮기기', action: true, act: function () { closePanel(); startMove(pkg); } });
     if (home && P.cats.length > 1) rows.push({ name: '줄', sub: '◀ ▶로 다른 줄로 옮겨요', val: catById(catOf(pkg)).name || '내 앱',
       change: function (d) { var ids = P.cats.map(function (c) { return c.id; }); setCat(pkg, ids[(ids.indexOf(catOf(pkg)) + d + ids.length) % ids.length]); renderPanel(); } });
+    var isLocked = P.locked.indexOf(pkg) >= 0;
+    rows.push({ name: '잠금', sub: '열 때 PIN을 물어요', val: isLocked ? '켜짐' : '꺼짐', action: true, act: function () {
+      if (!hasPin()) { needPinFirst(); return; }
+      requirePin('앱 잠금 바꾸기', function () {
+        if (isLocked) P.locked = P.locked.filter(function (x) { return x !== pkg; }); else P.locked.push(pkg);
+        savePrefs(); render();
+      });
+    } });
     rows.push({ name: '앱 정보', sub: '저장공간, 권한, 강제 종료', action: true, act: function () { if (N) N.appInfo(pkg); else toast('TV에서만 열 수 있어요'); } });
     rows.push({ name: '앱 삭제', sub: 'TV의 삭제 확인 화면이 열려요', danger: true, action: true, act: function () { closePanel(); if (N) N.uninstall(pkg); else toast('TV에서만 삭제할 수 있어요'); } });
     return rows;
@@ -557,6 +669,15 @@
     rows.push({ name: '새 프로필 추가', sub: '지금 화면 설정을 복사해서 만들어요', action: true, act: addProfile });
     rows.push({ name: '이름', sub: '폰 리모컨에서 "이름을 민수로 바꿔"라고 해도 돼요', val: current().name, change: cycleName });
     rows.push({ name: '색', dot: current().color, val: '', change: cycleColor });
+    var cur = current();
+    var toggle = function (key, title) {
+      return function () {
+        if (!hasPin()) { needPinFirst(); return; }
+        requirePin(title, function () { cur[key] = !cur[key]; savePrefs(); renderPanel(); });
+      };
+    };
+    rows.push({ name: '이 프로필로 바꿀 때 PIN', sub: '부모 프로필에 켜 두면 아이가 넘어오지 못해요', val: cur.lockIn ? '켜짐' : '꺼짐', action: true, act: toggle('lockIn', '프로필 잠금 바꾸기') });
+    rows.push({ name: '이 프로필의 설정 잠그기', sub: '꾸미기, 설정, 모든 앱, 앱 메뉴에 PIN이 필요해요', val: cur.guard ? '켜짐' : '꺼짐', action: true, act: toggle('guard', '설정 잠금 바꾸기') });
     if (ROOT.profiles.length > 1) {
       rows.push({ name: '이 프로필 삭제', danger: true, action: true, val: armed === 'delprofile' ? '한 번 더 누르면 삭제' : '',
         act: function () { twice('delprofile', deleteProfile); } });
@@ -636,6 +757,12 @@
         act: function () { helpOpen = !helpOpen; renderPanel(); } },
       { name: 'Cove 앱 정보 열기', sub: '여기서 "제한된 설정 허용"을 찾아요', action: true,
         act: function () { if (N) N.appInfo(N.selfPackage()); else toast('TV에서만 열 수 있어요'); } },
+      { name: '잠금 PIN', sub: hasPin() ? 'OK를 누르면 PIN을 바꿔요' : '프로필, 설정, 앱 잠금에 쓰는 4자리', val: hasPin() ? '설정됨' : '없음', action: true,
+        act: function () { requirePin('PIN 바꾸기', function () { openPin({ mode: 'new' }); }); } },
+    ].concat(hasPin() ? [
+      { name: 'PIN 끄기', sub: '모든 잠금이 풀려요', danger: true, action: true, val: armed === 'nopin' ? '한 번 더 누르면 끄기' : '',
+        act: function () { requirePin('PIN 끄기', function () { twice('nopin', function () { ROOT.pinHash = ''; savePrefs(); render(); toast('PIN을 껐어요'); }); }); } }
+    ] : []).concat([
       { name: '업데이트 확인', sub: '새 버전이 있으면 바로 설치해요', val: updateLabel(), action: true,
         act: function () {
           if (!N) { toast('TV에서만 확인할 수 있어요'); return; }
@@ -644,7 +771,7 @@
         } },
       { name: 'TV 설정 열기', action: true, act: function () { if (N) N.openTvSettings(); } },
       { name: '버전', val: N ? N.version() : '미리보기' }
-    ];
+    ]);
   }
 
   function rowsFor(type) {
@@ -659,6 +786,7 @@
 
   function openPanel(type, opts) {
     if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat'].indexOf(type) < 0) return;
+    if (type !== 'profiles' && locked(type === 'settings' ? '설정' : type === 'app' ? '앱 메뉴' : '꾸미기', function () { openPanel(type, opts); })) return;
     if (type === 'look' || type === 'settings') loadPhotos();
     if (moving) { moving = null; renderTiles(); }
     opts = opts || {};
@@ -769,6 +897,8 @@
 
   // ---------- keys ----------
   function key(k) {
+    if (pinState) { pinKey(k); return; }
+    if (k.charAt(0) === 'n' && k.length === 2) return;   // number keys only matter on the PIN pad
     if (panel) { panelKey(k); return; }
     if (moving) {
       if (k === 'ok' || k === 'back' || k === 'longok') endMove();
@@ -827,6 +957,7 @@
     var raw = String(text || '').trim();
     var t = norm(raw);
     if (!t) return;
+    if (pinState) { raw.replace(/\D/g, '').split('').forEach(pinPress); return; }
     var done = function (msg) { toast('🎙 "' + raw + '" → ' + msg); };
 
     // row rename: "줄 이름을 영화로 바꿔" (the row of the focused app)
@@ -951,6 +1082,7 @@
   // Desktop preview: keyboard instead of the TV remote.
   document.addEventListener('keydown', function (e) {
     var map = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: e.shiftKey ? 'longok' : 'ok', Escape: 'back', Backspace: 'back', m: 'menu', l: 'longok' };
+    if (/^[0-9]$/.test(e.key)) map[e.key] = 'n' + e.key;
     if (map[e.key]) { e.preventDefault(); key(map[e.key]); }
   });
 

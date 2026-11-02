@@ -162,6 +162,24 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .pair p { margin: 0; font-size: 1.15rem; color: var(--ink-dim); line-height: 1.5; }
 .pair b { display: block; color: var(--ink); font-size: 1.25rem; margin: .5rem 0; word-break: break-all; font-weight: 500; }
 
+/* ---------- PIN ---------- */
+#pin { position: fixed; inset: 0; background: rgba(6,8,14,.78); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); display: grid; place-items: center; animation: fade .2s ease; z-index: 20; }
+.pin-box { width: 30rem; display: grid; gap: 1.2rem; justify-items: center; text-align: center; }
+.pin-box h2 { margin: 0; font-size: 2.2rem; font-weight: 500; }
+.pin-box p { margin: 0; min-height: 1.6rem; font-size: 1.2rem; color: var(--ink-dim); }
+.pin-box p.bad { color: #ffb1a8; }
+.dots { display: flex; gap: 1.2rem; margin: .6rem 0 1rem; }
+.dots i { width: 1.4rem; height: 1.4rem; border-radius: 50%; border: .15rem solid rgba(255,255,255,.6); }
+.dots i.on { background: #fff; border-color: #fff; }
+.dots.shake { animation: shake .35s; }
+@keyframes shake { 25% { transform: translateX(-1rem); } 75% { transform: translateX(1rem); } }
+.keys { display: grid; grid-template-columns: repeat(3, 6.4rem); gap: .9rem; }
+.keys span { height: 4.6rem; border-radius: 1.2rem; background: rgba(255,255,255,.1); display: grid; place-items: center; font-size: 1.9rem; transition: transform .12s; }
+.keys span.small { font-size: 1.15rem; color: var(--ink-dim); }
+.keys span.sel { background: #fff; color: #11141b; transform: scale(1.06); }
+.tile .lock { position: absolute; right: .6rem; top: .6rem; width: 2rem; height: 2rem; border-radius: 50%; background: rgba(0,0,0,.55); display: grid; place-items: center; }
+.tile .lock svg { width: 1.1rem; height: 1.1rem; }
+
 /* ---------- toast ---------- */
 #toast { position: fixed; left: 50%; bottom: 3rem; transform: translate(-50%, 2rem); opacity: 0; padding: .9rem 1.6rem; border-radius: 3rem;
   background: rgba(16,19,28,.92); font-size: 1.2rem; transition: opacity .25s, transform .25s var(--ease); pointer-events: none; }

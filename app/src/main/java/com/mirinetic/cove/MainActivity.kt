@@ -121,6 +121,8 @@ class MainActivity : Activity() {
             KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_BUTTON_A -> "ok"
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BUTTON_B -> "back"
             KeyEvent.KEYCODE_MENU -> "menu"
+            in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> "n" + (event.keyCode - KeyEvent.KEYCODE_0)
+            in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 -> "n" + (event.keyCode - KeyEvent.KEYCODE_NUMPAD_0)
             else -> null
         } ?: return super.dispatchKeyEvent(event)
 
