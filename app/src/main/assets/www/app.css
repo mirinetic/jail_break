@@ -99,6 +99,17 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .empty { margin: auto; font-size: 1.6rem; color: var(--ink-dim); background: rgba(0,0,0,.35); padding: 1.2rem 2rem; border-radius: 1rem; }
 [data-clock="off"] .clock { visibility: hidden; }
 
+/* ---------- category rows ---------- */
+.tiles.sections { display: flex; flex-direction: column; gap: 1.4rem; overflow: hidden; flex: 1 1 auto; min-height: 0; margin-top: 0; padding-top: 2.4rem;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 2.4rem); mask-image: linear-gradient(to bottom, transparent 0, #000 2.4rem); }
+.tiles.sections > .cat:first-child { margin-top: auto; }
+.cat { flex: none; }
+.cat h3 { margin: 0 0 .1rem .2rem; font-size: 1.35rem; font-weight: 500; color: var(--ink-dim); text-shadow: 0 .1rem .6rem rgba(0,0,0,.5); }
+.strip { display: flex; gap: 1.6rem; overflow: hidden; padding: 1.4rem 1.2rem 1rem; margin: 0 -1.2rem; }
+.strip .tile { flex: 0 0 var(--tw, 15.5rem); }
+[data-layout="icons"] .strip .tile { --tw: 13.5rem; }
+.hole { font-size: 1.1rem; color: var(--ink-dim); padding: 1.6rem 1.4rem; border: .1rem dashed rgba(255,255,255,.25); border-radius: 1rem; }
+
 /* move mode: the tile being moved */
 .tile.moving .face { box-shadow: 0 0 0 .3rem #ffd76b, 0 0 2.4rem .4rem rgba(255,215,107,.55); }
 .tile.moving { animation: nudge 1.2s ease-in-out infinite; }
@@ -157,3 +168,4 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 #toast.on { opacity: 1; transform: translate(-50%, 0); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+[data-layout="icons"] .tiles.sections { margin: 0; max-width: none; align-self: stretch; }
