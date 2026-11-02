@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cove</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body data-font="modern">
+  <div id="bg"><img id="bgA" alt=""><img id="bgB" alt=""></div>
+  <div id="dim"></div>
+
+  <main id="home" data-layout="grid" data-tiles="glass" data-labels="on">
+    <header class="top">
+      <div class="clock" id="clock"><div class="time" id="time"></div><div class="date" id="date"></div></div>
+      <nav class="quick">
+        <button class="qbtn focusable" data-act="look" aria-label="꾸미기">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0 0 18c1.1 0 1.7-.8 1.7-1.6 0-.5-.2-.8-.4-1.1-.3-.3-.4-.6-.4-1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3Z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7.5" cy="11" r="1.3" fill="currentColor"/><circle cx="10" cy="7.3" r="1.3" fill="currentColor"/><circle cx="14.5" cy="7.3" r="1.3" fill="currentColor"/><circle cx="17" cy="11" r="1.3" fill="currentColor"/></svg>
+          <span>꾸미기</span>
+        </button>
+        <button class="qbtn focusable" data-act="settings" aria-label="설정">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m19.4 13.5.1-1.5-.1-1.5 2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.6 7.6 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6-.1 1.5.1 1.5-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <span>설정</span>
+        </button>
+      </nav>
+    </header>
+    <section id="tiles" class="tiles"></section>
+    <p id="empty" class="empty" hidden>꾸미기 › 앱 고르기에서 홈 화면에 둘 앱을 선택하세요.</p>
+  </main>
+
+  <aside id="panel" hidden>
+    <div class="p-head"><div class="p-kicker" id="pKicker"></div><h2 id="pTitle"></h2></div>
+    <div id="pExtra"></div>
+    <div class="p-rows" id="pRows"></div>
+    <div class="p-hint" id="pHint"></div>
+  </aside>
+
+  <div id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>

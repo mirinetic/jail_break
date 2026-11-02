@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Cove</string>
+    <string name="override_label">Cove 홈 버튼 전환</string>
+    <string name="override_description">기본 홈 화면이 나타나면 Cove 홈 화면으로 바로 바꿔 줍니다. 화면 내용은 읽거나 저장하지 않고, 어떤 앱이 앞에 떴는지만 확인합니다.</string>
+</resources>
