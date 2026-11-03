@@ -8,6 +8,7 @@
 <style>
   :root { --bg:#0e1118; --pad:#191e2a; --key:#232a3a; --key-on:#33405a; --ink:#eef1f7; --dim:#8d96aa; --accent:#9cc2ff; color-scheme:dark; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  [hidden] { display:none !important; }
   html,body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system, "Apple SD Gothic Neo", "Noto Sans KR", Roboto, sans-serif; }
   body { padding:max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
          min-height:100vh; display:flex; flex-direction:column; gap:22px; max-width:460px; margin:0 auto; user-select:none; -webkit-user-select:none; }
@@ -40,17 +41,47 @@
   .chips i { width:12px; height:12px; border-radius:50%; display:inline-block; }
   .chips button.cur { outline:2px solid var(--accent); }
   .eg { font-size:12px; color:var(--dim); line-height:1.6; margin:0; }
+  .voice { display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:center; }
+  .mic { width:58px; height:58px; border-radius:50%; background:var(--accent); color:#0c1220; padding:0; display:grid; place-items:center; }
+  .mic svg { width:26px; height:26px; }
+  .mic.live { background:#ff7a8a; animation:pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow:0 0 0 10px rgba(255,122,138,.18); } }
+  .listen { display:flex; align-items:center; gap:10px; background:#2a1f2a; border:1px solid #5a3446; border-radius:14px; padding:12px 14px; margin-top:10px; }
+  .listen span { flex:1; font-size:15px; min-width:0; }
+  .listen button { padding:8px 14px; font-size:14px; }
+  .hint { margin-top:10px; font-size:14px; line-height:1.5; background:#1d2638; border:1px solid #33405a; border-radius:14px; padding:12px 14px; }
+  .hint b { color:var(--accent); }
+  .guide { margin-top:12px; background:#151b27; border:1px solid #2c3446; border-radius:18px; padding:16px; display:grid; gap:12px; }
+  .guide > b { font-size:16px; }
+  .guide p { margin:0; font-size:13px; color:var(--dim); line-height:1.55; }
+  .guide ol { margin:0; padding-left:20px; display:grid; gap:12px; font-size:14px; line-height:1.5; }
+  .guide li b { color:var(--ink); }
+  .guide code { display:block; margin-top:6px; padding:8px 10px; background:#0b0f17; border-radius:10px; font-size:13px; color:#cfe0ff; word-break:break-all; user-select:text; -webkit-user-select:text; }
+  .guide .cp { margin-top:6px; padding:8px 12px; font-size:13px; background:#26314a; color:var(--accent); border-radius:10px; }
+  .guide .acts { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .guide .acts button { font-size:14px; padding:12px 8px; }
+  .guide .acts .go { background:var(--accent); color:#0c1220; font-weight:600; }
+  .linkish { background:none; padding:4px 0; color:var(--accent); font-size:13px; text-decoration:underline; justify-self:start; }
 </style>
 </head>
 <body>
 <header id="head"><b>Cove</b><span><i></i><em id="status" style="font-style:normal">TV에 연결됨</em></span></header>
 
 <div id="main">
-  <div class="say">
-    <input id="sayText" type="text" enterkeyhint="send" autocomplete="off" placeholder="말하거나 입력하기 (키보드의 마이크 버튼)">
-    <button id="sayBtn">보내기</button>
+  <div class="voice">
+    <button id="mic" class="mic" aria-label="음성으로 말하기">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <div class="say">
+      <input id="sayText" type="text" enterkeyhint="send" autocomplete="off" placeholder="말하거나 입력하세요">
+      <button id="sayBtn">보내기</button>
+    </div>
   </div>
+  <div id="listen" class="listen" hidden><span id="listenText">듣고 있어요… 말해 보세요</span><button id="listenStop">그만</button></div>
+  <div id="kbHint" class="hint" hidden></div>
   <p class="eg" style="margin-top:8px">예: "넷플릭스 틀어줘", "미니멀로 바꿔", "배경 다음", "엄마 프로필", "유튜브 홈에서 빼줘"</p>
+  <button id="guideOpen" class="linkish" hidden>마이크 버튼 한 번으로 말하기 설정하기</button>
+  <div id="guide" class="guide" hidden></div>
 
   <div class="pad" style="margin-top:18px">
     <button class="up" data-key="up" aria-label="위">▲</button>
@@ -152,12 +183,156 @@
     var t = $('sayText').value.trim();
     if (!t) return;
     buzz();
+    var wasVoice = voiceMode;
+    stopKeyboardVoice();
+    if (wasVoice) $('sayText').blur();
     post('/api/say', t).then(function (r) { if (r && r.ok) { msg('보냈어요: ' + t); $('sayText').value = ''; setTimeout(loadState, 500); } });
   }
   $('sayBtn').addEventListener('click', sendSay);
   $('sayText').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); sendSay(); } });
 
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+
+  // ---------- voice ----------
+  // Direct speech recognition needs a "secure" page (https). The remote is http on the home Wi-Fi, so it works only
+  // after Chrome is told to trust this address (chrome://flags, once). Otherwise the phone keyboard's mic is used,
+  // and whatever it types is sent automatically when the speaking stops.
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var canDirect = !!(SR && window.isSecureContext);
+  var ua = navigator.userAgent;
+  var isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/.test(ua);
+  var inApp = /; wv\)|KAKAOTALK|NAVER|Line\/|Instagram|FBAN|FBAV/.test(ua);
+  var isChrome = /Chrome\/\d+/.test(ua) && !/SamsungBrowser|EdgA|Edg\/|OPR|Firefox|Whale|YaBrowser/.test(ua) && !inApp && !isIOS;
+  var voiceMode = false, autoTimer = null, rec = null;
+
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+
+  function copy(text, label) {
+    var done = function () { buzz(); msg(label + ' 복사했어요'); };
+    var fallback = function () {
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;user-select:text;-webkit-user-select:text';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      if (ok) done(); else msg('복사가 안 되면 글자를 길게 눌러 직접 복사해 주세요');
+    };
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+  }
+
+  function renderGuide() {
+    var g = $('guide');
+    var origin = location.origin;
+    if (isChrome) {
+      g.innerHTML =
+        '<b>마이크 버튼 한 번으로 바로 말하기</b>' +
+        '<p>지금은 키보드의 마이크 버튼을 한 번 더 눌러야 해요. 크롬 설정을 한 번만 바꾸면 이 화면의 마이크 버튼만 누르고 바로 말할 수 있어요. 1분 정도 걸려요.</p>' +
+        '<ol>' +
+        '<li>아래 버튼으로 복사한 뒤, 크롬에서 <b>새 탭</b>을 열고 주소창에 붙여넣어 이동하세요.<br><button class="cp" data-copy="chrome://flags" data-label="설정 주소를">chrome://flags 복사</button></li>' +
+        '<li>맨 위 <b>Search flags</b> 칸에 검색어를 붙여넣으세요.<br><button class="cp" data-copy="Insecure origins treated as secure" data-label="검색어를">검색어 복사</button></li>' +
+        '<li><b>Insecure origins treated as secure</b> 항목의 입력칸에 이 리모컨 주소를 붙여넣으세요.<code>' + esc(origin) + '</code><button class="cp" data-copy="' + esc(origin) + '" data-label="리모컨 주소를">리모컨 주소 복사</button></li>' +
+        '<li>그 항목 오른쪽의 <b>Disabled</b>를 눌러 <b>Enabled</b>로 바꾸세요.</li>' +
+        '<li>화면 아래에 나오는 <b>Relaunch</b>를 누르세요. 크롬이 다시 열려요.</li>' +
+        '<li>이 리모컨 탭으로 돌아와 마이크 버튼을 누르고, 마이크 사용을 <b>허용</b>해 주세요.</li>' +
+        '</ol>' +
+        '<p>TV 주소가 바뀌면(공유기 재시작 등) 이 안내가 다시 나타나요. 3번만 새 주소로 바꾸면 돼요.</p>' +
+        '<div class="acts"><button class="go" id="guideCheck">다 했어요, 확인</button><button id="guideHide">다음에 할게요</button></div>';
+    } else if (isAndroid) {
+      g.innerHTML =
+        '<b>크롬으로 열면 더 편해요</b>' +
+        '<p>지금 브라우저에서는 키보드의 마이크 버튼으로 말해야 해요. <b>크롬</b>에서 이 리모컨을 열면, 설정 한 번으로 마이크 버튼만 누르고 바로 말할 수 있어요.</p>' +
+        '<ol><li>아래 버튼으로 리모컨 주소를 복사하세요.<br><button class="cp" data-copy="' + esc(location.href) + '" data-label="리모컨 주소를">리모컨 주소 복사</button></li>' +
+        '<li><b>크롬</b> 앱을 열고 주소창에 붙여넣어 이동하세요.</li>' +
+        '<li>크롬에서 열린 리모컨에 나오는 안내를 따라 하세요.</li></ol>' +
+        '<div class="acts"><button class="go" id="guideHide">알겠어요</button><button id="guideHide2">다시 보지 않기</button></div>';
+    } else {
+      g.innerHTML = '';
+    }
+    Array.prototype.forEach.call(g.querySelectorAll('[data-copy]'), function (b) {
+      b.addEventListener('click', function () { copy(b.getAttribute('data-copy'), b.getAttribute('data-label')); });
+    });
+    var hide = function () { store('cove.voiceGuide', 'hidden'); g.hidden = true; $('guideOpen').hidden = false; };
+    if ($('guideHide')) $('guideHide').addEventListener('click', hide);
+    if ($('guideHide2')) $('guideHide2').addEventListener('click', hide);
+    if ($('guideCheck')) $('guideCheck').addEventListener('click', function () { location.reload(); });
+  }
+
+  function setupVoice() {
+    var guideable = !canDirect && (isChrome || isAndroid);
+    if (guideable) {
+      renderGuide();
+      var hidden = store('cove.voiceGuide') === 'hidden';
+      $('guide').hidden = hidden;
+      $('guideOpen').hidden = !hidden;
+    }
+    $('guideOpen').addEventListener('click', function () { renderGuide(); $('guide').hidden = false; $('guideOpen').hidden = true; });
+    if (canDirect) $('sayText').placeholder = '마이크를 누르고 말하세요';
+  }
+
+  function stopKeyboardVoice() { voiceMode = false; clearTimeout(autoTimer); $('kbHint').hidden = true; }
+
+  function keyboardVoice() {
+    voiceMode = true;
+    var h = $('kbHint');
+    h.innerHTML = isIOS
+      ? '키보드 오른쪽 아래의 <b>마이크</b>를 누르고 말하세요. 말이 끝나면 자동으로 TV에 보내요.'
+      : '키보드의 <b>마이크</b> 버튼을 누르고 말하세요. 말이 끝나면 자동으로 TV에 보내요.';
+    h.hidden = false;
+    var input = $('sayText');
+    input.value = '';
+    input.focus();
+  }
+
+  function directVoice() {
+    if (rec) { rec.stop(); return; }
+    var finalText = '', failed = false;
+    rec = new SR();
+    rec.lang = 'ko-KR';
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    $('listen').hidden = false;
+    $('listenText').textContent = '듣고 있어요… 말해 보세요';
+    $('mic').classList.add('live');
+    buzz();
+    rec.onresult = function (e) {
+      var text = '';
+      for (var i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+      $('listenText').textContent = text;
+      if (e.results[e.results.length - 1].isFinal) finalText = text;
+    };
+    rec.onerror = function (e) {
+      failed = true;
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') msg('마이크가 꺼져 있어요. 주소창 왼쪽 아이콘 → 권한 → 마이크 허용');
+      else if (e.error === 'no-speech') msg('목소리가 들리지 않았어요. 다시 눌러 주세요');
+      else if (e.error === 'network') msg('음성인식에 인터넷 연결이 필요해요');
+      else if (e.error !== 'aborted') msg('음성인식을 하지 못했어요 (' + e.error + ')');
+    };
+    rec.onend = function () {
+      rec = null;
+      $('listen').hidden = true;
+      $('mic').classList.remove('live');
+      if (finalText.trim()) { $('sayText').value = finalText.trim(); sendSay(); }
+      else if (!failed) msg('잘 못 들었어요. 다시 눌러 주세요');
+    };
+    try { rec.start(); } catch (e) { rec = null; $('listen').hidden = true; $('mic').classList.remove('live'); keyboardVoice(); }
+  }
+
+  $('mic').addEventListener('click', function () { if (canDirect) directVoice(); else keyboardVoice(); });
+  $('listenStop').addEventListener('click', function () { if (rec) rec.stop(); });
+  // Keyboard dictation types in bursts; send once it has been quiet for a moment.
+  $('sayText').addEventListener('input', function () {
+    if (!voiceMode) return;
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(function () { if ($('sayText').value.trim()) sendSay(); }, 1500);
+  });
+  $('sayText').addEventListener('blur', function () { setTimeout(function () { if (!$('sayText').value.trim()) stopKeyboardVoice(); }, 300); });
+  setupVoice();
+
   function loadState() {
     if (!token) return;
     fetch('/api/state?t=' + encodeURIComponent(token)).then(function (r) {
