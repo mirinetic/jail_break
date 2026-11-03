@@ -26,6 +26,8 @@
   .pad .ok { left:30%; top:30%; width:40%; height:40%; background:var(--key); color:var(--ink); font-size:18px; font-weight:600; }
   .row { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
   .row.two { grid-template-columns:1fr 1fr; }
+  .row.four { grid-template-columns:repeat(4, 1fr); }
+  .row.four button { font-size:14px; padding:14px 4px; }
   h2 { margin:8px 0 -8px; font-size:13px; font-weight:600; color:var(--dim); letter-spacing:.08em; }
   .wide { width:100%; background:var(--accent); color:#0c1220; font-weight:600; }
   .note { font-size:13px; color:var(--dim); line-height:1.5; margin:0; }
@@ -105,10 +107,16 @@
   <div class="chips" id="profiles" style="margin-top:18px"><span class="eg">불러오는 중…</span></div>
 
   <h2>디자인</h2>
-  <div class="row" style="margin-top:18px">
+  <div class="row four" style="margin-top:18px">
     <button data-cmd="design:glass">Glass</button>
     <button data-cmd="design:icons">Icons</button>
     <button data-cmd="design:minimal">Minimal</button>
+    <button data-cmd="design:theater">Theater</button>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button data-cmd="design:column">Column</button>
+    <button data-cmd="design:dock">Dock</button>
+    <button data-cmd="design:collage">Collage</button>
   </div>
 
   <h2>배경</h2>

@@ -25,11 +25,15 @@
     ['berry', '베리 그라데이션', 'linear-gradient(160deg, #1d0f2a 0%, #5b1f5e 55%, #c2417a 100%)']
   ];
   var DESIGNS = {
-    glass:   { name: 'Glass',   desc: '사진 위 유리 타일',     p: { layout: 'grid',    tiles: 'glass', labels: true,  font: 'modern', dim: 1, bg: { type: 'preset', id: 'blue-ridges' } } },
-    icons:   { name: 'Icons',   desc: '브랜드 컬러 아이콘',     p: { layout: 'icons',   tiles: 'brand', labels: true,  font: 'modern', dim: 1, bg: { type: 'preset', id: 'golden-hour' } } },
-    minimal: { name: 'Minimal', desc: '큰 시계와 로고 한 줄',   p: { layout: 'minimal', tiles: 'clear', labels: false, font: 'light',  dim: 1, bg: { type: 'preset', id: 'night-peaks' } } }
+    glass:   { name: 'Glass',   desc: '사진 위 유리 타일',       p: { layout: 'grid',    tiles: 'glass',    labels: true,  font: 'modern', dim: 1, shape: 'rounded', size: 'm', bg: { type: 'preset', id: 'blue-ridges' } } },
+    icons:   { name: 'Icons',   desc: '브랜드 컬러 아이콘',       p: { layout: 'icons',   tiles: 'brand',    labels: true,  font: 'modern', dim: 1, shape: 'rounded', size: 'm', bg: { type: 'preset', id: 'golden-hour' } } },
+    minimal: { name: 'Minimal', desc: '큰 시계와 로고 한 줄',     p: { layout: 'minimal', tiles: 'clear',    labels: false, font: 'light',  dim: 1, shape: 'rounded', size: 'm', bg: { type: 'preset', id: 'night-peaks' } } },
+    theater: { name: 'Theater', desc: '고른 앱을 크게, 앱 색 배경', p: { layout: 'theater', tiles: 'banner',   labels: false, font: 'modern', dim: 1, shape: 'rounded', size: 'm', bg: { type: 'app', id: 'focus' } } },
+    column:  { name: 'Column',  desc: '왼쪽 목록, 오른쪽 앱',       p: { layout: 'column',  tiles: 'frosted',  labels: true,  font: 'modern', dim: 2, shape: 'rounded', size: 'm', bg: { type: 'preset', id: 'snowy-peaks' } } },
+    dock:    { name: 'Dock',    desc: '큰 시계와 아래 아이콘 독',   p: { layout: 'dock',    tiles: 'clear',    labels: false, font: 'light',  dim: 1, shape: 'rounded', size: 'm', bg: { type: 'live', id: 'flow' } } },
+    collage: { name: 'Collage', desc: '크고 작은 타일 배열',       p: { layout: 'collage', tiles: 'gradient', labels: true,  font: 'modern', dim: 2, shape: 'rounded', size: 'm', bg: { type: 'preset', id: 'city-night' } } }
   };
-  var DESIGN_IDS = ['glass', 'icons', 'minimal'];
+  var DESIGN_IDS = ['glass', 'icons', 'minimal', 'theater', 'column', 'dock', 'collage'];
   var TILES = [['banner', '앱 배너'], ['glass', '글래스'], ['brand', '브랜드 컬러'], ['gradient', '그라데이션'], ['neon', '네온'], ['frosted', '프로스트'],
     ['dark', '다크'], ['mono', '흑백'], ['poster', '포스터'], ['clear', '투명']];
   var SHAPES = [['rounded', '둥근 사각형'], ['circle', '원형'], ['pill', '알약형'], ['square', '각진 모양']];
@@ -72,6 +76,7 @@
   var focusEl = null;
   var lastFocus = { home: null, drawer: null };
   var cols = 5;
+  var colSel = null;     // Column design: the list item whose apps are shown
   var armed = '';        // name of a row waiting for a second OK (reset, delete)
   var helpOpen = false;
   var update = null;     // {phase, ...result}
@@ -160,7 +165,9 @@
   function appsIn(id) { return visibleApps().filter(function (p) { return catOf(p) === id; }); }
   function recentApps() { return P.recentRow ? P.recent.filter(function (p) { return BYPKG[p]; }).slice(0, 8) : []; }
   // Rows with titles. Minimal always stays one plain row of logos.
-  function sectioned() { return P.layout !== 'minimal' && (P.cats.length > 1 || !!P.cats[0].name || recentApps().length > 0); }
+  function sectioned() { return ['grid', 'icons', 'theater'].indexOf(P.layout) >= 0 && (P.cats.length > 1 || !!P.cats[0].name || recentApps().length > 0); }
+  // Designs that show apps in a single horizontal row
+  function oneRow() { return P.layout === 'minimal' || P.layout === 'dock' || (P.layout === 'theater' && !sectioned()); }
   function iconUrl(a) { return N ? '/icon/' + encodeURIComponent(a.pkg) : a.icon; }
   function bannerUrl(a) { return N ? '/banner/' + encodeURIComponent(a.pkg) : a.bannerUrl; }
   function sortedApps() { return APPS.slice().sort(function (a, b) { return a.label.localeCompare(b.label, 'ko'); }); }
@@ -413,6 +420,8 @@
     $('pDot').style.setProperty('--pc', pr.color);
     tick();
     renderTiles();
+    $('hero').hidden = P.layout !== 'theater';
+    updateHero();
     if (base === 'drawer') renderDrawer();
     if (panel) renderPanel();
   }
@@ -436,11 +445,15 @@
     cols = (n <= 8 ? 4 : n <= 10 ? 5 : 6) + (P.size === 's' ? 1 : P.size === 'l' ? -1 : 0) + (P.tiles === 'poster' ? 2 : 0) + (P.shape === 'circle' ? 1 : 0);
     cols = Math.max(3, Math.min(9, cols));
     var box = $('tiles');
-    var sec = sectioned();
+    var sec = sectioned() || P.layout === 'theater';
     box.classList.toggle('sections', sec);
     box.style.setProperty('--cols', cols);
-    var banner = P.tiles === 'banner', round = P.shape === 'circle';
-    if (!sec) {
+    var banner = P.tiles === 'banner', round = P.shape === 'circle' || P.layout === 'dock';
+    if (P.layout === 'column') {
+      renderColumn(box, banner, round);
+    } else if (P.layout === 'theater' && !sectioned()) {
+      box.innerHTML = '<div class="cat"><div class="strip">' + ids.map(function (pkg) { return tileHtml(BYPKG[pkg], { banner: banner, round: round }); }).join('') + '</div></div>';
+    } else if (!sec) {
       box.innerHTML = ids.map(function (pkg) { return tileHtml(BYPKG[pkg], { banner: banner, round: round }); }).join('');
     } else {
       var html = '', rec = recentApps();
@@ -455,6 +468,47 @@
     }
     $('empty').hidden = n > 0;
     if (base === 'home' && !panel) restoreFocus('home');
+  }
+
+  // Column design: a list of rows on the left, the chosen row's apps on the right.
+  function colItems() {
+    var items = [];
+    if (recentApps().length) items.push(['recent', '최근 실행']);
+    P.cats.forEach(function (c) { items.push([c.id, c.name || '내 앱']); });
+    items.push(['all', '모든 앱']);
+    return items;
+  }
+  function colApps(id) { return id === 'recent' ? recentApps() : appsIn(id); }
+  function renderColumn(box, banner, round) {
+    var items = colItems();
+    if (!colSel || !items.some(function (x) { return x[0] === colSel && x[0] !== 'all'; })) colSel = items[0][0] === 'all' ? P.cats[0].id : items[0][0];
+    box.innerHTML = '<nav class="colnav">' + items.map(function (x) {
+      return '<div class="colitem focusable' + (x[0] === colSel ? ' cur' : '') + '" data-col="' + esc(x[0]) + '">' + esc(x[1]) +
+        (x[0] === 'all' ? '' : '<span>' + colApps(x[0]).length + '</span>') + '</div>';
+    }).join('') + '</nav><div class="colgrid" id="colGrid"></div>';
+    fillColumn(banner, round);
+  }
+  function fillColumn(banner, round) {
+    if (banner === undefined) { banner = P.tiles === 'banner'; round = P.shape === 'circle'; }
+    var list = colApps(colSel);
+    $('colGrid').innerHTML = list.length
+      ? list.map(function (p) { return tileHtml(BYPKG[p], { banner: banner, round: round, recent: colSel === 'recent' }); }).join('')
+      : '<div class="hole">이 목록은 비어 있어요. 앱 메뉴의 "줄"로 앱을 넣을 수 있어요</div>';
+    Array.prototype.forEach.call(document.querySelectorAll('.colitem'), function (e) { e.classList.toggle('cur', e.getAttribute('data-col') === colSel); });
+  }
+
+  // Theater design: the focused app, large.
+  function updateHero() {
+    if (P.layout !== 'theater') return;
+    var pkg = (focusEl && focusEl.getAttribute('data-pkg')) || lastFocus.home || visibleApps()[0];
+    var a = pkg && BYPKG[pkg];
+    if (!a) { $('hero').hidden = true; return; }
+    $('hero').hidden = false;
+    $('heroArt').style.setProperty('--brand', a.color || '#2a2f3a');
+    $('heroArt').innerHTML = a.banner ? '<img src="' + bannerUrl(a) + '" alt="">' : '<img class="hicon" src="' + iconUrl(a) + '" alt="">';
+    $('heroName').textContent = a.label;
+    var c = catById(catOf(pkg));
+    $('heroSub').textContent = (P.cats.length > 1 && c && c.name ? c.name + ' · ' : '') + 'OK로 실행 · 길게 누르면 메뉴';
   }
 
   function renderDrawer() {
@@ -487,6 +541,18 @@
     if (pkg) lastFocus[base] = pkg;
     keepVisible(focusEl);
     appBg(false);
+    updateHero();
+    // Column design: moving onto a list item shows its apps
+    var col = focusEl.getAttribute('data-col');
+    if (col && col !== 'all' && col !== colSel) { colSel = col; fillColumn(); }
+    // Dock design: neighbours of the focused icon grow a little
+    if (P.layout === 'dock') {
+      Array.prototype.forEach.call(document.querySelectorAll('#tiles .near'), function (e) { e.classList.remove('near'); });
+      if (focusEl.classList.contains('tile')) {
+        if (focusEl.previousElementSibling) focusEl.previousElementSibling.classList.add('near');
+        if (focusEl.nextElementSibling) focusEl.nextElementSibling.classList.add('near');
+      }
+    }
   }
 
   function keepVisible(el) {
@@ -501,11 +567,15 @@
       var tl = $('tiles'), tlr = tl.getBoundingClientRect(), cr = strip.parentNode.getBoundingClientRect();
       // whole rows: a row that doesn't fit is brought to the top edge
       if (cr.top < tlr.top || cr.bottom > tlr.bottom) tl.scrollTop += (cr.top - tlr.top);
-    } else if (el.classList.contains('tile') && el.parentNode.id === 'tiles' && P.layout !== 'minimal') {
+    } else if (el.classList.contains('tile') && el.parentNode.id === 'colGrid') {
+      var cg = el.parentNode, cgr = cg.getBoundingClientRect(), ce = el.getBoundingClientRect();
+      if (ce.top < cgr.top + 10) cg.scrollTop -= (cgr.top + 10 - ce.top);
+      else if (ce.bottom > cgr.bottom - 10) cg.scrollTop += (ce.bottom - cgr.bottom + 10);
+    } else if (el.classList.contains('tile') && el.parentNode.id === 'tiles' && P.layout !== 'minimal' && P.layout !== 'dock') {
       var box = $('tiles'), br = box.getBoundingClientRect(), tr0 = el.getBoundingClientRect();
       if (tr0.top < br.top + 10) box.scrollTop -= (br.top + 10 - tr0.top);
       else if (tr0.bottom > br.bottom - 10) box.scrollTop += (tr0.bottom - br.bottom + 10);
-    } else if (P.layout === 'minimal' && el.classList.contains('tile')) {
+    } else if ((P.layout === 'minimal' || P.layout === 'dock') && el.classList.contains('tile')) {
       var row = $('tiles'), rr = row.getBoundingClientRect(), tr = el.getBoundingClientRect();
       if (tr.left < rr.left + 40) row.scrollLeft -= (rr.left + 40 - tr.left);
       else if (tr.right > rr.right - 40) row.scrollLeft += (tr.right - rr.right + 40);
@@ -632,7 +702,16 @@
       renderTiles();
       return;
     }
-    var j = dir === 'left' ? i - 1 : dir === 'right' ? i + 1 : (P.layout === 'minimal' ? i : dir === 'up' ? i - cols : i + cols);
+    if (P.layout === 'column') {
+      var cc = catOf(moving), mine = list.filter(function (p) { return catOf(p) === cc; }), mk = mine.indexOf(moving);
+      var mj = mk + (dir === 'left' ? -1 : dir === 'right' ? 1 : dir === 'up' ? -4 : 4);
+      if (mj < 0 || mj >= mine.length) return;
+      var o2 = list.indexOf(mine[mj]);
+      list[i] = mine[mj]; list[o2] = moving;
+      P.apps = list; savePrefs(); renderTiles();
+      return;
+    }
+    var j = dir === 'left' ? i - 1 : dir === 'right' ? i + 1 : (oneRow() ? i : dir === 'up' ? i - cols : i + cols);
     if (j < 0 || j >= list.length || j === i) return;
     list.splice(i, 1); list.splice(j, 0, moving);
     P.apps = list;
@@ -1142,6 +1221,9 @@
     if (k === 'longok') { if (pkg) openPanel('app', { pkg: pkg }); return; }
     if (k === 'ok') {
       if (pkg) { launch(pkg); return; }
+      var colId = focusEl && focusEl.getAttribute('data-col');
+      if (colId === 'all') { openDrawer(); return; }
+      if (colId) { var firstT = $('colGrid') && $('colGrid').querySelector('.tile'); if (firstT) setFocus(firstT); return; }
       var act = focusEl && focusEl.getAttribute('data-act');
       if (act === 'drawer') openDrawer(); else if (act) openPanel(act);
       return;
@@ -1209,6 +1291,10 @@
     if (has(t, ['닫아', '닫기', '홈으로', '처음화면'])) { window.Cove.home(); done('홈'); return; }
 
     // designs
+    if (has(t, ['시어터', '씨어터', '극장', 'theater'])) { applyDesign('theater'); done('Theater 디자인'); return; }
+    if (has(t, ['칼럼', '컬럼', 'column', '사이드'])) { applyDesign('column'); done('Column 디자인'); return; }
+    if (has(t, ['도크', 'dock', '독으로', '독디자인'])) { applyDesign('dock'); done('Dock 디자인'); return; }
+    if (has(t, ['콜라주', 'collage'])) { applyDesign('collage'); done('Collage 디자인'); return; }
     if (has(t, ['글래스', 'glass', '유리'])) { applyDesign('glass'); done('Glass 디자인'); return; }
     if (has(t, ['아이콘', 'icons'])) { applyDesign('icons'); done('Icons 디자인'); return; }
     if (has(t, ['미니멀', 'minimal', '심플'])) { applyDesign('minimal'); done('Minimal 디자인'); return; }
@@ -1262,7 +1348,11 @@
     if (app) {
       if (has(t, ['옮겨', '이동', '줄로', '줄에'])) {
         var tc = null;
-        P.cats.forEach(function (c) { if (c.name && t.indexOf(norm(c.name)) >= 0) tc = c; });
+        P.cats.forEach(function (c) {
+          if (!c.name) return;
+          var words = c.name.split(/[·\s,]+/).map(norm).filter(function (w) { return w.length >= 2; });
+          if (t.indexOf(norm(c.name)) >= 0 || words.some(function (w) { return t.indexOf(w) >= 0; })) tc = c;
+        });
         if (tc) { if (!onHome(app.pkg)) addToHome(app.pkg); setCat(app.pkg, tc.id); done(app.label + ' → ' + tc.name + ' 줄'); return; }
       }
       if (has(t, ['빼', '숨겨', '지워'])) { removeFromHome(app.pkg); done(app.label + ' 홈에서 빼기'); return; }
