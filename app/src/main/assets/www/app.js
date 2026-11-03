@@ -108,7 +108,14 @@
     try { saved = JSON.parse(raw) || {}; } catch (e) {}
     if (saved.v === 2 && Array.isArray(saved.profiles) && saved.profiles.length) ROOT = saved;
     else ROOT = { v: 2, current: 'p1', known: null, profiles: [{ id: 'p1', name: '나', color: PROFILE_COLORS[0], prefs: saved }] }; // first run or old single-profile settings
-    ROOT.profiles.forEach(function (pr) { pr.prefs = withDefaults(pr.prefs); });
+    ROOT.profiles.forEach(function (pr) {
+      pr.prefs = withDefaults(pr.prefs);
+      // older versions: "protect this profile's settings" becomes a kids profile
+      if (!pr.kind) pr.kind = pr.guard ? 'kids' : 'normal';
+      if (pr.guard) { pr.kidsLook = false; delete pr.guard; }
+      if (pr.kind === 'kids' && !Array.isArray(pr.allow)) pr.allow = (pr.prefs.apps || []).slice();
+    });
+    if (!profileById(ROOT.masterId)) ROOT.masterId = ROOT.profiles[0].id;
     if (!current()) ROOT.current = ROOT.profiles[0].id;
     P = current().prefs;
   }
@@ -159,7 +166,8 @@
     });
   }
 
-  function visibleApps() { return (P.apps || []).filter(function (p) { return BYPKG[p]; }); }
+  function kidsAllows(pkg) { return !isKids() || (current().allow || []).indexOf(pkg) >= 0; }
+  function visibleApps() { return (P.apps || []).filter(function (p) { return BYPKG[p] && kidsAllows(p); }); }
   function catById(id) { for (var i = 0; i < P.cats.length; i++) if (P.cats[i].id === id) return P.cats[i]; return null; }
   function catOf(pkg) { return catById(P.cat[pkg]) ? P.cat[pkg] : P.cats[0].id; }
   function appsIn(id) { return visibleApps().filter(function (p) { return catOf(p) === id; }); }
@@ -552,7 +560,7 @@
   }
 
   function renderDrawer() {
-    var list = sortedApps();
+    var list = sortedApps().filter(function (a) { return kidsAllows(a.pkg); });
     $('dCount').textContent = list.length + '개';
     $('dGrid').innerHTML = list.map(function (a) { return tileHtml(a, { banner: true, forceBrand: !a.banner }); }).join('');
     if (!panel) restoreFocus('drawer');
@@ -655,8 +663,14 @@
   }
 
   // ---------- actions ----------
-  function launch(pkg) {
-    if (P.locked.indexOf(pkg) >= 0 && hasPin() && !unlocked()) {
+  function launch(pkg, force) {
+    if (!force && !kidsAllows(pkg) && !isAdmin()) {
+      var lbl = BYPKG[pkg] ? BYPKG[pkg].label : pkg;
+      if (hasPin()) openPin({ mode: 'check', title: '"' + lbl + '"은(는) 허용되지 않은 앱이에요', onOk: function () { launch(pkg, true); } });
+      else toast('"' + lbl + '"은(는) 이 프로필에서 열 수 없어요');
+      return;
+    }
+    if (!force && P.locked.indexOf(pkg) >= 0 && hasPin() && !unlocked()) {
       openPin({ mode: 'check', title: '"' + (BYPKG[pkg] ? BYPKG[pkg].label : pkg) + '" 열기', onOk: function () { launch(pkg); } });
       return;
     }
@@ -668,7 +682,9 @@
   }
 
   function set(changes) {
-    if (locked('설정 바꾸기', function () { set(changes); })) return;
+    var appKeys = ['apps', 'cats', 'cat', 'autoAdd', 'recentRow'];
+    var kind = Object.keys(changes).some(function (k) { return appKeys.indexOf(k) >= 0; }) ? 'apps' : 'look';
+    if (blocked(kind, '설정 바꾸기', function () { set(changes); })) return;
     Object.keys(changes).forEach(function (k) { P[k] = changes[k]; });
     armed = '';
     savePrefs();
@@ -680,7 +696,6 @@
   function removeFromHome(pkg) { var l = visibleApps(), i = l.indexOf(pkg); if (i >= 0) l.splice(i, 1); set({ apps: l }); }
 
   function openDrawer() {
-    if (locked('모든 앱', openDrawer)) return;
     closePanelQuiet();
     base = 'drawer';
     $('drawer').hidden = false;
@@ -692,9 +707,9 @@
     restoreFocus('home');
   }
 
-  function setCat(pkg, id) { if (locked('줄 바꾸기', function () { setCat(pkg, id); })) return; P.cat[pkg] = id; savePrefs(); render(); }
+  function setCat(pkg, id) { if (blocked('apps', '줄 바꾸기', function () { setCat(pkg, id); })) return; P.cat[pkg] = id; savePrefs(); render(); }
   function addCat(name) {
-    if (locked('줄 추가', function () { addCat(name); })) return null;
+    if (blocked('apps', '줄 추가', function () { addCat(name); })) return null;
     if (P.cats.length === 1 && !P.cats[0].name) P.cats[0].name = '즐겨찾기';
     var used = P.cats.map(function (c) { return c.name; });
     name = name || CAT_NAMES.filter(function (n) { return used.indexOf(n) < 0; })[0] || ('줄 ' + (P.cats.length + 1));
@@ -705,7 +720,7 @@
     return c;
   }
   function renameCat(id, name) {
-    if (locked('줄 이름 바꾸기', function () { renameCat(id, name); })) return;
+    if (blocked('apps', '줄 이름 바꾸기', function () { renameCat(id, name); })) return;
     var c = catById(id);
     name = String(name).trim().slice(0, 14);
     if (!c || !name) return;
@@ -722,7 +737,7 @@
   }
 
   function startMove(pkg) {
-    if (locked('위치 옮기기', function () { startMove(pkg); })) return;
+    if (blocked('apps', '위치 옮기기', function () { startMove(pkg); })) return;
     if (focusEl && focusEl.getAttribute('data-recent')) { toast('최근 실행 줄에서는 옮길 수 없어요. 원래 줄에서 옮겨 주세요'); return; }
     if (base !== 'home' || !onHome(pkg)) return;
     moving = pkg;
@@ -784,11 +799,29 @@
   function hasPin() { return !!ROOT.pinHash; }
   function unlocked() { return !hasPin() || Date.now() < unlockedUntil; }
   function requirePin(title, fn) { if (unlocked()) fn(); else openPin({ mode: 'check', title: title, onOk: fn }); }
-  // True (and asks for the PIN) when the current profile protects its settings.
-  function locked(title, retry) {
-    if (current().guard && !unlocked()) { openPin({ mode: 'check', title: title, onOk: retry }); return true; }
+
+  // ---------- who may do what ----------
+  // One master profile holds the grown-up controls. Anyone who enters the PIN counts as the master for 5 minutes.
+  //   look  = appearance (design, background, tiles, fonts, clock, weather)   - every profile; kids if allowed
+  //   apps  = which apps sit on the home screen, rows, positions              - every profile except kids
+  //   self  = the profile's own name and colour                               - every profile except kids
+  //   admin = PIN, profiles, kids settings, app locks, uninstall, system      - master only
+  function master() { return profileById(ROOT.masterId) || ROOT.profiles[0]; }
+  function isKids(pr) { return (pr || current()).kind === 'kids'; }
+  function isAdmin() { return ROOT.current === master().id || Date.now() < unlockedUntil; }
+  function may(kind) {
+    if (isAdmin()) return true;
+    if (kind === 'look') return !isKids() || current().kidsLook !== false;
+    if (kind === 'apps' || kind === 'self') return !isKids();
     return false;
   }
+  function gate(kind, title, fn) {
+    if (may(kind)) { fn(); return; }
+    if (hasPin()) { openPin({ mode: 'check', title: title, onOk: fn }); return; }
+    toast(kind === 'admin' ? '"' + master().name + '" (마스터) 프로필에서 할 수 있어요' : '이 프로필에서는 바꿀 수 없어요');
+  }
+  // For edit functions: true when not allowed (the PIN is asked for, and the edit runs again after it).
+  function blocked(kind, title, retry) { if (may(kind)) return false; gate(kind, title, retry); return true; }
   function openPin(st) {
     pinState = st; st.entry = ''; st.i = 0; st.bad = '';
     $('pin').hidden = false;
@@ -847,20 +880,22 @@
     else if (k === 'left') c = Math.max(0, c - 1); else if (k === 'right') c = Math.min(2, c + 1);
     st.i = r * 3 + c; renderPin();
   }
-  function needPinFirst() { toast('설정에서 잠금 PIN을 먼저 만들어 주세요'); }
+  function needPinFirst() { toast('마스터 프로필의 설정에서 잠금 PIN을 먼저 만들어 주세요'); }
 
   // ---------- profiles ----------
+  // Entering the master profile, a profile with "PIN to switch", or leaving a kids profile asks for the PIN.
   function switchProfile(id, quiet) {
     var pr = profileById(id);
-    if (!pr) return;
-    if (pr.lockIn && id !== ROOT.current && hasPin()) {
-      openPin({ mode: 'check', title: '"' + pr.name + '" 프로필 열기', onOk: function () { doSwitch(id, quiet); } });
+    if (!pr || id === ROOT.current) return;
+    var needPin = hasPin() && !isAdmin() && (id === master().id || pr.lockIn || isKids());
+    if (needPin) {
+      openPin({ mode: 'check', title: isKids() ? '키즈 프로필에서 나가기' : '"' + pr.name + '" 프로필 열기', onOk: function () { doSwitch(id, quiet); } });
       return;
     }
     doSwitch(id, quiet);
   }
   function doSwitch(id, quiet) {
-    if (profileById(id).guard) unlockedUntil = 0;   // a protected profile is locked again as soon as it opens
+    unlockedUntil = 0;   // grown-up access never carries over to another profile
     ROOT.current = id;
     P = current().prefs;
     lastFocus.home = null;
@@ -869,17 +904,37 @@
     render();
     if (!quiet) toast(current().name + ' 프로필로 바꿨어요');
   }
+  // "New profile" opens a screen to choose name, colour, kind and starting point; nothing is created until "추가".
   function addProfile() {
-    if (locked('프로필 추가', addProfile)) return;
-    var used = ROOT.profiles.map(function (p) { return p.name; });
-    var name = PROFILE_NAMES.filter(function (n) { return used.indexOf(n) < 0; })[0] || ('프로필 ' + (ROOT.profiles.length + 1));
-    var pr = { id: 'p' + Date.now().toString(36), name: name, color: PROFILE_COLORS[ROOT.profiles.length % PROFILE_COLORS.length], prefs: clone(P) };
+    gate('admin', '프로필 추가', function () {
+      var used = ROOT.profiles.map(function (p) { return p.name; });
+      var name = PROFILE_NAMES.filter(function (n) { return used.indexOf(n) < 0; })[0] || ('프로필 ' + (ROOT.profiles.length + 1));
+      openPanel('newprofile', { draft: { name: name, color: PROFILE_COLORS[ROOT.profiles.length % PROFILE_COLORS.length], kind: 'normal', start: 'default' },
+        back: panel && panel.type === 'profiles' ? { type: 'profiles', id: 'add' } : null });
+    });
+  }
+  function kidsDefaults() {
+    return APPS.filter(function (a) { return /kids|키즈|junior|주니어/i.test(a.label + ' ' + a.pkg); }).map(function (a) { return a.pkg; });
+  }
+  function createProfile(d) {
+    if (d.kind === 'kids' && !hasPin()) {
+      toast('키즈 프로필을 지키려면 PIN이 필요해요. 먼저 PIN을 만들어 주세요');
+      openPin({ mode: 'new', onOk: function () { createProfile(d); } });
+      return;
+    }
+    var prefs = d.start === 'copy' && d.kind !== 'kids' ? clone(P) : withDefaults({});
+    var pr = { id: 'p' + Date.now().toString(36), name: d.name, color: d.color, kind: d.kind, prefs: prefs };
+    if (d.kind === 'kids') { pr.allow = kidsDefaults(); pr.prefs.apps = pr.allow.slice(); pr.kidsLook = true; }
+    else if (!Array.isArray(pr.prefs.apps)) pr.prefs.apps = defaultApps();
     ROOT.profiles.push(pr);
-    switchProfile(pr.id, true);
-    toast('"' + name + '" 프로필을 만들었어요. 지금 화면 설정을 그대로 복사했어요');
+    closePanelQuiet();
+    doSwitch(pr.id, true);
+    toast(d.kind === 'kids'
+      ? '"' + d.name + '" 키즈 프로필을 만들었어요. 허용 앱은 프로필 메뉴에서 PIN으로 바꿀 수 있어요'
+      : '"' + d.name + '" 프로필을 만들었어요');
   }
   function renameProfile(name) {
-    if (locked('프로필 이름 바꾸기', function () { renameProfile(name); })) return;
+    if (blocked('self', '프로필 이름 바꾸기', function () { renameProfile(name); })) return;
     name = String(name).trim().slice(0, 12);
     if (!name) return;
     current().name = name;
@@ -887,7 +942,7 @@
     toast('프로필 이름을 "' + name + '"(으)로 바꿨어요');
   }
   function cycleName(d) {
-    if (locked('프로필 이름 바꾸기', function () { cycleName(d); })) return;
+    if (blocked('self', '프로필 이름 바꾸기', function () { cycleName(d); })) return;
     var others = ROOT.profiles.filter(function (p) { return p.id !== ROOT.current; }).map(function (p) { return p.name; });
     var names = PROFILE_NAMES.filter(function (n) { return others.indexOf(n) < 0; });
     var i = names.indexOf(current().name);
@@ -895,17 +950,17 @@
     savePrefs(); render();
   }
   function cycleColor(d) {
-    if (locked('프로필 색 바꾸기', function () { cycleColor(d); })) return;
+    if (blocked('self', '프로필 색 바꾸기', function () { cycleColor(d); })) return;
     var i = PROFILE_COLORS.indexOf(current().color);
     current().color = PROFILE_COLORS[(i + d + PROFILE_COLORS.length) % PROFILE_COLORS.length];
     savePrefs(); render();
   }
   function deleteProfile() {
-    if (ROOT.profiles.length < 2) return;
-    if (locked('프로필 삭제', deleteProfile)) return;
+    if (ROOT.profiles.length < 2 || ROOT.current === master().id) return;
+    if (blocked('admin', '프로필 삭제', deleteProfile)) return;
     var name = current().name;
     ROOT.profiles = ROOT.profiles.filter(function (p) { return p.id !== ROOT.current; });
-    doSwitch(ROOT.profiles[0].id, true);
+    doSwitch(master().id, true);
     toast('"' + name + '" 프로필을 지웠어요');
   }
 
@@ -997,47 +1052,101 @@
   function appMenuRows() {
     var pkg = panel.pkg, home = onHome(pkg), rows = [];
     rows.push({ name: '실행', action: true, act: function () { closePanel(); launch(pkg); } });
+    if (!may('apps')) return rows.concat(adminAppRows(pkg));
     rows.push(home
       ? { name: '홈에서 빼기', action: true, act: function () { removeFromHome(pkg); closePanel(); toast('홈에서 뺐어요. 모든 앱에서 다시 추가할 수 있어요'); } }
       : { name: '홈에 추가', action: true, act: function () { addToHome(pkg); closePanel(); toast('홈 끝에 추가했어요'); } });
     if (home && base === 'home') rows.push({ name: '위치 옮기기', action: true, act: function () { closePanel(); startMove(pkg); } });
     if (home && P.cats.length > 1) rows.push({ name: '줄', sub: '◀ ▶로 다른 줄로 옮겨요', val: catById(catOf(pkg)).name || '내 앱',
       change: function (d) { var ids = P.cats.map(function (c) { return c.id; }); setCat(pkg, ids[(ids.indexOf(catOf(pkg)) + d + ids.length) % ids.length]); renderPanel(); } });
-    var isLocked = P.locked.indexOf(pkg) >= 0;
-    rows.push({ name: '잠금', sub: '열 때 PIN을 물어요', val: isLocked ? '켜짐' : '꺼짐', action: true, act: function () {
-      if (!hasPin()) { needPinFirst(); return; }
-      requirePin('앱 잠금 바꾸기', function () {
-        if (isLocked) P.locked = P.locked.filter(function (x) { return x !== pkg; }); else P.locked.push(pkg);
-        savePrefs(); render();
-      });
-    } });
-    rows.push({ name: '앱 정보', sub: '저장공간, 권한, 강제 종료', action: true, act: function () { if (N) N.appInfo(pkg); else toast('TV에서만 열 수 있어요'); } });
-    rows.push({ name: '앱 삭제', sub: 'TV의 삭제 확인 화면이 열려요', danger: true, action: true, act: function () { closePanel(); if (N) N.uninstall(pkg); else toast('TV에서만 삭제할 수 있어요'); } });
+    return rows.concat(adminAppRows(pkg));
+  }
+  // Master-only rows of the app menu (other profiles see them too and are asked for the PIN).
+  function adminAppRows(pkg) {
+    var rows = [];
+    if (!isKids()) {
+      var isLocked = P.locked.indexOf(pkg) >= 0;
+      rows.push({ name: '잠금', sub: '열 때 PIN을 물어요 · 마스터', val: isLocked ? '켜짐' : '꺼짐', action: true, act: function () {
+        if (!hasPin()) { needPinFirst(); return; }
+        gate('admin', '앱 잠금 바꾸기', function () {
+          if (P.locked.indexOf(pkg) >= 0) P.locked = P.locked.filter(function (x) { return x !== pkg; }); else P.locked.push(pkg);
+          savePrefs(); render();
+        });
+      } });
+    }
+    rows.push({ name: '앱 정보', sub: '저장공간, 권한, 강제 종료 · 마스터', action: true, act: function () { gate('admin', '앱 정보', function () { if (N) N.appInfo(pkg); else toast('TV에서만 열 수 있어요'); }); } });
+    rows.push({ name: '앱 삭제', sub: 'TV의 삭제 확인 화면이 열려요 · 마스터', danger: true, action: true, act: function () {
+      gate('admin', '앱 삭제', function () { closePanel(); if (N) N.uninstall(pkg); else toast('TV에서만 삭제할 수 있어요'); }); } });
     return rows;
   }
 
+  function profileBadges(pr) {
+    return [pr.id === master().id ? '마스터' : '', pr.kind === 'kids' ? '키즈' : '', pr.id !== master().id && pr.lockIn ? 'PIN 필요' : ''].filter(Boolean).join(' · ');
+  }
   function profileRows() {
+    var m = master(), cur = current();
     var rows = ROOT.profiles.map(function (pr) {
-      return { name: pr.name, dot: pr.color, val: pr.id === ROOT.current ? '사용 중' : '', action: pr.id !== ROOT.current,
-        act: function () { if (pr.id !== ROOT.current) { switchProfile(pr.id); closePanel(); } } };
+      return { name: pr.name, dot: pr.color, sub: profileBadges(pr), val: pr.id === ROOT.current ? '사용 중' : '', action: pr.id !== ROOT.current,
+        act: function () { if (pr.id !== ROOT.current) { closePanelQuiet(); switchProfile(pr.id); if (!pinState) restoreFocus('home'); } } };
     });
-    rows.push({ name: '새 프로필 추가', sub: '지금 화면 설정을 복사해서 만들어요', action: true, act: addProfile });
-    rows.push({ name: '이름', sub: '폰 리모컨에서 "이름을 민수로 바꿔"라고 해도 돼요', val: current().name, change: cycleName });
-    rows.push({ name: '색', dot: current().color, val: '', change: cycleColor });
-    var cur = current();
-    var toggle = function (key, title) {
-      return function () {
-        if (!hasPin()) { needPinFirst(); return; }
-        requirePin(title, function () { cur[key] = !cur[key]; savePrefs(); renderPanel(); });
-      };
-    };
-    rows.push({ name: '이 프로필로 바꿀 때 PIN', sub: '부모 프로필에 켜 두면 아이가 넘어오지 못해요', val: cur.lockIn ? '켜짐' : '꺼짐', action: true, act: toggle('lockIn', '프로필 잠금 바꾸기') });
-    rows.push({ name: '이 프로필의 설정 잠그기', sub: '꾸미기, 설정, 모든 앱, 앱 메뉴에 PIN이 필요해요', val: cur.guard ? '켜짐' : '꺼짐', action: true, act: toggle('guard', '설정 잠금 바꾸기') });
-    if (ROOT.profiles.length > 1) {
-      rows.push({ name: '이 프로필 삭제', danger: true, action: true, val: armed === 'delprofile' ? '한 번 더 누르면 삭제' : '',
-        act: function () { twice('delprofile', deleteProfile); } });
+    rows.push({ id: 'add', name: '새 프로필 추가', sub: '마스터만 만들 수 있어요', action: true, act: addProfile });
+    rows.push({ name: '이름', sub: isKids() ? '키즈 프로필은 마스터가 바꿔요' : '폰에서 "이름을 민수로 바꿔"라고 해도 돼요', val: cur.name, change: function (d) { cycleName(d); renderPanel(); } });
+    rows.push({ name: '색', dot: cur.color, val: '', change: function (d) { cycleColor(d); renderPanel(); } });
+    if (isKids(cur)) {
+      rows.push({ id: 'allow', name: '허용 앱', sub: '이 프로필에서 보이고 열리는 앱 · 마스터', val: (cur.allow || []).length + '개', action: true,
+        act: function () { gate('admin', '허용 앱 바꾸기', function () { openPanel('allow', { back: { type: 'profiles', id: 'allow' } }); }); } });
+      rows.push({ name: '아이가 꾸미기 바꾸기', sub: '디자인, 배경, 타일 · 마스터', val: cur.kidsLook !== false ? '허용' : '막음', action: true,
+        act: function () { gate('admin', '설정 바꾸기', function () { cur.kidsLook = cur.kidsLook === false; savePrefs(); renderPanel(); }); } });
+    }
+    if (cur.id !== m.id) {
+      rows.push({ name: '이 프로필로 바꿀 때 PIN', sub: '다른 프로필에서 넘어올 때 PIN을 물어요 · 마스터', val: cur.lockIn ? '켜짐' : '꺼짐', action: true,
+        act: function () { if (!hasPin()) { needPinFirst(); return; } gate('admin', '프로필 잠금 바꾸기', function () { cur.lockIn = !cur.lockIn; savePrefs(); renderPanel(); }); } });
+      rows.push({ name: '이 프로필 삭제', sub: '마스터', danger: true, action: true, val: armed === 'delprofile' ? '한 번 더 누르면 삭제' : '',
+        act: function () { gate('admin', '프로필 삭제', function () { twice('delprofile', deleteProfile); }); } });
     }
     return rows;
+  }
+
+  function newProfileRows() {
+    var d = panel.draft;
+    var names = function () {
+      var used = ROOT.profiles.map(function (p) { return p.name; });
+      return PROFILE_NAMES.filter(function (n) { return used.indexOf(n) < 0 || n === d.name; });
+    };
+    var rows = [
+      { name: '이름', sub: '만든 뒤 폰에서 원하는 이름으로 바꿀 수 있어요', val: d.name, change: function (k) { var l = names(); d.name = l[(l.indexOf(d.name) + k + l.length) % l.length]; renderPanel(); } },
+      { name: '색', dot: d.color, val: '', change: function (k) { d.color = PROFILE_COLORS[(PROFILE_COLORS.indexOf(d.color) + k + PROFILE_COLORS.length) % PROFILE_COLORS.length]; renderPanel(); } },
+      { name: '종류', sub: d.kind === 'kids' ? '허용한 앱만 보이고, 나가려면 PIN이 필요해요' : '모든 앱을 쓸 수 있어요',
+        val: d.kind === 'kids' ? '키즈' : '일반', change: function () {
+          d.kind = d.kind === 'kids' ? 'normal' : 'kids';
+          var used = ROOT.profiles.map(function (p) { return p.name; });
+          if (d.kind === 'kids' && used.indexOf('아이') < 0) d.name = '아이';
+          else if (d.kind === 'normal' && d.name === '아이') d.name = PROFILE_NAMES.filter(function (n) { return used.indexOf(n) < 0 && n !== '아이'; })[0] || d.name;
+          renderPanel();
+        } }
+    ];
+    if (d.kind !== 'kids') {
+      rows.push({ name: '시작 상태', sub: d.start === 'copy' ? '지금 프로필의 디자인, 배경, 앱 목록을 복사해요' : '처음 설치했을 때와 같은 기본 상태로 시작해요',
+        val: d.start === 'copy' ? '지금 설정 복사' : '기본 상태', change: function () { d.start = d.start === 'copy' ? 'default' : 'copy'; renderPanel(); } });
+    }
+    rows.push({ name: '"' + d.name + '" 프로필을 추가할까요?', sub: d.kind === 'kids' && !hasPin() ? '키즈 프로필은 PIN이 필요해서 PIN부터 만들어요' : '',
+      val: '추가', action: true, act: function () { createProfile(d); } });
+    rows.push({ name: '취소', action: true, act: closePanel });
+    return rows;
+  }
+
+  // Kids profile: which apps it may see and open (master).
+  function allowRows() {
+    var cur = current(), allow = cur.allow || (cur.allow = []);
+    return sortedApps().map(function (a) {
+      var on = allow.indexOf(a.pkg) >= 0;
+      return { pkg: a.pkg, name: a.label, appicon: iconUrl(a), check: on, val: on ? '허용' : '',
+        act: function () {
+          if (on) { cur.allow = allow.filter(function (x) { return x !== a.pkg; }); P.apps = (P.apps || []).filter(function (x) { return x !== a.pkg; }); }
+          else { allow.push(a.pkg); if ((P.apps || []).indexOf(a.pkg) < 0) (P.apps = P.apps || []).push(a.pkg); }
+          savePrefs(); render();
+        } };
+    });
   }
 
   function catRows() {
@@ -1103,28 +1212,35 @@
       { name: '홈 버튼으로 Cove 열기', action: true,
         sub: !st.service ? 'OK를 누르면 접근성 설정으로 이동해요' : st.enabled ? 'OK를 누르면 잠시 꺼요' : 'OK를 누르면 다시 켜요',
         val: !st.service ? '권한 필요' : st.enabled ? '켜짐' : '일시 중지',
-        act: function () {
+        act: function () { gate('admin', '홈 버튼 설정', function () {
           if (!N) { toast('TV에서만 바꿀 수 있어요'); return; }
           if (!st.service) { N.openAccessibility(); toast('접근성에서 "Cove 홈 버튼 전환"을 켜 주세요'); return; }
           N.setOverride(!st.enabled); renderPanel();
-        } },
+        }); } },
       { name: '권한이 켜지지 않을 때', sub: '안드로이드 "제한된 설정" 안내', val: helpOpen ? '닫기' : '보기', action: true,
         act: function () { helpOpen = !helpOpen; renderPanel(); } },
       { name: 'Cove 앱 정보 열기', sub: '여기서 "제한된 설정 허용"을 찾아요', action: true,
-        act: function () { if (N) N.appInfo(N.selfPackage()); else toast('TV에서만 열 수 있어요'); } },
-      { name: '잠금 PIN', sub: hasPin() ? 'OK를 누르면 PIN을 바꿔요' : '프로필, 설정, 앱 잠금에 쓰는 4자리', val: hasPin() ? '설정됨' : '없음', action: true,
-        act: function () { requirePin('PIN 바꾸기', function () { openPin({ mode: 'new' }); }); } },
+        act: function () { gate('admin', 'Cove 앱 정보', function () { if (N) N.appInfo(N.selfPackage()); else toast('TV에서만 열 수 있어요'); }); } },
+      { name: '마스터 프로필', sub: '◀ ▶로 넘기기 · PIN, 프로필, 잠금을 관리해요', val: master().name,
+        change: function (d) { gate('admin', '마스터 넘기기', function () {
+          var list = ROOT.profiles.filter(function (p) { return p.kind !== 'kids'; });
+          var i = list.indexOf(master());
+          ROOT.masterId = list[(i + d + list.length) % list.length].id;
+          savePrefs(); renderPanel(); toast('"' + master().name + '" 프로필이 마스터예요');
+        }); } },
+      { name: '잠금 PIN', sub: hasPin() ? 'OK를 누르면 PIN을 바꿔요 · 마스터' : '프로필, 키즈, 앱 잠금에 쓰는 4자리 · 마스터', val: hasPin() ? '설정됨' : '없음', action: true,
+        act: function () { gate('admin', 'PIN 바꾸기', function () { openPin({ mode: 'new' }); }); } },
     ].concat(hasPin() ? [
       { name: 'PIN 끄기', sub: '모든 잠금이 풀려요', danger: true, action: true, val: armed === 'nopin' ? '한 번 더 누르면 끄기' : '',
-        act: function () { requirePin('PIN 끄기', function () { twice('nopin', function () { ROOT.pinHash = ''; savePrefs(); render(); toast('PIN을 껐어요'); }); }); } }
+        act: function () { gate('admin', 'PIN 끄기', function () { twice('nopin', function () { ROOT.pinHash = ''; savePrefs(); render(); toast('PIN을 껐어요'); }); }); } }
     ] : []).concat([
       { name: '업데이트 확인', sub: '새 버전이 있으면 바로 설치해요', val: updateLabel(), action: true,
         act: function () {
           if (!N) { toast('TV에서만 확인할 수 있어요'); return; }
-          if (update && update.ok && update.available && update.phase === 'result') { update.phase = 'download'; renderPanel(); N.installUpdate(); }
+          if (update && update.ok && update.available && update.phase === 'result') { gate('admin', '업데이트 설치', function () { update.phase = 'download'; renderPanel(); N.installUpdate(); }); }
           else { update = { phase: 'checking' }; renderPanel(); N.checkUpdate(); }
         } },
-      { name: 'TV 설정 열기', action: true, act: function () { if (N) N.openTvSettings(); } },
+      { name: 'TV 설정 열기', sub: '마스터', action: true, act: function () { gate('admin', 'TV 설정', function () { if (N) N.openTvSettings(); }); } },
       { name: '버전', val: N ? N.version() : '미리보기' }
     ]);
   }
@@ -1136,16 +1252,19 @@
     if (type === 'app') return appMenuRows();
     if (type === 'cats') return catRows();
     if (type === 'cat') return catPanelRows();
+    if (type === 'newprofile') return newProfileRows();
+    if (type === 'allow') return allowRows();
     return lookRows();
   }
 
   function openPanel(type, opts) {
-    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat'].indexOf(type) < 0) return;
-    if (type !== 'profiles' && locked(type === 'settings' ? '설정' : type === 'app' ? '앱 메뉴' : '꾸미기', function () { openPanel(type, opts); })) return;
+    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow'].indexOf(type) < 0) return;
+    var need = type === 'look' ? 'look' : (type === 'apps' || type === 'cats' || type === 'cat') ? 'apps' : (type === 'newprofile' || type === 'allow') ? 'admin' : null;
+    if (need && blocked(need, type === 'look' ? '꾸미기' : need === 'apps' ? '앱 정리' : '마스터 메뉴', function () { openPanel(type, opts); })) return;
     if (type === 'look' || type === 'settings') loadPhotos();
     if (moving) { moving = null; renderTiles(); }
     opts = opts || {};
-    panel = { type: type, i: 0, pkg: opts.pkg, cat: opts.cat, back: opts.back };
+    panel = { type: type, i: 0, pkg: opts.pkg, cat: opts.cat, back: opts.back, draft: opts.draft };
     armed = '';
     if (type !== 'settings') helpOpen = false;
     if (focusEl) focusEl.classList.remove('focus');
@@ -1195,11 +1314,12 @@
     var rows = rowsFor(panel.type);
     panel.i = Math.max(0, Math.min(rows.length - 1, panel.i));
     var titles = { look: ['Appearance', '꾸미기'], apps: ['Apps', '앱 고르기'], settings: ['Settings', '설정'], profiles: ['Profiles', '프로필'], app: ['App', ''],
-      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''] };
+      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'] };
     $('pKicker').textContent = titles[panel.type][0];
     $('pTitle').textContent = panel.type === 'app' ? (BYPKG[panel.pkg] ? BYPKG[panel.pkg].label : '')
       : panel.type === 'cat' ? ((catById(panel.cat) || {}).name || '내 앱') : titles[panel.type][1];
     $('pExtra').innerHTML = panel.type === 'settings' ? (helpOpen ? helpBlock() : remoteBlock())
+      : panel.type === 'allow' ? '<div class="help">체크한 앱만 "' + esc(current().name) + '" 프로필의 홈과 모든 앱에 보이고 열려요. 음성 명령도 같아요.</div>'
       : panel.type === 'cats' && P.layout === 'minimal' ? '<div class="help">Minimal 디자인은 줄 없이 로고 한 줄로 보여요. 줄은 Glass와 Icons에서 나타나요.</div>' : '';
 
     $('pRows').innerHTML = rows.map(function (r, i) {
@@ -1227,7 +1347,8 @@
       apps: [['OK', '표시 / 숨김'], ['◀ ▶', '순서 옮기기'], ['뒤로', '돌아가기']],
       profiles: [['OK', '선택'], ['◀ ▶', '이름·색 바꾸기'], ['뒤로', '닫기']],
       settings: [['OK', '선택'], ['뒤로', '닫기']], app: [['OK', '선택'], ['뒤로', '닫기']],
-      cats: [['OK', '편집'], ['◀ ▶', '순서'], ['뒤로', '돌아가기']], cat: [['OK', '이 줄에 넣기 / 빼기'], ['◀ ▶', '이름'], ['뒤로', '돌아가기']] };
+      cats: [['OK', '편집'], ['◀ ▶', '순서'], ['뒤로', '돌아가기']], cat: [['OK', '이 줄에 넣기 / 빼기'], ['◀ ▶', '이름'], ['뒤로', '돌아가기']],
+      newprofile: [['◀ ▶', '바꾸기'], ['OK', '추가'], ['뒤로', '취소']], allow: [['OK', '허용 / 막기'], ['뒤로', '돌아가기']] };
     $('pHint').innerHTML = hints[panel.type].map(function (h) { return '<span><kbd>' + h[0] + '</kbd>' + h[1] + '</span>'; }).join('');
   }
 
