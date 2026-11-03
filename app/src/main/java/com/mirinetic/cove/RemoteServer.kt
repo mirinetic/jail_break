@@ -143,6 +143,23 @@ class RemoteServer(private val activity: MainActivity) {
                             json(out, 200, """{"ok":true}""")
                         }
                     }
+                    // Calendar from the phone: {"op":"add"|"del"|"sub"|"unsub", ...} handed to the page as JSON
+                    method == "POST" && path == "/api/cal" -> {
+                        if (length <= 0 || length > 64 * 1024) {
+                            json(out, 413, """{"error":"size"}""")
+                        } else {
+                            val body = ByteArray(length)
+                            DataInputStream(input).readFully(body)
+                            val text = String(body, Charsets.UTF_8)
+                            try {
+                                JSONObject(text)
+                                activity.js("Cove.calCmd(${JSONObject.quote(text)})")
+                                json(out, 200, """{"ok":true}""")
+                            } catch (e: Exception) {
+                                json(out, 400, """{"error":"json"}""")
+                            }
+                        }
+                    }
                     method == "POST" && path == "/api/photo" -> {
                         if (length <= 0 || length > MAX_PHOTO) {
                             json(out, 413, """{"error":"size"}""")

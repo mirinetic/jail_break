@@ -30,6 +30,9 @@ class MainActivity : Activity() {
     lateinit var updater: Updater
         private set
 
+    lateinit var calendars: CalendarFetcher
+        private set
+
     /** The phone remote server, so the settings screen can show whether it is running. */
     var remote: RemoteServer? = null
         private set
@@ -57,6 +60,7 @@ class MainActivity : Activity() {
         store = Store(this)
         apps = AppRepository(this)
         updater = Updater(this)
+        calendars = CalendarFetcher(this)
         val content = LocalContent(this, apps, store)
 
         web = WebView(this).apply {

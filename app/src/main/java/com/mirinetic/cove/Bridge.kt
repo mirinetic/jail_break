@@ -96,6 +96,14 @@ class Bridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun version(): String = BuildConfig.VERSION_NAME
 
+    /** Downloads a calendar subscription; answers later through Cove.calFetched(id, json). */
+    @JavascriptInterface
+    fun fetchCalendar(id: String, url: String) {
+        if (url.startsWith("http://", true) || url.startsWith("https://", true) || url.startsWith("webcal", true)) {
+            activity.calendars.fetch(id, url)
+        }
+    }
+
     /** Answers later through Cove.updateResult(json). */
     @JavascriptInterface
     fun checkUpdate() = activity.updater.check()

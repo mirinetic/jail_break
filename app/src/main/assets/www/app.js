@@ -61,7 +61,7 @@
   ];
   var CAT_NAMES = ['즐겨찾기', '영화·드라마', '예능', '음악', '키즈', '게임', '스포츠', '뉴스', '유틸리티', '기타'];
   // cats: the home screen's rows, in order. cat: pkg -> row id (an app without one sits in the first row).
-  var DEFAULTS = { design: 'glass', clock: '24', shape: 'rounded', size: 'm', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null, locked: null, weather: null };
+  var DEFAULTS = { design: 'glass', clock: '24', shape: 'rounded', size: 'm', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null, locked: null, weather: null, calPreview: true };
   Object.keys(DESIGNS.glass.p).forEach(function (k) { DEFAULTS[k] = DESIGNS.glass.p[k]; });
 
   // ---------- state ----------
@@ -413,6 +413,8 @@
     $('date').textContent = d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' });
     showBg(); // switches to/from the night background on time
     refreshWeather(false);
+    showNextEvent();
+    if (ROOT && ROOT.cal && ROOT.cal.subs && ROOT.cal.subs.length) syncCalendars(false);
   }
 
   // ---------- render ----------
@@ -999,6 +1001,7 @@
           var ids = [null].concat(CITIES.map(function (c) { return c[0]; }));
           set({ weather: ids[(ids.indexOf(P.weather || null) + d + ids.length) % ids.length] });
         } },
+      { name: '다음 일정', sub: '시계 아래에 오늘·내일 일정을 한 줄로', val: P.calPreview !== false ? '표시' : '숨김', change: function () { set({ calPreview: P.calPreview === false }); } },
       { name: '카테고리 줄', id: 'cats', sub: '앱을 소제목 달린 줄로 묶어요', val: P.cats.length > 1 || P.cats[0].name ? P.cats.length + '줄' : '사용 안 함', action: true,
         act: function () { openPanel('cats', { back: { type: 'look', id: 'cats' } }); } },
       { name: '새 앱 자동 추가', sub: '새로 설치한 앱을 홈 끝에 붙여요', val: P.autoAdd !== false ? '켜짐' : '꺼짐', change: function () { set({ autoAdd: P.autoAdd === false }); } }
@@ -1253,12 +1256,13 @@
     if (type === 'cats') return catRows();
     if (type === 'cat') return catPanelRows();
     if (type === 'newprofile') return newProfileRows();
+    if (type === 'calset') return calRows();
     if (type === 'allow') return allowRows();
     return lookRows();
   }
 
   function openPanel(type, opts) {
-    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow'].indexOf(type) < 0) return;
+    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset'].indexOf(type) < 0) return;
     var need = type === 'look' ? 'look' : (type === 'apps' || type === 'cats' || type === 'cat') ? 'apps' : (type === 'newprofile' || type === 'allow') ? 'admin' : null;
     if (need && blocked(need, type === 'look' ? '꾸미기' : need === 'apps' ? '앱 정리' : '마스터 메뉴', function () { openPanel(type, opts); })) return;
     if (type === 'look' || type === 'settings') loadPhotos();
@@ -1282,6 +1286,7 @@
       renderPanel();
       return;
     }
+    if (base === 'cal') { renderCal(); return; }
     if (base === 'drawer') restoreFocus('drawer'); else restoreFocus('home');
   }
 
@@ -1314,11 +1319,12 @@
     var rows = rowsFor(panel.type);
     panel.i = Math.max(0, Math.min(rows.length - 1, panel.i));
     var titles = { look: ['Appearance', '꾸미기'], apps: ['Apps', '앱 고르기'], settings: ['Settings', '설정'], profiles: ['Profiles', '프로필'], app: ['App', ''],
-      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'] };
+      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'] };
     $('pKicker').textContent = titles[panel.type][0];
     $('pTitle').textContent = panel.type === 'app' ? (BYPKG[panel.pkg] ? BYPKG[panel.pkg].label : '')
       : panel.type === 'cat' ? ((catById(panel.cat) || {}).name || '내 앱') : titles[panel.type][1];
     $('pExtra').innerHTML = panel.type === 'settings' ? (helpOpen ? helpBlock() : remoteBlock())
+      : panel.type === 'calset' ? '<div class="help">구독 캘린더 추가와 일정 추가는 폰 리모컨의 <b>일정</b>에서 해요. Google 캘린더와 아이폰 캘린더 주소를 넣는 방법도 거기 있어요.</div>'
       : panel.type === 'allow' ? '<div class="help">체크한 앱만 "' + esc(current().name) + '" 프로필의 홈과 모든 앱에 보이고 열려요. 음성 명령도 같아요.</div>'
       : panel.type === 'cats' && P.layout === 'minimal' ? '<div class="help">Minimal 디자인은 줄 없이 로고 한 줄로 보여요. 줄은 Glass와 Icons에서 나타나요.</div>' : '';
 
@@ -1348,7 +1354,7 @@
       profiles: [['OK', '선택'], ['◀ ▶', '이름·색 바꾸기'], ['뒤로', '닫기']],
       settings: [['OK', '선택'], ['뒤로', '닫기']], app: [['OK', '선택'], ['뒤로', '닫기']],
       cats: [['OK', '편집'], ['◀ ▶', '순서'], ['뒤로', '돌아가기']], cat: [['OK', '이 줄에 넣기 / 빼기'], ['◀ ▶', '이름'], ['뒤로', '돌아가기']],
-      newprofile: [['◀ ▶', '바꾸기'], ['OK', '추가'], ['뒤로', '취소']], allow: [['OK', '허용 / 막기'], ['뒤로', '돌아가기']] };
+      newprofile: [['◀ ▶', '바꾸기'], ['OK', '추가'], ['뒤로', '취소']], allow: [['OK', '허용 / 막기'], ['뒤로', '돌아가기']], calset: [['OK', '선택'], ['뒤로', '닫기']] };
     $('pHint').innerHTML = hints[panel.type].map(function (h) { return '<span><kbd>' + h[0] + '</kbd>' + h[1] + '</span>'; }).join('');
   }
 
@@ -1359,6 +1365,309 @@
     else if (k === 'left' || k === 'right') { if (r && r.change) r.change(k === 'left' ? -1 : 1); }
     else if (k === 'ok' || k === 'longok') { if (!r) return; if (r.act) r.act(); else if (r.change) r.change(1); }
     else if (k === 'back' || k === 'menu') closePanel();
+  }
+
+  // ---------- calendar ----------
+  // Own events (added from the phone or by voice) plus read-only subscriptions (iCal links from Google
+  // Calendar, iCloud, Outlook). Events belong to the family (everyone sees them) or to one profile.
+  var DOW = ['일', '월', '화', '수', '목', '금', '토'];
+  var SUB_COLORS = ['#8fb4ff', '#ff9f7a', '#7ee0b0', '#d7a6ff', '#ffd76b', '#ff8fb1'];
+  var calFeeds = {};               // sub id -> {at, ok, error, series:[...]}
+  var cal = { mode: 'day', day: null, scroll: 0 };
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function dayKey(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function addDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes()); }
+  function fmtTime(d) { var h = d.getHours(), m = pad2(d.getMinutes()); return (h < 12 ? '오전 ' : '오후 ') + ((h % 12) || 12) + ':' + m; }
+  function fmtDay(d) { return (d.getMonth() + 1) + '월 ' + d.getDate() + '일 (' + DOW[d.getDay()] + ')'; }
+  function relDay(d) {
+    var diff = Math.round((startOfDay(d) - startOfDay(new Date())) / 86400000);
+    return diff === 0 ? '오늘' : diff === 1 ? '내일' : diff === 2 ? '모레' : diff === -1 ? '어제' : fmtDay(d);
+  }
+
+  function calData() {
+    if (!ROOT.cal) ROOT.cal = { events: [], subs: [] };
+    if (!Array.isArray(ROOT.cal.events)) ROOT.cal.events = [];
+    if (!Array.isArray(ROOT.cal.subs)) ROOT.cal.subs = [];
+    return ROOT.cal;
+  }
+  function visibleOwner(owner) { return owner === 'family' || owner === ROOT.current; }
+  function ownerName(owner) { if (owner === 'family') return '가족'; var p = profileById(owner); return p ? p.name : ''; }
+
+  // --- iCal parsing ---
+  function icsDate(val, params) {
+    var m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?/.exec(val || '');
+    if (!m) return null;
+    if (!m[4] || /VALUE=DATE(?!-)/.test(params || '')) return { d: new Date(+m[1], +m[2] - 1, +m[3]), allDay: !m[4] };
+    if (m[7]) return { d: new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0))), allDay: false };
+    return { d: new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)), allDay: false };   // TZID time: shown as TV-local time
+  }
+  function icsText(v) { return String(v || '').replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1').trim(); }
+  function parseIcs(text) {
+    var lines = text.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '').split(/\r?\n/);
+    var out = [], ev = null, name = '';
+    lines.forEach(function (line) {
+      var i = line.indexOf(':');
+      if (i < 0) return;
+      var head = line.slice(0, i), val = line.slice(i + 1);
+      var semi = head.indexOf(';'), key = (semi < 0 ? head : head.slice(0, semi)).toUpperCase(), params = semi < 0 ? '' : head.slice(semi + 1);
+      if (key === 'X-WR-CALNAME' && !ev) name = icsText(val);
+      if (key === 'BEGIN' && val === 'VEVENT') ev = { exdates: [] };
+      else if (key === 'END' && val === 'VEVENT') { if (ev && ev.start) out.push(ev); ev = null; }
+      else if (ev) {
+        if (key === 'SUMMARY') ev.title = icsText(val);
+        else if (key === 'UID') ev.uid = val;
+        else if (key === 'DTSTART') { var s = icsDate(val, params); if (s) { ev.start = s.d; ev.allDay = s.allDay; } }
+        else if (key === 'DTEND') { var e = icsDate(val, params); if (e) ev.end = e.d; }
+        else if (key === 'RRULE') ev.rrule = val;
+        else if (key === 'EXDATE') val.split(',').forEach(function (x) { var d = icsDate(x, params); if (d) ev.exdates.push(d.d.getTime()); });
+        else if (key === 'RECURRENCE-ID') { var r = icsDate(val, params); if (r) ev.recurrenceId = r.d.getTime(); }
+        else if (key === 'STATUS' && val === 'CANCELLED') ev.cancelled = true;
+      }
+    });
+    return { name: name, events: out };
+  }
+  // Repeating events (daily / weekly with days / monthly by date or "2nd Monday" / yearly), within a window.
+  function expand(ev, from, to, moved) {
+    var out = [], dur = ev.end ? ev.end - ev.start : 0;
+    var push = function (d) {
+      if (d < from || d > to) return;
+      if (ev.exdates.indexOf(d.getTime()) >= 0 || moved[ev.uid + '@' + d.getTime()]) return;
+      out.push({ start: d, end: dur ? new Date(d.getTime() + dur) : null });
+    };
+    if (!ev.rrule) { if (!ev.cancelled) push(ev.start); return out; }
+    var r = {};
+    ev.rrule.split(';').forEach(function (kv) { var p = kv.split('='); r[p[0]] = p[1]; });
+    var freq = r.FREQ, step = +(r.INTERVAL || 1), count = r.COUNT ? +r.COUNT : Infinity;
+    var until = r.UNTIL ? (icsDate(r.UNTIL) || {}).d : null;
+    var days = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+    var byday = r.BYDAY ? r.BYDAY.split(',') : null;
+    var s = ev.start, n = 0, guard = 0;
+    var ok = function (d) { return (!until || d <= until) && n < count; };
+    if (freq === 'WEEKLY') {
+      var wd = byday ? byday.map(function (x) { return days[x.slice(-2)]; }).sort() : [s.getDay()];
+      var week0 = addDays(s, -s.getDay());
+      for (var w = 0; guard++ < 2000; w += step) {
+        var base = addDays(week0, w * 7);
+        if (base > to) break;
+        for (var k = 0; k < wd.length; k++) {
+          var d = addDays(base, wd[k]);
+          d.setHours(s.getHours(), s.getMinutes(), s.getSeconds());
+          if (d < s) continue;
+          if (!ok(d)) return out;
+          n++; push(d);
+        }
+      }
+    } else if (freq === 'MONTHLY' && byday) {
+      var m0 = byday[0], nth = parseInt(m0, 10) || 1, dow = days[m0.slice(-2)];
+      for (var mi = 0; guard++ < 600; mi += step) {
+        var first = new Date(s.getFullYear(), s.getMonth() + mi, 1, s.getHours(), s.getMinutes());
+        if (first > to) break;
+        var d2;
+        if (nth > 0) { d2 = new Date(first); d2.setDate(1 + ((dow - first.getDay() + 7) % 7) + (nth - 1) * 7); }
+        else { var last = new Date(first.getFullYear(), first.getMonth() + 1, 0, s.getHours(), s.getMinutes()); d2 = new Date(last); d2.setDate(last.getDate() - ((last.getDay() - dow + 7) % 7) + (nth + 1) * 7); }
+        if (d2.getMonth() !== first.getMonth() || d2 < s) continue;
+        if (!ok(d2)) return out;
+        n++; push(d2);
+      }
+    } else {
+      for (var i = 0; guard++ < 3000; i += step) {
+        var d3 = freq === 'DAILY' ? addDays(s, i)
+          : freq === 'MONTHLY' ? new Date(s.getFullYear(), s.getMonth() + i, s.getDate(), s.getHours(), s.getMinutes())
+          : freq === 'YEARLY' ? new Date(s.getFullYear() + i, s.getMonth(), s.getDate(), s.getHours(), s.getMinutes()) : null;
+        if (!d3 || d3 > to) break;
+        if (freq !== 'DAILY' && d3.getDate() !== s.getDate()) continue;   // e.g. the 31st in a short month
+        if (!ok(d3)) break;
+        n++; push(d3);
+      }
+    }
+    return out;
+  }
+
+  // All visible occurrences between two dates, sorted.
+  function occurrences(from, to) {
+    var list = [], data = calData();
+    data.events.forEach(function (e) {
+      if (!visibleOwner(e.owner)) return;
+      var s = new Date(e.start);
+      if (s >= from && s <= to) list.push({ title: e.title, start: s, end: e.end ? new Date(e.end) : null, allDay: !!e.allDay, owner: e.owner, id: e.id, color: '#ffffff', src: '내 일정' });
+    });
+    data.subs.forEach(function (sub, si) {
+      if (!visibleOwner(sub.owner)) return;
+      var feed = calFeeds[sub.id];
+      if (!feed || !feed.series) return;
+      var moved = {};
+      feed.series.forEach(function (ev) { if (ev.recurrenceId) moved[ev.uid + '@' + ev.recurrenceId] = true; });
+      feed.series.forEach(function (ev) {
+        expand(ev, from, to, moved).forEach(function (o) {
+          if (ev.cancelled) return;
+          list.push({ title: ev.title || '(제목 없음)', start: o.start, end: o.end, allDay: ev.allDay, owner: sub.owner, color: sub.color || SUB_COLORS[si % SUB_COLORS.length], src: sub.name });
+        });
+      });
+    });
+    list.sort(function (a, b) { return (a.start - b.start) || (b.allDay - a.allDay); });
+    return list;
+  }
+  function eventsOn(day) { var d0 = startOfDay(day); return occurrences(d0, new Date(d0.getTime() + 86400000 - 1)); }
+
+  // --- subscriptions ---
+  function syncCalendars(force) {
+    calData().subs.forEach(function (sub) {
+      var f = calFeeds[sub.id];
+      if (!force && f && Date.now() - f.at < 30 * 60 * 1000) return;
+      calFeeds[sub.id] = { at: Date.now(), ok: f ? f.ok : false, series: f ? f.series : null, busy: true };
+      if (N) N.fetchCalendar(sub.id, sub.url);
+      else calFeeds[sub.id] = { at: Date.now(), ok: false, error: '미리보기에서는 불러올 수 없어요' };
+    });
+  }
+  function calFetched(id, json) {
+    var r = {};
+    try { r = JSON.parse(json); } catch (e) {}
+    var sub = null;
+    calData().subs.forEach(function (x) { if (x.id === id) sub = x; });
+    if (!sub) return;
+    if (r.ok) {
+      var parsed = parseIcs(r.ics || '');
+      calFeeds[id] = { at: Date.now(), ok: true, series: parsed.events };
+      if (!sub.name || sub.name === '구독 캘린더') { sub.name = parsed.name || sub.name; savePrefs(); }
+    } else {
+      var old = calFeeds[id] || {};
+      calFeeds[id] = { at: Date.now(), ok: false, error: r.error || '불러오지 못했어요', series: old.series };
+    }
+    showNextEvent();
+    if (base === 'cal') renderCal();
+    if (panel && panel.type === 'calset') renderPanel();
+  }
+
+  // --- commands from the phone ---
+  function calCmd(json) {
+    var c = {};
+    try { c = JSON.parse(json); } catch (e) { return; }
+    var data = calData();
+    var owner = c.owner && (c.owner === 'family' || profileById(c.owner)) ? c.owner : 'family';
+    if (c.op === 'add' && c.title && c.start) {
+      var ev = { id: 'e' + Date.now().toString(36), title: String(c.title).slice(0, 80), start: c.start, end: c.end || null, allDay: !!c.allDay, owner: owner };
+      data.events.push(ev);
+      savePrefs();
+      toast('일정을 추가했어요: ' + relDay(new Date(ev.start)) + ' ' + (ev.allDay ? '' : fmtTime(new Date(ev.start)) + ' ') + ev.title);
+    } else if (c.op === 'del') {
+      data.events = data.events.filter(function (e) { return e.id !== c.id; });
+      savePrefs();
+      toast('일정을 지웠어요');
+    } else if (c.op === 'sub' && c.url) {
+      var sub = { id: 's' + Date.now().toString(36), name: String(c.name || '구독 캘린더').slice(0, 40), url: String(c.url).trim(), owner: owner,
+        color: SUB_COLORS[data.subs.length % SUB_COLORS.length] };
+      data.subs.push(sub);
+      savePrefs();
+      toast('"' + sub.name + '" 캘린더를 불러오는 중이에요');
+      syncCalendars(true);
+    } else if (c.op === 'unsub') {
+      data.subs = data.subs.filter(function (s) { return s.id !== c.id; });
+      delete calFeeds[c.id];
+      savePrefs();
+      toast('구독 캘린더를 지웠어요');
+    } else if (c.op === 'refresh') {
+      syncCalendars(true);
+    }
+    showNextEvent();
+    if (base === 'cal') renderCal();
+  }
+
+  // --- home preview: the next event today (or tomorrow) under the clock ---
+  function showNextEvent() {
+    var el = $('nextEvt');
+    if (!el) return;
+    if (P.calPreview === false) { el.hidden = true; return; }
+    var now = new Date(), list = occurrences(now, addDays(startOfDay(now), 2)).filter(function (o) { return o.allDay ? startOfDay(o.start) >= startOfDay(now) : o.start >= now; });
+    var todayList = eventsOn(now).filter(function (o) { return o.allDay || o.start >= now; });
+    var first = list[0];
+    if (!first) { el.hidden = true; return; }
+    var more = startOfDay(first.start).getTime() === startOfDay(now).getTime() ? todayList.length - 1 : 0;
+    el.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' +
+      '<b>' + relDay(first.start) + (first.allDay ? '' : ' ' + fmtTime(first.start)) + '</b><span>' + esc(first.title) + (more > 0 ? ' 외 ' + more + '개' : '') + '</span>';
+    el.hidden = false;
+  }
+
+  // --- the calendar screen ---
+  function openCal(mode, day) {
+    closePanelQuiet();
+    if (base === 'drawer') $('drawer').hidden = true;
+    base = 'cal';
+    cal.mode = mode || 'day';
+    cal.day = startOfDay(day || new Date());
+    cal.scroll = 0;
+    $('cal').hidden = false;
+    syncCalendars(false);
+    renderCal();
+  }
+  function closeCal() { base = 'home'; $('cal').hidden = true; restoreFocus('home'); }
+
+  function evRow(o, showDay) {
+    return '<div class="ev" style="--evc:' + esc(o.color) + '"><div class="ev-time">' + (showDay ? '<em>' + relDay(o.start) + '</em>' : '') +
+      (o.allDay ? '종일' : fmtTime(o.start)) + '</div><div class="ev-main"><b>' + esc(o.title) + '</b><span>' + esc(o.src) +
+      (o.owner !== 'family' ? ' · ' + esc(ownerName(o.owner)) : '') + '</span></div></div>';
+  }
+  function renderCal() {
+    var tabs = [['day', '하루'], ['week', '이번 주'], ['month', '한 달']];
+    $('calTabs').innerHTML = tabs.map(function (t) { return '<span class="' + (cal.mode === t[0] ? 'cur' : '') + '">' + t[1] + '</span>'; }).join('');
+    var subs = calData().subs.filter(function (s) { return visibleOwner(s.owner); });
+    var errs = subs.filter(function (s) { return calFeeds[s.id] && !calFeeds[s.id].ok && !calFeeds[s.id].busy; });
+    $('calSync').textContent = subs.length ? (errs.length ? '구독 ' + errs.length + '개를 불러오지 못했어요' : '구독 캘린더 ' + subs.length + '개') : '폰 리모컨 → 일정에서 캘린더를 연결할 수 있어요';
+    var body = $('calBody'), html = '';
+    if (cal.mode === 'day') {
+      var list = eventsOn(cal.day);
+      html = '<div class="cal-day"><h3>' + fmtDay(cal.day) + ' <small>' + relDay(cal.day) + '</small></h3>' +
+        (list.length ? '<div class="ev-list">' + list.map(function (o) { return evRow(o, false); }).join('') + '</div>' : '<p class="cal-empty">일정이 없어요</p>') + '</div>';
+    } else if (cal.mode === 'week') {
+      var w0 = addDays(cal.day, -cal.day.getDay());
+      html = '<div class="cal-week">';
+      for (var i = 0; i < 7; i++) {
+        var d = addDays(w0, i), evs = eventsOn(d), today = dayKey(d) === dayKey(new Date());
+        html += '<div class="wk' + (today ? ' today' : '') + (dayKey(d) === dayKey(cal.day) ? ' sel' : '') + '"><h4>' + DOW[d.getDay()] + ' <b>' + d.getDate() + '</b></h4>' +
+          evs.slice(0, 6).map(function (o) { return '<div class="chip" style="--evc:' + esc(o.color) + '">' + (o.allDay ? '' : '<i>' + pad2(o.start.getHours()) + ':' + pad2(o.start.getMinutes()) + '</i>') + esc(o.title) + '</div>'; }).join('') +
+          (evs.length > 6 ? '<div class="more">+' + (evs.length - 6) + '</div>' : '') + '</div>';
+      }
+      html += '</div>';
+    } else {
+      var m0 = new Date(cal.day.getFullYear(), cal.day.getMonth(), 1), g0 = addDays(m0, -m0.getDay());
+      html = '<div class="cal-month"><div class="mgrid"><div class="mtitle">' + cal.day.getFullYear() + '년 ' + (cal.day.getMonth() + 1) + '월</div>' +
+        DOW.map(function (x) { return '<div class="dow">' + x + '</div>'; }).join('');
+      for (var j = 0; j < 42; j++) {
+        var dd = addDays(g0, j), n = eventsOn(dd).length;
+        html += '<div class="mday' + (dd.getMonth() !== cal.day.getMonth() ? ' out' : '') + (dayKey(dd) === dayKey(new Date()) ? ' today' : '') + (dayKey(dd) === dayKey(cal.day) ? ' sel' : '') + '">' +
+          dd.getDate() + (n ? '<i>' + (n > 3 ? '•••' : new Array(n + 1).join('•')) + '</i>' : '') + '</div>';
+      }
+      var dl = eventsOn(cal.day);
+      html += '</div><div class="magenda"><h3>' + fmtDay(cal.day) + '</h3>' + (dl.length ? '<div class="ev-list">' + dl.map(function (o) { return evRow(o, false); }).join('') + '</div>' : '<p class="cal-empty">일정이 없어요</p>') + '</div></div>';
+    }
+    body.innerHTML = html;
+    var lst = body.querySelector('.cal-day .ev-list');
+    if (lst) lst.scrollTop = cal.scroll;
+  }
+  function calKey(k) {
+    if (k === 'back') { closeCal(); return; }
+    if (k === 'ok') { cal.mode = cal.mode === 'day' ? 'week' : cal.mode === 'week' ? 'month' : 'day'; renderCal(); return; }
+    if (k === 'longok' || k === 'menu') { openPanel('calset'); return; }
+    var step = cal.mode === 'week' ? 7 : 1;
+    if (k === 'left') { cal.day = addDays(cal.day, -step); cal.scroll = 0; }
+    else if (k === 'right') { cal.day = addDays(cal.day, step); cal.scroll = 0; }
+    else if (k === 'up') { if (cal.mode === 'month') cal.day = addDays(cal.day, -7); else cal.scroll = Math.max(0, cal.scroll - 120); }
+    else if (k === 'down') { if (cal.mode === 'month') cal.day = addDays(cal.day, 7); else cal.scroll += 120; }
+    renderCal();
+  }
+
+  // Calendar settings panel (subscriptions + preview), opened with OK held on the calendar screen.
+  function calRows() {
+    var rows = calData().subs.map(function (s) {
+      var f = calFeeds[s.id] || {};
+      var status = f.busy ? '불러오는 중' : f.ok ? (f.series ? f.series.length + '개 일정' : '연결됨') : (f.error ? '오류: ' + f.error : '대기 중');
+      return { name: s.name, dot: s.color, sub: ownerName(s.owner) + ' · ' + status, val: armed === 'unsub' + s.id ? '한 번 더 누르면 삭제' : '삭제', danger: true, action: true,
+        act: function () { gate('self', '캘린더 삭제', function () { twice('unsub' + s.id, function () { calCmd(JSON.stringify({ op: 'unsub', id: s.id })); renderPanel(); }); }); } };
+    });
+    rows.push({ name: '지금 다시 불러오기', action: true, act: function () { syncCalendars(true); toast('구독 캘린더를 다시 불러와요'); } });
+    rows.push({ name: '홈 화면에 다음 일정', sub: '시계 아래에 오늘·내일 일정을 한 줄로', val: P.calPreview !== false ? '표시' : '숨김', change: function () { set({ calPreview: P.calPreview === false }); } });
+    return rows;
   }
 
   // ---------- toast ----------
@@ -1376,6 +1685,7 @@
     if (pinState) { pinKey(k); return; }
     if (k.charAt(0) === 'n' && k.length === 2) return;   // number keys only matter on the PIN pad
     if (panel) { panelKey(k); return; }
+    if (base === 'cal') { calKey(k); return; }
     if (moving) {
       if (k === 'ok' || k === 'back' || k === 'longok') endMove();
       else if (['up', 'down', 'left', 'right'].indexOf(k) >= 0) shiftMoving(k);
@@ -1398,7 +1708,7 @@
       if (colId === 'all') { openDrawer(); return; }
       if (colId) { var firstT = P.layout === 'column' ? ($('colGrid') && $('colGrid').querySelector('.tile')) : $('tiles').querySelector('.tile'); if (firstT) setFocus(firstT); return; }
       var act = focusEl && focusEl.getAttribute('data-act');
-      if (act === 'drawer') openDrawer(); else if (act) openPanel(act);
+      if (act === 'drawer') openDrawer(); else if (act === 'calendar') openCal('day'); else if (act) openPanel(act);
       return;
     }
     move(k);
@@ -1432,6 +1742,45 @@
     return best;
   }
 
+  // "내일 오후 3시", "다음 주 금요일 7시 반", "11월 20일", "오늘 저녁 8시" -> {day, time, rest}
+  function parseWhen(raw) {
+    var t = ' ' + raw + ' ', now = new Date(), day = null, time = null, m;
+    var cut = function (re) { t = t.replace(re, ' '); };
+    var rel = { '오늘': 0, '내일': 1, '모레': 2, '글피': 3 };
+    if ((m = /(오늘|내일|모레|글피)/.exec(t))) { day = addDays(startOfDay(now), rel[m[1]]); cut(m[0]); }
+    if (!day && (m = /(\d{1,2})\s*월\s*(\d{1,2})\s*일/.exec(t))) {
+      day = new Date(now.getFullYear(), +m[1] - 1, +m[2]);
+      if (day < addDays(startOfDay(now), -30)) day = new Date(now.getFullYear() + 1, +m[1] - 1, +m[2]);
+      cut(m[0]);
+    }
+    if (!day && (m = /(이번\s*주|다음\s*주|다다음\s*주)?\s*([월화수목금토일])요일/.exec(t))) {
+      var target = '일월화수목금토'.indexOf(m[2]), today0 = startOfDay(now);
+      if (m[1]) {
+        var wk = /다다음/.test(m[1]) ? 2 : /다음/.test(m[1]) ? 1 : 0;
+        day = addDays(today0, wk * 7 - today0.getDay() + target);
+      } else day = addDays(today0, (target - today0.getDay() + 7) % 7);
+      cut(m[0]);
+    }
+    if (!day && (m = /(\d{1,2})\s*일(?![요정])/.exec(t))) {
+      day = new Date(now.getFullYear(), now.getMonth(), +m[1]);
+      if (day < startOfDay(now)) day = new Date(now.getFullYear(), now.getMonth() + 1, +m[1]);
+      cut(m[0]);
+    }
+    if ((m = /(오전|오후|아침|낮|저녁|밤|새벽)?\s*(\d{1,2})\s*시\s*(반|(\d{1,2})\s*분)?/.exec(t))) {
+      // a time-of-day word anywhere counts: "7시 가족 저녁" is 7 in the evening
+      var h = +m[2], mi = m[3] === '반' ? 30 : m[4] ? +m[4] : 0,
+        q = m[1] || (/(오후|저녁|밤)/.test(raw) ? '오후' : /(오전|아침|새벽)/.test(raw) ? '오전' : '');
+      if (/오후|저녁|밤/.test(q) && h < 12) h += 12;
+      else if (/낮/.test(q) && h < 6) h += 12;
+      else if (!q && h >= 1 && h <= 6) h += 12;     // "3시 치과" usually means the afternoon
+      if (/오전|아침|새벽/.test(q) && h === 12) h = 0;
+      time = { h: h % 24, m: mi };
+      cut(m[0]);
+    } else if ((m = /(\d{1,2}):(\d{2})/.exec(t))) { time = { h: +m[1], m: +m[2] }; cut(m[0]); }
+    else if (/정오/.test(t)) { time = { h: 12, m: 0 }; cut(/정오/); }
+    return { day: day, time: time, rest: t };
+  }
+
   function say(text) {
     var raw = String(text || '').trim();
     var t = norm(raw);
@@ -1462,6 +1811,32 @@
     if (has(t, ['프로필'])) { openPanel('profiles'); done('프로필'); return; }
     if (has(t, ['업데이트'])) { openPanel('settings'); if (N) { update = { phase: 'checking' }; renderPanel(); N.checkUpdate(); } done('업데이트 확인'); return; }
     if (has(t, ['닫아', '닫기', '홈으로', '처음화면'])) { window.Cove.home(); done('홈'); return; }
+
+    // calendar: "오늘 일정", "이번 주 스케줄 보여줘", "내일 오후 3시 치과 추가", "금요일 7시 가족 저녁 등록"
+    var addWord = has(t, ['추가', '등록', '잡아', '넣어', '기억해']);
+    var calWord = has(t, ['일정', '스케줄', '캘린더', '달력', '약속']);
+    var when = parseWhen(raw);
+    if (addWord && (when.day || when.time) && !findApp(t)) {
+      if (blocked('self', '일정 추가', function () { say(raw); })) return;
+      var d0 = when.day || startOfDay(new Date());
+      var title = when.rest.replace(/(일정|스케줄|캘린더|달력)(을|를|에)?/g, ' ')
+        .replace(/(추가|등록|기억)\s*(해\s*줘|해\s*주세요|해|하기)?|잡아\s*줘|잡아|넣어\s*줘|넣어/g, ' ')
+        .replace(/\s+(에|은|는|을|를|이|가)(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
+      var owner = /내\s*일정|나만|개인/.test(raw) ? ROOT.current : 'family';
+      title = title.replace(/^(내\s*)/, '').trim() || '일정';
+      var start = when.time ? new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), when.time.h, when.time.m) : d0;
+      var ev = { op: 'add', title: title, start: when.time ? dayKey(start) + 'T' + pad2(start.getHours()) + ':' + pad2(start.getMinutes()) : dayKey(start), allDay: !when.time, owner: owner };
+      calCmd(JSON.stringify(ev));
+      openCal('day', d0);
+      return;
+    }
+    if (calWord) {
+      var mode = has(t, ['이번주', '주간', '일주일']) ? 'week' : has(t, ['이번달', '한달', '월간', '달력']) ? 'month' : 'day';
+      if (has(t, ['다음주']) && !when.day) { openCal('week', addDays(new Date(), 7)); done('다음 주 일정'); return; }
+      openCal(mode, when.day || new Date());
+      done(mode === 'week' ? '이번 주 일정' : mode === 'month' ? '이번 달 일정' : relDay(when.day || new Date()) + ' 일정');
+      return;
+    }
 
     // designs
     if (has(t, ['시어터', '씨어터', '극장', 'theater'])) { applyDesign('theater'); done('Theater 디자인'); return; }
@@ -1547,6 +1922,8 @@
   window.Cove = {
     key: key,
     say: say,
+    calFetched: calFetched,
+    calCmd: calCmd,
     // Test hook: focus the n-th element matching a selector (used by the layout checks)
     _focus: function (sel, n) { var e = document.querySelectorAll(sel)[n || 0]; if (e) setFocus(e); return !!e; },
     toast: toast,
@@ -1554,6 +1931,7 @@
       closePanelQuiet();
       moving = null;
       if (base === 'drawer') { base = 'home'; $('drawer').hidden = true; }
+      if (base === 'cal') { base = 'home'; $('cal').hidden = true; }
       lastFocus.home = null;
       renderTiles();
     },
@@ -1579,7 +1957,8 @@
     remote: function (cmd) {
       var parts = cmd.split(':');
       if (parts[0] === 'panel') {
-        if (parts[1] === 'drawer') { if (base === 'drawer') closeDrawer(); else openDrawer(); }
+        if (parts[1] === 'calendar') { if (base === 'cal') closeCal(); else openCal('day'); }
+        else if (parts[1] === 'drawer') { if (base === 'drawer') closeDrawer(); else openDrawer(); }
         else if (panel && panel.type === parts[1]) closePanel();
         else openPanel(parts[1]);
       }
@@ -1617,5 +1996,6 @@
   loadApps();
   loadPhotos();
   render();
+  syncCalendars(true);
   setInterval(tick, 10000);
 })();
