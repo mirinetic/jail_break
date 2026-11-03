@@ -79,6 +79,14 @@
   details.how summary { color:var(--accent); cursor:pointer; padding:4px 0; }
   details.how ol { margin:6px 0 0; padding-left:18px; display:grid; gap:6px; }
   details.how b { color:var(--ink); }
+  .memo-in { font:inherit; font-size:16px; color:#1d1a12; background:#ffe58a; border:0; border-radius:12px; padding:12px; min-height:90px; resize:vertical; width:100%; }
+  .swatches { display:flex; gap:10px; }
+  .swatches button { width:34px; height:34px; border-radius:50%; padding:0; border:2px solid transparent; }
+  .swatches button.on { border-color:#fff; }
+  .mnote { background:var(--c,#ffe58a); color:#1d1a12; border-radius:12px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; }
+  .mnote div { flex:1; min-width:0; white-space:pre-wrap; word-break:keep-all; font-size:15px; }
+  .mnote small { display:block; font-size:12px; opacity:.6; margin-top:4px; }
+  .mnote button { background:rgba(0,0,0,.12); color:#1d1a12; padding:6px 10px; font-size:13px; }
   .linkish { background:none; padding:4px 0; color:var(--accent); font-size:13px; text-decoration:underline; justify-self:start; }
 </style>
 </head>
@@ -114,8 +122,9 @@
     <button data-cmd="home">홈</button>
     <button data-cmd="panel:drawer">모든 앱</button>
   </div>
-  <div class="row" style="margin-top:10px">
+  <div class="row four" style="margin-top:10px">
     <button data-cmd="panel:calendar">일정</button>
+    <button data-cmd="panel:memo">메모</button>
     <button data-cmd="panel:look">꾸미기</button>
     <button data-cmd="panel:settings">설정</button>
   </div>
@@ -180,6 +189,16 @@
       </ol><p>공개 캘린더는 링크를 아는 사람 누구나 볼 수 있어요. 링크는 다른 곳에 공유하지 마세요.</p></details>
     </div>
     <div class="list" id="subList"></div>
+  </div>
+
+  <h2>메모</h2>
+  <div style="margin-top:18px; display:grid; gap:12px">
+    <div class="card">
+      <textarea id="memoText" class="memo-in" placeholder="TV에 붙일 메모 (예: 6시에 저녁 먹자)"></textarea>
+      <div class="swatches" id="memoColors"></div>
+      <button class="go" id="memoAdd">TV에 붙이기</button>
+    </div>
+    <div class="list" id="memoList"></div>
   </div>
 
   <h2>내 사진</h2>
@@ -432,6 +451,31 @@
     Array.prototype.forEach.call(document.querySelectorAll('[data-unsub]'), function (b) { b.addEventListener('click', function () { if (b.textContent !== '정말 삭제') { b.textContent = '정말 삭제'; return; } calPost({ op: 'unsub', id: b.getAttribute('data-unsub') }, function () { msg('구독을 지웠어요'); }); }); });
   }
 
+  // ---------- memos ----------
+  var MEMO_COLORS = ['#ffe58a', '#ffb3c1', '#b5e8c9', '#b9d4ff', '#e2c9ff'], memoColor = MEMO_COLORS[0];
+  $('memoColors').innerHTML = MEMO_COLORS.map(function (c, i) { return '<button aria-label="색 ' + (i + 1) + '" data-c="' + c + '" style="background:' + c + '"' + (i ? '' : ' class="on"') + '></button>'; }).join('');
+  Array.prototype.forEach.call(document.querySelectorAll('#memoColors button'), function (b) {
+    b.addEventListener('click', function () {
+      memoColor = b.getAttribute('data-c'); $('memoText').style.background = memoColor;
+      Array.prototype.forEach.call(document.querySelectorAll('#memoColors button'), function (x) { x.classList.toggle('on', x === b); });
+    });
+  });
+  $('memoAdd').addEventListener('click', function () {
+    var t = $('memoText').value.trim();
+    if (!t) { msg('메모 내용을 써 주세요'); return; }
+    buzz();
+    calPost({ op: 'memo', text: t, color: memoColor }, function () { $('memoText').value = ''; msg('TV에 붙였어요'); });
+  });
+  function renderMemos(root) {
+    var list = (root && root.memos) || [];
+    $('memoList').innerHTML = list.map(function (m) {
+      return '<div class="mnote" style="--c:' + esc(m.color || '#ffe58a') + '"><div>' + esc(m.text) + '<small>' + esc(m.by || '') + '</small></div><button data-unmemo="' + esc(m.id) + '">떼기</button></div>';
+    }).join('');
+    Array.prototype.forEach.call(document.querySelectorAll('[data-unmemo]'), function (b) {
+      b.addEventListener('click', function () { calPost({ op: 'unmemo', id: b.getAttribute('data-unmemo') }, function () { msg('메모를 뗐어요'); }); });
+    });
+  }
+
   function loadState() {
     if (!token) return;
     fetch('/api/state?t=' + encodeURIComponent(token)).then(function (r) {
@@ -439,6 +483,7 @@
       return r.ok ? r.json() : null;
     }).then(function (root) {
       renderCalState(root);
+      renderMemos(root);
       if (!root || !Array.isArray(root.profiles)) { $('profiles').innerHTML = '<span class="eg">TV에서 프로필을 만들면 여기에 나타나요</span>'; return; }
       $('profiles').innerHTML = root.profiles.map(function (p) {
         return '<button data-cmd="profile:' + esc(p.id) + '" class="' + (p.id === root.current ? 'cur' : '') + '"><i style="background:' + esc(p.color) + '"></i>' + esc(p.name) + '</button>';

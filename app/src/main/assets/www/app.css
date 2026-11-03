@@ -396,3 +396,18 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .ev.add .ev-time { font-size: 1.8rem; color: var(--accent); }
 .ev.add b { color: var(--accent); }
 .cal-day h3 small, .magenda h3 small { font-size: 1.3rem; color: var(--accent); margin-left: .8rem; font-weight: 400; }
+
+/* ---------- memo board ---------- */
+.nextevt.memo svg { opacity: .85; }
+#memo { position: fixed; inset: 0; background: rgba(8,10,16,.86); -webkit-backdrop-filter: blur(22px); backdrop-filter: blur(22px);
+  padding: 3.4rem 4.6rem 2.4rem; display: flex; flex-direction: column; gap: 1.8rem; animation: fade .25s ease; }
+.memo-grid { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2.4rem 2rem; align-content: start; padding: 1.6rem 1.2rem; margin: 0 -1.2rem; }
+.note { min-height: 13rem; border-radius: 1.2rem; padding: 1.6rem 1.6rem 1.2rem; background: var(--c, #ffe58a); color: #1d1a12; display: flex; flex-direction: column; gap: .8rem;
+  transform: rotate(var(--r, 0deg)); box-shadow: 0 1rem 2.4rem rgba(0,0,0,.4); transition: transform .15s; }
+.note p { margin: 0; flex: 1; font-size: 1.6rem; line-height: 1.45; white-space: pre-wrap; word-break: keep-all; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
+.note small { font-size: 1.05rem; opacity: .6; }
+.note.add { background: rgba(255,255,255,.07); color: var(--ink); border: .14rem dashed rgba(255,255,255,.3); box-shadow: none; align-items: center; justify-content: center; transform: none; }
+.note.add b { font-size: 3.4rem; font-weight: 300; color: var(--accent); }
+.note.add span { font-size: 1.3rem; color: var(--ink-dim); }
+.note.cfocus { transform: rotate(0deg) scale(1.06); outline: .22rem solid #fff; outline-offset: .32rem; }
+#ambient { position: fixed; inset: 0; z-index: 30; }

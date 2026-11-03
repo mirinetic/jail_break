@@ -61,7 +61,7 @@
   ];
   var CAT_NAMES = ['즐겨찾기', '영화·드라마', '예능', '음악', '키즈', '게임', '스포츠', '뉴스', '유틸리티', '기타'];
   // cats: the home screen's rows, in order. cat: pkg -> row id (an app without one sits in the first row).
-  var DEFAULTS = { design: 'glass', clock: '24', shape: 'rounded', size: 'm', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null, locked: null, weather: null, calPreview: true };
+  var DEFAULTS = { design: 'glass', clock: '24', shape: 'rounded', size: 'm', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null, locked: null, weather: null, calPreview: true, memoPreview: true };
   Object.keys(DESIGNS.glass.p).forEach(function (k) { DEFAULTS[k] = DESIGNS.glass.p[k]; });
 
   // ---------- state ----------
@@ -126,6 +126,7 @@
     saveTimer = setTimeout(function () {
       var s = JSON.stringify(ROOT);
       try { if (N) N.savePrefs(s); else localStorage.setItem('cove.prefs', s); } catch (e) {}
+      saveSnapshot();
     }, 250);
   }
 
@@ -414,7 +415,9 @@
     showBg(); // switches to/from the night background on time
     refreshWeather(false);
     showNextEvent();
+    showMemoLine();
     if (ROOT && ROOT.cal && ROOT.cal.subs && ROOT.cal.subs.length) syncCalendars(false);
+    if (ROOT) idleCheck();
   }
 
   // ---------- render ----------
@@ -1001,6 +1004,7 @@
           var ids = [null].concat(CITIES.map(function (c) { return c[0]; }));
           set({ weather: ids[(ids.indexOf(P.weather || null) + d + ids.length) % ids.length] });
         } },
+      { name: '메모', sub: '시계 아래에 최근 메모를 한 줄로', val: P.memoPreview !== false ? '표시' : '숨김', change: function () { set({ memoPreview: P.memoPreview === false }); } },
       { name: '다음 일정', sub: '시계 아래에 오늘·내일 일정을 한 줄로', val: P.calPreview !== false ? '표시' : '숨김', change: function () { set({ calPreview: P.calPreview === false }); } },
       { name: '카테고리 줄', id: 'cats', sub: '앱을 소제목 달린 줄로 묶어요', val: P.cats.length > 1 || P.cats[0].name ? P.cats.length + '줄' : '사용 안 함', action: true,
         act: function () { openPanel('cats', { back: { type: 'look', id: 'cats' } }); } },
@@ -1235,6 +1239,7 @@
           ROOT.masterId = list[(i + d + list.length) % list.length].id;
           savePrefs(); renderPanel(); toast('"' + master().name + '" 프로필이 마스터예요');
         }); } },
+      { name: '화면 보호기 · 대기 화면', id: 'ambient', sub: '사진, 시계, 날씨, 일정, 메모', action: true, act: function () { openPanel('ambient', { back: { type: 'settings', id: 'ambient' } }); } },
       { name: '잠금 PIN', sub: hasPin() ? 'OK를 누르면 PIN을 바꿔요 · 마스터' : '프로필, 키즈, 앱 잠금에 쓰는 4자리 · 마스터', val: hasPin() ? '설정됨' : '없음', action: true,
         act: function () { gate('admin', 'PIN 바꾸기', function () { openPin({ mode: 'new' }); }); } },
     ].concat(hasPin() ? [
@@ -1262,12 +1267,14 @@
     if (type === 'newprofile') return newProfileRows();
     if (type === 'calset') return calRows();
     if (type === 'calev') return eventRows();
+    if (type === 'ambient') return ambientRows();
+    if (type === 'memoitem') return memoRows();
     if (type === 'allow') return allowRows();
     return lookRows();
   }
 
   function openPanel(type, opts) {
-    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset', 'calev'].indexOf(type) < 0) return;
+    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset', 'calev', 'ambient', 'memoitem'].indexOf(type) < 0) return;
     var need = type === 'look' ? 'look' : (type === 'apps' || type === 'cats' || type === 'cat') ? 'apps' : (type === 'newprofile' || type === 'allow') ? 'admin' : null;
     if (need && blocked(need, type === 'look' ? '꾸미기' : need === 'apps' ? '앱 정리' : '마스터 메뉴', function () { openPanel(type, opts); })) return;
     if (type === 'look' || type === 'settings') loadPhotos();
@@ -1292,6 +1299,7 @@
       return;
     }
     if (base === 'cal') { renderCal(); return; }
+    if (base === 'memo') { renderMemo(); return; }
     if (base === 'drawer') restoreFocus('drawer'); else restoreFocus('home');
   }
 
@@ -1324,11 +1332,12 @@
     var rows = rowsFor(panel.type);
     panel.i = Math.max(0, Math.min(rows.length - 1, panel.i));
     var titles = { look: ['Appearance', '꾸미기'], apps: ['Apps', '앱 고르기'], settings: ['Settings', '설정'], profiles: ['Profiles', '프로필'], app: ['App', ''],
-      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'], calev: ['Event', '일정'] };
+      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'], calev: ['Event', '일정'], ambient: ['Screensaver', '화면 보호기'], memoitem: ['Memo', '메모'] };
     $('pKicker').textContent = titles[panel.type][0];
     $('pTitle').textContent = panel.type === 'app' ? (BYPKG[panel.pkg] ? BYPKG[panel.pkg].label : '')
       : panel.type === 'cat' ? ((catById(panel.cat) || {}).name || '내 앱') : titles[panel.type][1];
     $('pExtra').innerHTML = panel.type === 'settings' ? (helpOpen ? helpBlock() : remoteBlock())
+      : panel.type === 'ambient' ? '<div class="help"><div><b>TV 화면 보호기 목록에 Cove가 없나요?</b> 일부 Google TV는 이 메뉴를 숨겨 둬요. PC나 폰에서 ADB로 한 번 설정하면 돼요:</div><code>adb shell settings put secure screensaver_components com.mirinetic.cove/.CoveDream</code></div>'
       : panel.type === 'calset' ? '<div class="help">구독 캘린더 추가와 일정 추가는 폰 리모컨의 <b>일정</b>에서 해요. Google 캘린더와 아이폰 캘린더 주소를 넣는 방법도 거기 있어요.</div>'
       : panel.type === 'allow' ? '<div class="help">체크한 앱만 "' + esc(current().name) + '" 프로필의 홈과 모든 앱에 보이고 열려요. 음성 명령도 같아요.</div>'
       : panel.type === 'cats' && P.layout === 'minimal' ? '<div class="help">Minimal 디자인은 줄 없이 로고 한 줄로 보여요. 줄은 Glass와 Icons에서 나타나요.</div>' : '';
@@ -1359,7 +1368,8 @@
       profiles: [['OK', '선택'], ['◀ ▶', '이름·색 바꾸기'], ['뒤로', '닫기']],
       settings: [['OK', '선택'], ['뒤로', '닫기']], app: [['OK', '선택'], ['뒤로', '닫기']],
       cats: [['OK', '편집'], ['◀ ▶', '순서'], ['뒤로', '돌아가기']], cat: [['OK', '이 줄에 넣기 / 빼기'], ['◀ ▶', '이름'], ['뒤로', '돌아가기']],
-      newprofile: [['◀ ▶', '바꾸기'], ['OK', '추가'], ['뒤로', '취소']], allow: [['OK', '허용 / 막기'], ['뒤로', '돌아가기']], calset: [['OK', '선택'], ['뒤로', '닫기']], calev: [['▲ ▼', '이동'], ['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '취소']] };
+      newprofile: [['◀ ▶', '바꾸기'], ['OK', '추가'], ['뒤로', '취소']], allow: [['OK', '허용 / 막기'], ['뒤로', '돌아가기']], calset: [['OK', '선택'], ['뒤로', '닫기']], calev: [['▲ ▼', '이동'], ['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '취소']],
+      ambient: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '닫기']], memoitem: [['◀ ▶', '색'], ['OK', '선택'], ['뒤로', '닫기']] };
     $('pHint').innerHTML = hints[panel.type].map(function (h) { return '<span><kbd>' + h[0] + '</kbd>' + h[1] + '</span>'; }).join('');
   }
 
@@ -1572,6 +1582,11 @@
       delete calFeeds[c.id];
       savePrefs();
       toast('구독 캘린더를 지웠어요');
+    } else if (c.op === 'memo') {
+      addMemo(c.text, MEMO_COLORS.indexOf(c.color) >= 0 ? c.color : null);
+    } else if (c.op === 'unmemo') {
+      removeMemo(c.id);
+      toast('메모를 뗐어요');
     } else if (c.op === 'refresh') {
       syncCalendars(true);
     }
@@ -1803,6 +1818,151 @@
     return rows;
   }
 
+  // ---------- screensaver / idle screen ----------
+  var AMB_PHOTOS = [['all', '배경 사진 모두'], ['mine', '내 사진만'], ['current', '지금 배경']];
+  var AMB_INTERVALS = [[15, '15초'], [30, '30초'], [60, '1분'], [300, '5분']];
+  var AMB_IDLE = [[0, '끄기'], [5, '5분'], [10, '10분'], [30, '30분']];
+  var ambient = null, lastInput = Date.now();
+  function ambSettings() {
+    if (!ROOT.ambient) ROOT.ambient = { photos: 'all', interval: 30, info: true, side: true, idle: 10 };
+    return ROOT.ambient;
+  }
+  function ambImages() {
+    var a = ambSettings(), photos = PHOTOS.map(function (id) { return '/photo/' + id + '.jpg'; });
+    var walls = PRESETS.map(function (p) { return 'bg/' + p[0] + '.jpg'; });
+    if (a.photos === 'mine' && photos.length) return photos;
+    if (a.photos === 'current') { var u = bgUrl(activeBg()); if (u) return [u]; }
+    return walls.concat(photos);
+  }
+  function snapshot() {
+    var a = ambSettings(), w = null, c = cityOf(P.weather);
+    if (c && wx.data && wx.city === P.weather) {
+      var cur = wx.data.current || {}, day = wx.data.daily || {};
+      w = { temp: cur.temp_2m !== undefined ? cur.temp_2m : cur.temperature_2m, text: wxText(cur.weather_code), city: c[1],
+        hi: day.temperature_2m_max ? day.temperature_2m_max[0] : null, lo: day.temperature_2m_min ? day.temperature_2m_min[0] : null };
+    }
+    var now = new Date();
+    var agenda = occurrences(startOfDay(now), addDays(startOfDay(now), 8)).map(function (o) { return { start: o.start.toISOString(), allDay: o.allDay, title: o.title, color: o.color }; });
+    return { clock: P.clock === 'off' ? '24' : P.clock, images: ambImages(), interval: a.interval, info: a.info, side: a.side,
+      weather: w, agenda: agenda.slice(0, 20), memos: memos().map(function (m) { return { text: m.text, color: m.color }; }), at: Date.now() };
+  }
+  var snapTimer = null;
+  function saveSnapshot() {
+    clearTimeout(snapTimer);
+    snapTimer = setTimeout(function () {
+      var s = JSON.stringify(snapshot());
+      try { if (N && N.saveSnapshot) N.saveSnapshot(s); else localStorage.setItem('cove.snapshot', s); } catch (e) {}
+    }, 1500);
+  }
+  function showAmbient() {
+    if (ambient) return;
+    closePanelQuiet();
+    $('ambient').hidden = false;
+    ambient = window.CoveAmbient.create($('ambient'), snapshot);
+    ambient.start();
+  }
+  // Any key (or a phone command) wakes the home screen; the key itself is not used.
+  function wake() {
+    lastInput = Date.now();
+    if (!ambient) return false;
+    ambient.stop(); ambient = null;
+    $('ambient').hidden = true;
+    return true;
+  }
+  function idleCheck() {
+    var mins = ambSettings().idle;
+    if (!mins || ambient || base !== 'home' || panel || pinState || moving || document.hidden) return;
+    if (Date.now() - lastInput > mins * 60000) showAmbient();
+  }
+  function ambientRows() {
+    var a = ambSettings();
+    var ch = function (key, list) { return function (d) { a[key] = cycle(list, a[key], d); if (key === 'interval' || key === 'idle') a[key] = +a[key]; savePrefs(); saveSnapshot(); renderPanel(); }; };
+    return [
+      { name: '지금 보기', sub: '아무 버튼이나 누르면 돌아와요', action: true, act: function () { closePanelQuiet(); showAmbient(); } },
+      { name: '사진', val: labelOf(AMB_PHOTOS, a.photos), change: ch('photos', AMB_PHOTOS) },
+      { name: '넘김 간격', val: labelOf(AMB_INTERVALS, a.interval), change: ch('interval', AMB_INTERVALS) },
+      { name: '시계·날씨', val: a.info ? '표시' : '숨김', change: function () { a.info = !a.info; savePrefs(); saveSnapshot(); renderPanel(); } },
+      { name: '일정·메모', val: a.side ? '표시' : '숨김', change: function () { a.side = !a.side; savePrefs(); saveSnapshot(); renderPanel(); } },
+      { name: 'Cove 대기 화면', sub: 'Cove 홈을 그대로 두면 이 화면으로 바뀌어요', val: labelOf(AMB_IDLE, a.idle), change: ch('idle', AMB_IDLE) },
+      { name: 'TV 화면 보호기로 쓰기', sub: '다른 앱을 쓰다 TV가 쉴 때도 나와요 · 마스터', action: true,
+        act: function () { gate('admin', '화면 보호기 설정', function () { if (N) N.openDreamSettings(); toast('화면 보호기 목록에서 Cove를 골라 주세요. 목록이 없으면 아래 안내를 봐 주세요'); }); } }
+    ];
+  }
+
+  // ---------- memo board ----------
+  var MEMO_COLORS = ['#ffe58a', '#ffb3c1', '#b5e8c9', '#b9d4ff', '#e2c9ff'];
+  var memoSel = 0;
+  function memos() { if (!Array.isArray(ROOT.memos)) ROOT.memos = []; return ROOT.memos; }
+  function addMemo(text, color) {
+    text = String(text || '').trim().slice(0, 200);
+    if (!text) return;
+    memos().unshift({ id: 'm' + Date.now().toString(36), text: text, color: color || MEMO_COLORS[memos().length % MEMO_COLORS.length], at: Date.now(), by: current().name });
+    savePrefs(); saveSnapshot(); showMemoLine();
+    if (base === 'memo') renderMemo();
+    toast('메모를 붙였어요');
+  }
+  function removeMemo(id) {
+    ROOT.memos = memos().filter(function (m) { return m.id !== id; });
+    savePrefs(); saveSnapshot(); showMemoLine();
+    if (base === 'memo') renderMemo();
+  }
+  function ago(t) {
+    var m = Math.round((Date.now() - t) / 60000);
+    return m < 1 ? '방금' : m < 60 ? m + '분 전' : m < 1440 ? Math.round(m / 60) + '시간 전' : Math.round(m / 1440) + '일 전';
+  }
+  function showMemoLine() {
+    var el = $('memoLine');
+    if (!el) return;
+    var list = memos();
+    if (!list.length || P.memoPreview === false) { el.hidden = true; return; }
+    el.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v11l-5 5H5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 20v-5h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>' +
+      '<b>메모</b><span>' + esc(list[0].text.split('\n')[0]) + (list.length > 1 ? ' 외 ' + (list.length - 1) + '개' : '') + '</span>';
+    el.hidden = false;
+  }
+  function openMemo() {
+    closePanelQuiet();
+    if (base === 'drawer') $('drawer').hidden = true;
+    if (focusEl) focusEl.classList.remove('focus');
+    base = 'memo'; memoSel = 0;
+    $('memo').hidden = false;
+    renderMemo();
+  }
+  function closeMemo() { base = 'home'; $('memo').hidden = true; restoreFocus('home'); }
+  function renderMemo() {
+    var list = memos();
+    memoSel = Math.max(0, Math.min(list.length, memoSel));
+    $('memoGrid').innerHTML = '<div class="note add' + (memoSel === 0 ? ' cfocus' : '') + '"><b>＋</b><span>메모 붙이기</span></div>' +
+      list.map(function (m, i) {
+        return '<div class="note' + (memoSel === i + 1 ? ' cfocus' : '') + '" style="--c:' + esc(m.color) + ';--r:' + ((i % 3) - 1) * 0.8 + 'deg"><p>' + esc(m.text) + '</p><small>' + esc(m.by || '') + ' · ' + ago(m.at) + '</small></div>';
+      }).join('');
+    var f = $('memoGrid').querySelector('.cfocus');
+    if (f) { var g = $('memoGrid'), gr = g.getBoundingClientRect(), fr = f.getBoundingClientRect();
+      if (fr.bottom > gr.bottom) g.scrollTop += fr.bottom - gr.bottom + 20; else if (fr.top < gr.top) g.scrollTop -= gr.top - fr.top + 20; }
+  }
+  function memoKey(k) {
+    var n = memos().length + 1, cols = 4;
+    if (k === 'back') { closeMemo(); return; }
+    if (k === 'left') memoSel = Math.max(0, memoSel - 1);
+    else if (k === 'right') memoSel = Math.min(n - 1, memoSel + 1);
+    else if (k === 'up') memoSel = Math.max(0, memoSel - cols);
+    else if (k === 'down') memoSel = Math.min(n - 1, memoSel + cols);
+    else if (k === 'ok' || k === 'longok') {
+      if (memoSel === 0) askText('메모', '', function (txt) { if (txt !== null) addMemo(txt); });
+      else openPanel('memoitem', { draft: memos()[memoSel - 1] });
+      return;
+    }
+    renderMemo();
+  }
+  function memoRows() {
+    var m = panel.draft;
+    return [
+      { name: '내용', sub: m.text, val: '고치기', action: true, act: function () { askText('메모', m.text, function (txt) { if (txt !== null && txt.trim()) { m.text = txt.trim().slice(0, 200); savePrefs(); saveSnapshot(); showMemoLine(); renderPanel(); } }); } },
+      { name: '색', dot: m.color, val: '', change: function (d) { m.color = MEMO_COLORS[(MEMO_COLORS.indexOf(m.color) + d + MEMO_COLORS.length) % MEMO_COLORS.length]; savePrefs(); saveSnapshot(); renderPanel(); } },
+      { name: '떼기', danger: true, action: true, val: armed === 'delmemo' ? '한 번 더 누르면 삭제' : '', act: function () { twice('delmemo', function () { removeMemo(m.id); closePanel(); }); } },
+      { name: '닫기', action: true, act: closePanel }
+    ];
+  }
+
   // ---------- toast ----------
   var toastTimer = null;
   function toast(msg) {
@@ -1815,10 +1975,12 @@
 
   // ---------- keys ----------
   function key(k) {
+    if (wake()) return;
     if (pinState) { pinKey(k); return; }
     if (k.charAt(0) === 'n' && k.length === 2) return;   // number keys only matter on the PIN pad
     if (panel) { panelKey(k); return; }
     if (base === 'cal') { calKey(k); return; }
+    if (base === 'memo') { memoKey(k); return; }
     if (moving) {
       if (k === 'ok' || k === 'back' || k === 'longok') endMove();
       else if (['up', 'down', 'left', 'right'].indexOf(k) >= 0) shiftMoving(k);
@@ -1841,7 +2003,7 @@
       if (colId === 'all') { openDrawer(); return; }
       if (colId) { var firstT = P.layout === 'column' ? ($('colGrid') && $('colGrid').querySelector('.tile')) : $('tiles').querySelector('.tile'); if (firstT) setFocus(firstT); return; }
       var act = focusEl && focusEl.getAttribute('data-act');
-      if (act === 'drawer') openDrawer(); else if (act === 'calendar') openCal('month'); else if (act) openPanel(act);
+      if (act === 'drawer') openDrawer(); else if (act === 'calendar') openCal('month'); else if (act === 'memo') openMemo(); else if (act) openPanel(act);
       return;
     }
     move(k);
@@ -1915,6 +2077,7 @@
   }
 
   function say(text) {
+    wake();
     var raw = String(text || '').trim();
     var t = norm(raw);
     if (!t) return;
@@ -1944,6 +2107,14 @@
     if (has(t, ['프로필'])) { openPanel('profiles'); done('프로필'); return; }
     if (has(t, ['업데이트'])) { openPanel('settings'); if (N) { update = { phase: 'checking' }; renderPanel(); N.checkUpdate(); } done('업데이트 확인'); return; }
     if (has(t, ['닫아', '닫기', '홈으로', '처음화면'])) { window.Cove.home(); done('홈'); return; }
+
+    // memos: "메모 남겨 6시에 저녁 먹자", "메모 보여줘"
+    if (has(t, ['메모', '쪽지'])) {
+      var body = raw.replace(/(메모|쪽지)(를|을|에)?/g, ' ').replace(/(남겨|추가|붙여|써|적어|등록)\s*(줘|주세요|해\s*줘|해)?/g, ' ').replace(/\s+/g, ' ').trim();
+      if (body && !/^(보여|열어|확인|봐)/.test(body)) { addMemo(body); return; }
+      openMemo(); done('메모'); return;
+    }
+    if (has(t, ['화면보호기', '대기화면', '액자'])) { showAmbient(); return; }
 
     // calendar: "오늘 일정", "이번 주 스케줄 보여줘", "내일 오후 3시 치과 추가", "금요일 7시 가족 저녁 등록"
     var addWord = has(t, ['추가', '등록', '잡아', '넣어', '기억해']);
@@ -2056,6 +2227,7 @@
     key: key,
     say: say,
     calFetched: calFetched,
+    memo: function (text, color) { addMemo(text, color); },
     textResult: textResult,
     calCmd: calCmd,
     // Test hook: focus the n-th element matching a selector (used by the layout checks)
@@ -2066,6 +2238,8 @@
       moving = null;
       if (base === 'drawer') { base = 'home'; $('drawer').hidden = true; }
       if (base === 'cal') { base = 'home'; $('cal').hidden = true; }
+      if (base === 'memo') { base = 'home'; $('memo').hidden = true; }
+      wake();
       lastFocus.home = null;
       renderTiles();
     },
@@ -2089,9 +2263,11 @@
       if (panel && panel.type === 'settings') renderPanel();
     },
     remote: function (cmd) {
+      wake();
       var parts = cmd.split(':');
       if (parts[0] === 'panel') {
-        if (parts[1] === 'calendar') { if (base === 'cal') closeCal(); else openCal('month'); }
+        if (parts[1] === 'memo') { if (base === 'memo') closeMemo(); else openMemo(); }
+        else if (parts[1] === 'calendar') { if (base === 'cal') closeCal(); else openCal('month'); }
         else if (parts[1] === 'drawer') { if (base === 'drawer') closeDrawer(); else openDrawer(); }
         else if (panel && panel.type === parts[1]) closePanel();
         else openPanel(parts[1]);

@@ -144,6 +144,16 @@ class Bridge(private val activity: MainActivity) {
         }
     }
 
+    /** Saves what the screensaver should show (photos, clock, weather, events, memos). */
+    @JavascriptInterface
+    fun saveSnapshot(json: String) {
+        activity.store.snapshot = json
+    }
+
+    /** TV Settings > Screen saver, where Cove can be chosen (hidden on some Google TV models). */
+    @JavascriptInterface
+    fun openDreamSettings() = startScreen(Intent(Settings.ACTION_DREAM_SETTINGS))
+
     /** Downloads a calendar subscription; answers later through Cove.calFetched(id, json). */
     @JavascriptInterface
     fun fetchCalendar(id: String, url: String) {

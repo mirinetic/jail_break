@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cove</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#root{position:fixed;inset:0}</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="ambient.js"></script>
+<script>
+  // TV screensaver: shows the snapshot the home screen last saved.
+  (function () {
+    var read = function () {
+      try { return JSON.parse(window.CoveDreamNative ? window.CoveDreamNative.snapshot() : (localStorage.getItem('cove.snapshot') || '{}')); } catch (e) { return {}; }
+    };
+    var data = read();
+    setInterval(function () { data = read(); }, 60000);
+    window.CoveAmbient.create(document.getElementById('root'), function () { return data; }).start();
+  })();
+</script>
+</body>
+</html>

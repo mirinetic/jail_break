@@ -23,6 +23,13 @@ class Store(context: Context) {
             sp.edit().putString("prefs", value).apply()
         }
 
+    /** What the screensaver shows: a JSON snapshot written by the home screen page. */
+    var snapshot: String
+        get() = sp.getString("snapshot", "{}") ?: "{}"
+        set(value) {
+            sp.edit().putString("snapshot", value).apply()
+        }
+
     /** Whether the accessibility service should bring Cove back over the stock home screen. */
     var overrideOn: Boolean
         get() = sp.getBoolean("override", true)
