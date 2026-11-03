@@ -1,9 +1,15 @@
 package com.mirinetic.cove
 
+import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.text.InputType
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
+import android.widget.FrameLayout
 import android.webkit.JavascriptInterface
 import org.json.JSONArray
 import org.json.JSONObject
@@ -95,6 +101,48 @@ class Bridge(private val activity: MainActivity) {
 
     @JavascriptInterface
     fun version(): String = BuildConfig.VERSION_NAME
+
+    /**
+     * Asks for a line of text with the TV's own keyboard (which on Google TV also has a microphone).
+     * Answers later through Cove.textResult(id, text) - text is null when cancelled.
+     */
+    @JavascriptInterface
+    fun askText(id: String, title: String, initial: String) {
+        activity.runOnUiThread {
+            val field = EditText(activity).apply {
+                setText(initial)
+                setSelection(text.length)
+                inputType = InputType.TYPE_CLASS_TEXT
+                imeOptions = EditorInfo.IME_ACTION_DONE
+                setSingleLine()
+            }
+            val box = FrameLayout(activity).apply {
+                val pad = (24 * resources.displayMetrics.density).toInt()
+                setPadding(pad, pad / 2, pad, 0)
+                addView(field)
+            }
+            var answered = false
+            val answer = { text: String? ->
+                if (!answered) {
+                    answered = true
+                    activity.js("Cove.textResult(${JSONObject.quote(id)},${if (text == null) "null" else JSONObject.quote(text)})")
+                }
+            }
+            val dialog = AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(title)
+                .setView(box)
+                .setPositiveButton("확인") { _, _ -> answer(field.text.toString()) }
+                .setNegativeButton("취소") { _, _ -> answer(null) }
+                .setOnCancelListener { answer(null) }
+                .create()
+            field.setOnEditorActionListener { _, action, _ ->
+                if (action == EditorInfo.IME_ACTION_DONE) { answer(field.text.toString()); dialog.dismiss(); true } else false
+            }
+            dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+            dialog.show()
+            field.requestFocus()
+        }
+    }
 
     /** Downloads a calendar subscription; answers later through Cove.calFetched(id, json). */
     @JavascriptInterface

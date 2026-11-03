@@ -348,7 +348,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .c-head h2 { margin: 0; font-size: 2.6rem; font-weight: 500; }
 .c-tabs { display: flex; gap: .6rem; }
 .c-tabs span { padding: .5rem 1.3rem; border-radius: 2rem; font-size: 1.2rem; color: var(--ink-dim); background: rgba(255,255,255,.06); }
-.c-tabs span.cur { background: #fff; color: #11141b; }
+.c-tabs span.cur { background: rgba(255,255,255,.2); color: var(--ink); }
+.c-tabs .cbtn { margin-left: .6rem; border: .08rem solid rgba(255,255,255,.18); }
+.c-tabs span.cfocus { background: #fff; color: #11141b; transform: scale(1.06); }
+.c-tabs span { transition: transform .12s, background .12s; }
 .c-sync { margin-left: auto; font-size: 1.1rem; color: var(--ink-dim); }
 .c-body { flex: 1; min-height: 0; overflow: hidden; }
 .cal-day { height: 100%; display: flex; flex-direction: column; gap: 1.4rem; max-width: 70rem; }
@@ -383,3 +386,13 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .mday.sel { background: #fff; color: #11141b; }
 .mday.sel i { color: #2f5bd3; }
 .magenda { display: flex; flex-direction: column; gap: 1.2rem; min-height: 0; }
+
+.mday.cfocus { background: #fff; color: #11141b; transform: scale(1.06); box-shadow: 0 .6rem 1.4rem rgba(0,0,0,.4); }
+.mday.cfocus i { color: #2f5bd3; }
+.mday { transition: transform .12s; }
+.wk.cfocus { background: rgba(255,255,255,.14); box-shadow: inset 0 0 0 .18rem #fff; }
+.ev.cfocus { background: rgba(255,255,255,.18); box-shadow: inset 0 0 0 .14rem #fff; }
+.ev.add { border-left-color: transparent; background: rgba(255,255,255,.03); }
+.ev.add .ev-time { font-size: 1.8rem; color: var(--accent); }
+.ev.add b { color: var(--accent); }
+.cal-day h3 small, .magenda h3 small { font-size: 1.3rem; color: var(--accent); margin-left: .8rem; font-weight: 400; }

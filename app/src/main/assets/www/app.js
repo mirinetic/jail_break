@@ -1093,7 +1093,9 @@
         act: function () { if (pr.id !== ROOT.current) { closePanelQuiet(); switchProfile(pr.id); if (!pinState) restoreFocus('home'); } } };
     });
     rows.push({ id: 'add', name: '새 프로필 추가', sub: '마스터만 만들 수 있어요', action: true, act: addProfile });
-    rows.push({ name: '이름', sub: isKids() ? '키즈 프로필은 마스터가 바꿔요' : '폰에서 "이름을 민수로 바꿔"라고 해도 돼요', val: cur.name, change: function (d) { cycleName(d); renderPanel(); } });
+    rows.push({ name: '이름', sub: isKids() ? '키즈 프로필은 마스터가 바꿔요' : 'OK로 직접 입력, ◀ ▶로 추천 이름', val: cur.name, action: true,
+      act: function () { gate('self', '프로필 이름 바꾸기', function () { askText('프로필 이름', cur.name, function (txt) { if (txt !== null && txt.trim()) { renameProfile(txt); renderPanel(); } }); }); },
+      change: function (d) { cycleName(d); renderPanel(); } });
     rows.push({ name: '색', dot: cur.color, val: '', change: function (d) { cycleColor(d); renderPanel(); } });
     if (isKids(cur)) {
       rows.push({ id: 'allow', name: '허용 앱', sub: '이 프로필에서 보이고 열리는 앱 · 마스터', val: (cur.allow || []).length + '개', action: true,
@@ -1117,7 +1119,8 @@
       return PROFILE_NAMES.filter(function (n) { return used.indexOf(n) < 0 || n === d.name; });
     };
     var rows = [
-      { name: '이름', sub: '만든 뒤 폰에서 원하는 이름으로 바꿀 수 있어요', val: d.name, change: function (k) { var l = names(); d.name = l[(l.indexOf(d.name) + k + l.length) % l.length]; renderPanel(); } },
+      { name: '이름', sub: 'OK로 직접 입력, ◀ ▶로 추천 이름', val: d.name, action: true,
+        act: function () { askText('프로필 이름', d.name, function (txt) { if (txt !== null && txt.trim()) { d.name = txt.trim().slice(0, 12); renderPanel(); } }); }, change: function (k) { var l = names(); d.name = l[(l.indexOf(d.name) + k + l.length) % l.length]; renderPanel(); } },
       { name: '색', dot: d.color, val: '', change: function (k) { d.color = PROFILE_COLORS[(PROFILE_COLORS.indexOf(d.color) + k + PROFILE_COLORS.length) % PROFILE_COLORS.length]; renderPanel(); } },
       { name: '종류', sub: d.kind === 'kids' ? '허용한 앱만 보이고, 나가려면 PIN이 필요해요' : '모든 앱을 쓸 수 있어요',
         val: d.kind === 'kids' ? '키즈' : '일반', change: function () {
@@ -1172,7 +1175,8 @@
     var c = catById(panel.cat);
     if (!c) return [];
     var rows = [
-      { name: '이름', sub: '폰에서 "줄 이름을 OO로 바꿔"라고 해도 돼요', val: c.name || '내 앱',
+      { name: '이름', sub: 'OK로 직접 입력, ◀ ▶로 추천 이름', val: c.name || '내 앱', action: true,
+        act: function () { askText('줄 이름', c.name, function (txt) { if (txt !== null && txt.trim()) { renameCat(c.id, txt); renderPanel(); } }); },
         change: function (d) {
           var others = P.cats.filter(function (x) { return x.id !== c.id; }).map(function (x) { return x.name; });
           var names = CAT_NAMES.filter(function (n) { return others.indexOf(n) < 0; });
@@ -1257,12 +1261,13 @@
     if (type === 'cat') return catPanelRows();
     if (type === 'newprofile') return newProfileRows();
     if (type === 'calset') return calRows();
+    if (type === 'calev') return eventRows();
     if (type === 'allow') return allowRows();
     return lookRows();
   }
 
   function openPanel(type, opts) {
-    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset'].indexOf(type) < 0) return;
+    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset', 'calev'].indexOf(type) < 0) return;
     var need = type === 'look' ? 'look' : (type === 'apps' || type === 'cats' || type === 'cat') ? 'apps' : (type === 'newprofile' || type === 'allow') ? 'admin' : null;
     if (need && blocked(need, type === 'look' ? '꾸미기' : need === 'apps' ? '앱 정리' : '마스터 메뉴', function () { openPanel(type, opts); })) return;
     if (type === 'look' || type === 'settings') loadPhotos();
@@ -1319,7 +1324,7 @@
     var rows = rowsFor(panel.type);
     panel.i = Math.max(0, Math.min(rows.length - 1, panel.i));
     var titles = { look: ['Appearance', '꾸미기'], apps: ['Apps', '앱 고르기'], settings: ['Settings', '설정'], profiles: ['Profiles', '프로필'], app: ['App', ''],
-      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'] };
+      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'], calev: ['Event', '일정'] };
     $('pKicker').textContent = titles[panel.type][0];
     $('pTitle').textContent = panel.type === 'app' ? (BYPKG[panel.pkg] ? BYPKG[panel.pkg].label : '')
       : panel.type === 'cat' ? ((catById(panel.cat) || {}).name || '내 앱') : titles[panel.type][1];
@@ -1354,7 +1359,7 @@
       profiles: [['OK', '선택'], ['◀ ▶', '이름·색 바꾸기'], ['뒤로', '닫기']],
       settings: [['OK', '선택'], ['뒤로', '닫기']], app: [['OK', '선택'], ['뒤로', '닫기']],
       cats: [['OK', '편집'], ['◀ ▶', '순서'], ['뒤로', '돌아가기']], cat: [['OK', '이 줄에 넣기 / 빼기'], ['◀ ▶', '이름'], ['뒤로', '돌아가기']],
-      newprofile: [['◀ ▶', '바꾸기'], ['OK', '추가'], ['뒤로', '취소']], allow: [['OK', '허용 / 막기'], ['뒤로', '돌아가기']], calset: [['OK', '선택'], ['뒤로', '닫기']] };
+      newprofile: [['◀ ▶', '바꾸기'], ['OK', '추가'], ['뒤로', '취소']], allow: [['OK', '허용 / 막기'], ['뒤로', '돌아가기']], calset: [['OK', '선택'], ['뒤로', '닫기']], calev: [['▲ ▼', '이동'], ['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '취소']] };
     $('pHint').innerHTML = hints[panel.type].map(function (h) { return '<span><kbd>' + h[0] + '</kbd>' + h[1] + '</span>'; }).join('');
   }
 
@@ -1590,71 +1595,199 @@
   }
 
   // --- the calendar screen ---
+  // Arrow keys move the focus, OK opens what is focused. Up from the content reaches the top bar
+  // (하루 / 이번 주 / 한 달 / 일정 추가 / 캘린더 설정).
+  var CAL_HEAD = [['day', '하루'], ['week', '이번 주'], ['month', '한 달'], ['add', '＋ 일정 추가'], ['set', '캘린더 설정']];
   function openCal(mode, day) {
     closePanelQuiet();
     if (base === 'drawer') $('drawer').hidden = true;
+    if (focusEl) focusEl.classList.remove('focus');
     base = 'cal';
-    cal.mode = mode || 'day';
+    cal.mode = mode || 'month';
     cal.day = startOfDay(day || new Date());
-    cal.scroll = 0;
+    cal.zone = 'body';
+    cal.hi = 0;
+    cal.idx = 0;
+    cal.prevMode = null;
     $('cal').hidden = false;
     syncCalendars(false);
     renderCal();
   }
   function closeCal() { base = 'home'; $('cal').hidden = true; restoreFocus('home'); }
+  function dayItems() { return eventsOn(cal.day).concat([{ add: true }]); }
+  function gridStart(day) { var m0 = new Date(day.getFullYear(), day.getMonth(), 1); return addDays(m0, -m0.getDay()); }
 
-  function evRow(o, showDay) {
-    return '<div class="ev" style="--evc:' + esc(o.color) + '"><div class="ev-time">' + (showDay ? '<em>' + relDay(o.start) + '</em>' : '') +
+  function evRow(o, focused) {
+    if (o.add) return '<div class="ev add' + (focused ? ' cfocus' : '') + '"><div class="ev-time">＋</div><div class="ev-main"><b>이 날에 일정 추가</b></div></div>';
+    return '<div class="ev' + (focused ? ' cfocus' : '') + '" style="--evc:' + esc(o.color) + '"><div class="ev-time">' +
       (o.allDay ? '종일' : fmtTime(o.start)) + '</div><div class="ev-main"><b>' + esc(o.title) + '</b><span>' + esc(o.src) +
       (o.owner !== 'family' ? ' · ' + esc(ownerName(o.owner)) : '') + '</span></div></div>';
   }
   function renderCal() {
-    var tabs = [['day', '하루'], ['week', '이번 주'], ['month', '한 달']];
-    $('calTabs').innerHTML = tabs.map(function (t) { return '<span class="' + (cal.mode === t[0] ? 'cur' : '') + '">' + t[1] + '</span>'; }).join('');
-    var subs = calData().subs.filter(function (s) { return visibleOwner(s.owner); });
-    var errs = subs.filter(function (s) { return calFeeds[s.id] && !calFeeds[s.id].ok && !calFeeds[s.id].busy; });
-    $('calSync').textContent = subs.length ? (errs.length ? '구독 ' + errs.length + '개를 불러오지 못했어요' : '구독 캘린더 ' + subs.length + '개') : '폰 리모컨 → 일정에서 캘린더를 연결할 수 있어요';
-    var body = $('calBody'), html = '';
+    var head = cal.zone === 'head';
+    $('calTabs').innerHTML = CAL_HEAD.map(function (t, i) {
+      return '<span class="' + (i < 3 ? 'ctab' : 'cbtn') + (cal.mode === t[0] ? ' cur' : '') + (head && cal.hi === i ? ' cfocus' : '') + '">' + t[1] + '</span>';
+    }).join('');
+    var subs = calData().subs.filter(function (x) { return visibleOwner(x.owner); });
+    var errs = subs.filter(function (x) { return calFeeds[x.id] && !calFeeds[x.id].ok && !calFeeds[x.id].busy; });
+    $('calSync').textContent = subs.length ? (errs.length ? '구독 ' + errs.length + '개를 불러오지 못했어요' : '구독 캘린더 ' + subs.length + '개') : '';
+    var body = $('calBody'), html = '', bodyFocus = !head;
     if (cal.mode === 'day') {
-      var list = eventsOn(cal.day);
+      var items = dayItems();
+      cal.idx = Math.max(0, Math.min(items.length - 1, cal.idx));
       html = '<div class="cal-day"><h3>' + fmtDay(cal.day) + ' <small>' + relDay(cal.day) + '</small></h3>' +
-        (list.length ? '<div class="ev-list">' + list.map(function (o) { return evRow(o, false); }).join('') + '</div>' : '<p class="cal-empty">일정이 없어요</p>') + '</div>';
+        (items.length === 1 ? '<p class="cal-empty">일정이 없어요</p>' : '') +
+        '<div class="ev-list">' + items.map(function (o, i) { return evRow(o, bodyFocus && i === cal.idx); }).join('') + '</div></div>';
     } else if (cal.mode === 'week') {
       var w0 = addDays(cal.day, -cal.day.getDay());
       html = '<div class="cal-week">';
       for (var i = 0; i < 7; i++) {
-        var d = addDays(w0, i), evs = eventsOn(d), today = dayKey(d) === dayKey(new Date());
-        html += '<div class="wk' + (today ? ' today' : '') + (dayKey(d) === dayKey(cal.day) ? ' sel' : '') + '"><h4>' + DOW[d.getDay()] + ' <b>' + d.getDate() + '</b></h4>' +
+        var d = addDays(w0, i), evs = eventsOn(d);
+        html += '<div class="wk' + (dayKey(d) === dayKey(new Date()) ? ' today' : '') + (bodyFocus && dayKey(d) === dayKey(cal.day) ? ' cfocus' : '') + '"><h4>' + DOW[d.getDay()] + ' <b>' + d.getDate() + '</b></h4>' +
           evs.slice(0, 6).map(function (o) { return '<div class="chip" style="--evc:' + esc(o.color) + '">' + (o.allDay ? '' : '<i>' + pad2(o.start.getHours()) + ':' + pad2(o.start.getMinutes()) + '</i>') + esc(o.title) + '</div>'; }).join('') +
           (evs.length > 6 ? '<div class="more">+' + (evs.length - 6) + '</div>' : '') + '</div>';
       }
       html += '</div>';
     } else {
-      var m0 = new Date(cal.day.getFullYear(), cal.day.getMonth(), 1), g0 = addDays(m0, -m0.getDay());
+      var g0 = gridStart(cal.day);
       html = '<div class="cal-month"><div class="mgrid"><div class="mtitle">' + cal.day.getFullYear() + '년 ' + (cal.day.getMonth() + 1) + '월</div>' +
         DOW.map(function (x) { return '<div class="dow">' + x + '</div>'; }).join('');
       for (var j = 0; j < 42; j++) {
         var dd = addDays(g0, j), n = eventsOn(dd).length;
-        html += '<div class="mday' + (dd.getMonth() !== cal.day.getMonth() ? ' out' : '') + (dayKey(dd) === dayKey(new Date()) ? ' today' : '') + (dayKey(dd) === dayKey(cal.day) ? ' sel' : '') + '">' +
-          dd.getDate() + (n ? '<i>' + (n > 3 ? '•••' : new Array(n + 1).join('•')) + '</i>' : '') + '</div>';
+        html += '<div class="mday' + (dd.getMonth() !== cal.day.getMonth() ? ' out' : '') + (dayKey(dd) === dayKey(new Date()) ? ' today' : '') +
+          (bodyFocus && dayKey(dd) === dayKey(cal.day) ? ' cfocus' : '') + '">' + dd.getDate() + (n ? '<i>' + (n > 3 ? '•••' : new Array(n + 1).join('•')) + '</i>' : '') + '</div>';
       }
       var dl = eventsOn(cal.day);
-      html += '</div><div class="magenda"><h3>' + fmtDay(cal.day) + '</h3>' + (dl.length ? '<div class="ev-list">' + dl.map(function (o) { return evRow(o, false); }).join('') + '</div>' : '<p class="cal-empty">일정이 없어요</p>') + '</div></div>';
+      html += '</div><div class="magenda"><h3>' + fmtDay(cal.day) + ' <small>' + relDay(cal.day) + '</small></h3>' +
+        (dl.length ? '<div class="ev-list">' + dl.map(function (o) { return evRow(o, false); }).join('') + '</div>' : '<p class="cal-empty">일정이 없어요</p>') + '</div></div>';
     }
     body.innerHTML = html;
-    var lst = body.querySelector('.cal-day .ev-list');
-    if (lst) lst.scrollTop = cal.scroll;
+    var f = body.querySelector('.ev.cfocus');
+    if (f) {
+      var lst = f.parentNode, lr = lst.getBoundingClientRect(), fr = f.getBoundingClientRect();
+      if (fr.bottom > lr.bottom) lst.scrollTop += fr.bottom - lr.bottom + 8; else if (fr.top < lr.top) lst.scrollTop -= lr.top - fr.top + 8;
+    }
+    var hints = head ? [['◀ ▶', '이동'], ['OK', '선택'], ['▼', '달력으로'], ['뒤로', '닫기']]
+      : cal.mode === 'month' ? [['방향키', '날짜 이동'], ['OK', '그날 보기'], ['▲', '위 메뉴'], ['뒤로', '닫기']]
+      : cal.mode === 'week' ? [['◀ ▶', '날짜 이동'], ['OK', '그날 보기'], ['▲', '위 메뉴'], ['뒤로', cal.prevMode ? '돌아가기' : '닫기']]
+      : [['▲ ▼', '일정 이동'], ['◀ ▶', '다른 날'], ['OK', '열기'], ['뒤로', cal.prevMode ? '돌아가기' : '닫기']];
+    $('calHint').innerHTML = hints.map(function (h) { return '<span><kbd>' + h[0] + '</kbd>' + h[1] + '</span>'; }).join('');
   }
   function calKey(k) {
-    if (k === 'back') { closeCal(); return; }
-    if (k === 'ok') { cal.mode = cal.mode === 'day' ? 'week' : cal.mode === 'week' ? 'month' : 'day'; renderCal(); return; }
-    if (k === 'longok' || k === 'menu') { openPanel('calset'); return; }
-    var step = cal.mode === 'week' ? 7 : 1;
-    if (k === 'left') { cal.day = addDays(cal.day, -step); cal.scroll = 0; }
-    else if (k === 'right') { cal.day = addDays(cal.day, step); cal.scroll = 0; }
-    else if (k === 'up') { if (cal.mode === 'month') cal.day = addDays(cal.day, -7); else cal.scroll = Math.max(0, cal.scroll - 120); }
-    else if (k === 'down') { if (cal.mode === 'month') cal.day = addDays(cal.day, 7); else cal.scroll += 120; }
+    if (k === 'back') {
+      if (cal.zone === 'head') cal.zone = 'body';
+      else if (cal.prevMode) { cal.mode = cal.prevMode; cal.prevMode = null; }
+      else { closeCal(); return; }
+      renderCal(); return;
+    }
+    if (k === 'menu') { openPanel('calset'); return; }
+    if (cal.zone === 'head') {
+      if (k === 'left') cal.hi = Math.max(0, cal.hi - 1);
+      else if (k === 'right') cal.hi = Math.min(CAL_HEAD.length - 1, cal.hi + 1);
+      else if (k === 'down') cal.zone = 'body';
+      else if (k === 'ok' || k === 'longok') {
+        var item = CAL_HEAD[cal.hi][0];
+        if (item === 'add') { openEventEditor(null); return; }
+        if (item === 'set') { openPanel('calset'); return; }
+        cal.mode = item; cal.prevMode = null; cal.idx = 0; cal.zone = 'body';
+      }
+      renderCal(); return;
+    }
+    var toHead = function () { cal.zone = 'head'; cal.hi = Math.max(0, ['day', 'week', 'month'].indexOf(cal.mode)); };
+    if (cal.mode === 'month') {
+      var row = Math.floor((startOfDay(cal.day) - gridStart(cal.day)) / 86400000 / 7);
+      if (k === 'up' && row === 0) toHead();
+      else if (k === 'left' || k === 'right' || k === 'up' || k === 'down') cal.day = addDays(cal.day, k === 'left' ? -1 : k === 'right' ? 1 : k === 'up' ? -7 : 7);
+      else if (k === 'ok') { cal.prevMode = 'month'; cal.mode = 'day'; cal.idx = 0; }
+      else if (k === 'longok') { openEventEditor(null); return; }
+    } else if (cal.mode === 'week') {
+      if (k === 'up') toHead();
+      else if (k === 'left' || k === 'right') cal.day = addDays(cal.day, k === 'left' ? -1 : 1);
+      else if (k === 'ok') { cal.prevMode = 'week'; cal.mode = 'day'; cal.idx = 0; }
+      else if (k === 'longok') { openEventEditor(null); return; }
+    } else {
+      var items = dayItems();
+      if (k === 'up') { if (cal.idx === 0) toHead(); else cal.idx--; }
+      else if (k === 'down') cal.idx = Math.min(items.length - 1, cal.idx + 1);
+      else if (k === 'left' || k === 'right') { cal.day = addDays(cal.day, k === 'left' ? -1 : 1); cal.idx = 0; }
+      else if (k === 'ok' || k === 'longok') {
+        var it = items[cal.idx];
+        if (it.add) openEventEditor(null); else openEventEditor(it);
+        return;
+      }
+    }
     renderCal();
+  }
+
+  // --- adding / editing an event on the TV ---
+  var textAsks = {}, textSeq = 0;
+  function askText(title, initial, cb) {
+    var id = 't' + (++textSeq);
+    textAsks[id] = cb;
+    if (N && N.askText) N.askText(id, title, initial || '');
+    else setTimeout(function () { window.Cove.textResult(id, window.prompt(title, initial || '')); }, 0);
+  }
+  function textResult(id, text) { var cb = textAsks[id]; delete textAsks[id]; if (cb) cb(text); }
+
+  // 30-minute steps; null = all day
+  var TIME_STEPS = [null];
+  for (var ts = 0; ts < 48; ts++) TIME_STEPS.push({ h: Math.floor(ts / 2), m: ts % 2 ? 30 : 0 });
+  function timeLabel(t) { return t ? fmtTime(new Date(2000, 0, 1, t.h, t.m)) : '종일'; }
+  function stepTime(t, d) {
+    var i = 0;
+    TIME_STEPS.forEach(function (x, k) { if (x && t && x.h === t.h && x.m === t.m) i = k; });
+    return TIME_STEPS[(i + d + TIME_STEPS.length) % TIME_STEPS.length];
+  }
+  function ownerList() { return ['family'].concat(ROOT.profiles.map(function (p) { return p.id; })); }
+
+  // o = an occurrence (edit / view) or null (new event on the focused day)
+  function openEventEditor(o) {
+    if (o && !o.id) { openPanel('calev', { draft: { view: o } }); return; }   // subscribed event: details only
+    gate('self', o ? '일정 수정' : '일정 추가', function () {
+      var now = new Date(), day = cal.day || startOfDay(now);
+      var draft = o ? { id: o.id, title: o.title, day: startOfDay(o.start), time: o.allDay ? null : { h: o.start.getHours(), m: o.start.getMinutes() }, owner: o.owner }
+        : { title: '', day: day, time: dayKey(day) === dayKey(now) ? { h: Math.min(23, now.getHours() + 1), m: 0 } : { h: 10, m: 0 }, owner: 'family' };
+      openPanel('calev', { draft: draft });
+      if (!o) askText('일정 제목', '', function (txt) { if (txt !== null && panel && panel.draft === draft) { draft.title = txt.trim(); panel.i = 4; renderPanel(); } });
+    });
+  }
+  function eventRows() {
+    var d = panel.draft;
+    if (d.view) {
+      var v = d.view;
+      return [
+        { name: v.title, sub: relDay(v.start) + ' · ' + (v.allDay ? '종일' : fmtTime(v.start)) },
+        { name: '캘린더', val: v.src },
+        { name: '닫기', action: true, act: closePanel }
+      ];
+    }
+    var rows = [
+      { name: '제목', sub: 'OK를 누르면 TV 키보드가 열려요 (마이크로 말해도 돼요)', val: d.title || '입력하기', action: true,
+        act: function () { askText('일정 제목', d.title, function (txt) { if (txt !== null) { d.title = txt.trim(); renderPanel(); } }); } },
+      { name: '날짜', val: fmtDay(d.day), change: function (k) { d.day = addDays(d.day, k); renderPanel(); } },
+      { name: '시간', val: timeLabel(d.time), change: function (k) { d.time = stepTime(d.time, k); renderPanel(); } },
+      { name: '누구 일정', val: ownerName(d.owner) || '가족', change: function (k) { var l = ownerList(); d.owner = l[(l.indexOf(d.owner) + k + l.length) % l.length]; renderPanel(); } },
+      { name: d.id ? '저장' : '추가', sub: d.title ? relDay(d.day) + ' ' + (d.time ? timeLabel(d.time) + ' ' : '') + d.title : '먼저 제목을 넣어 주세요', action: true,
+        act: function () {
+          if (!d.title) { toast('제목을 넣어 주세요'); panel.i = 0; renderPanel(); return; }
+          var start = d.time ? dayKey(d.day) + 'T' + pad2(d.time.h) + ':' + pad2(d.time.m) : dayKey(d.day);
+          var data = calData();
+          if (d.id) {
+            data.events.forEach(function (e) { if (e.id === d.id) { e.title = d.title.slice(0, 80); e.start = start; e.allDay = !d.time; e.owner = d.owner; } });
+            savePrefs(); toast('일정을 고쳤어요');
+          } else {
+            calCmd(JSON.stringify({ op: 'add', title: d.title, start: start, allDay: !d.time, owner: d.owner }));
+          }
+          closePanelQuiet();
+          cal.day = d.day; cal.mode = cal.mode || 'day'; cal.zone = 'body';
+          showNextEvent();
+          if (base === 'cal') renderCal();
+        } }
+    ];
+    if (d.id) rows.push({ name: '삭제', danger: true, action: true, val: armed === 'delev' ? '한 번 더 누르면 삭제' : '',
+      act: function () { twice('delev', function () { calCmd(JSON.stringify({ op: 'del', id: d.id })); closePanelQuiet(); if (base === 'cal') renderCal(); }); } });
+    rows.push({ name: '취소', action: true, act: closePanel });
+    return rows;
   }
 
   // Calendar settings panel (subscriptions + preview), opened with OK held on the calendar screen.
@@ -1708,7 +1841,7 @@
       if (colId === 'all') { openDrawer(); return; }
       if (colId) { var firstT = P.layout === 'column' ? ($('colGrid') && $('colGrid').querySelector('.tile')) : $('tiles').querySelector('.tile'); if (firstT) setFocus(firstT); return; }
       var act = focusEl && focusEl.getAttribute('data-act');
-      if (act === 'drawer') openDrawer(); else if (act === 'calendar') openCal('day'); else if (act) openPanel(act);
+      if (act === 'drawer') openDrawer(); else if (act === 'calendar') openCal('month'); else if (act) openPanel(act);
       return;
     }
     move(k);
@@ -1923,6 +2056,7 @@
     key: key,
     say: say,
     calFetched: calFetched,
+    textResult: textResult,
     calCmd: calCmd,
     // Test hook: focus the n-th element matching a selector (used by the layout checks)
     _focus: function (sel, n) { var e = document.querySelectorAll(sel)[n || 0]; if (e) setFocus(e); return !!e; },
@@ -1957,7 +2091,7 @@
     remote: function (cmd) {
       var parts = cmd.split(':');
       if (parts[0] === 'panel') {
-        if (parts[1] === 'calendar') { if (base === 'cal') closeCal(); else openCal('day'); }
+        if (parts[1] === 'calendar') { if (base === 'cal') closeCal(); else openCal('month'); }
         else if (parts[1] === 'drawer') { if (base === 'drawer') closeDrawer(); else openDrawer(); }
         else if (panel && panel.type === parts[1]) closePanel();
         else openPanel(parts[1]);
