@@ -26,8 +26,14 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* ---------- background ---------- */
 #bg { position: fixed; inset: 0; overflow: hidden; }
-#bg img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .9s ease; }
-#bg img.on { opacity: 1; }
+#bg > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .9s ease; }
+#bg > img.on { opacity: 1; }
+#bgFill, #bgFx, #bgApp { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity .8s ease; }
+#bg[data-kind="color"] > img.on, #bg[data-kind="live"] > img.on, #bg[data-kind="app"] > img.on { opacity: 0; }
+#bg[data-kind="color"] #bgFill, #bg[data-kind="live"] #bgFx, #bg[data-kind="overlay"] #bgFx, #bg[data-kind="app"] #bgApp { opacity: 1; }
+#bgApp { background: radial-gradient(120% 100% at 75% 20%, var(--appc, #1a1f2b), #05070c 75%); transition: opacity .8s ease, background .6s ease; }
+#bgAppImg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: blur(48px) saturate(1.4) brightness(.7); transform: scale(1.3); transition: opacity .6s ease; }
+#bgApp::after { content: ""; position: absolute; inset: 0; background: radial-gradient(130% 100% at 70% 25%, rgba(0,0,0,0) 30%, rgba(0,0,0,.55)); }
 #dim { position: fixed; inset: 0; pointer-events: none; transition: background .4s ease;
   background: linear-gradient(180deg, rgba(0,0,0,calc(var(--dim, .2) * .7)) 0%, rgba(0,0,0,var(--dim, .2)) 100%); }
 
@@ -173,7 +179,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .row .val { color: var(--ink-dim); display: flex; align-items: center; gap: .7rem; white-space: nowrap; }
 .row .val b { font-weight: 500; color: var(--ink); }
 .row .arrow { opacity: 0; color: var(--accent); font-size: 1.1rem; }
-.row .thumb { width: 4.6rem; height: 2.6rem; border-radius: .4rem; object-fit: cover; }
+.row .thumb { width: 4.6rem; height: 2.6rem; border-radius: .4rem; object-fit: cover; flex: none; display: block; }
+.thumb.live-flow { background: radial-gradient(circle at 30% 40%, #408cff, transparent 60%), radial-gradient(circle at 70% 60%, #ff5aaa, transparent 55%), #0b1020; }
+.thumb.live-stars { background: radial-gradient(1px 1px at 20% 30%, #fff, transparent), radial-gradient(1px 1px at 60% 20%, #fff, transparent), radial-gradient(1px 1px at 80% 60%, #fff, transparent), radial-gradient(1px 1px at 35% 70%, #fff, transparent), linear-gradient(#02030a, #1b1d45); }
+.thumb.live-app { background: linear-gradient(120deg, #e50914, #1a98ff 50%, #1ed760); }
 .row .check { width: 1.6rem; height: 1.6rem; border-radius: .4rem; border: .12rem solid rgba(255,255,255,.4); display: grid; place-items: center; font-size: 1.1rem; flex: none; }
 .row .check.on { background: var(--accent); border-color: var(--accent); color: #0c1220; }
 .row .dot { width: 1.4rem; height: 1.4rem; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 .12rem rgba(255,255,255,.35); }

@@ -154,8 +154,15 @@ class MainActivity : Activity() {
         js("Cove.home()")
     }
 
+    override fun onPause() {
+        // Stops moving backgrounds and other page work while another app is on screen.
+        if (::web.isInitialized) web.onPause()
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
+        if (::web.isInitialized) web.onResume()
         hideSystemUi()
         js("Cove.resume()")
     }

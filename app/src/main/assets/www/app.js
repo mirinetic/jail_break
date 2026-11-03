@@ -10,7 +10,19 @@
   // ---------- catalogue ----------
   var PRESETS = [
     ['blue-ridges', '푸른 능선'], ['golden-hour', '골든 아워'], ['night-peaks', '밤의 봉우리'], ['desert-dunes', '사막 언덕'],
-    ['ocean-dusk', '해 질 녘 바다'], ['forest-fog', '안개 숲'], ['mirror-lake', '거울 호수'], ['soft-aurora', '오로라']
+    ['ocean-dusk', '해 질 녘 바다'], ['forest-fog', '안개 숲'], ['mirror-lake', '거울 호수'], ['soft-aurora', '오로라'],
+    ['snowy-peaks', '눈 덮인 산'], ['city-night', '도시 야경'], ['sunny-beach', '한낮 해변'], ['autumn-forest', '가을 숲'],
+    ['milky-way', '은하수'], ['blossom-dawn', '벚꽃 새벽']
+  ];
+  // Moving backgrounds drawn on a canvas; "base" puts the effect over a wallpaper.
+  var LIVE = [['flow', '흐르는 빛', null], ['stars', '반짝이는 별', null], ['snow', '내리는 눈', 'snowy-peaks']];
+  var COLORS = [
+    ['ink', '먹색', '#0d1017'], ['navy', '네이비', 'linear-gradient(160deg, #13203d, #070b16)'],
+    ['pine', '짙은 초록', 'linear-gradient(160deg, #15302a, #08130f)'], ['wine', '와인', 'linear-gradient(160deg, #3a1424, #12060c)'],
+    ['dusk', '노을 그라데이션', 'linear-gradient(160deg, #2b1d4a 0%, #7a3b5e 55%, #e0875a 100%)'],
+    ['ocean', '바다 그라데이션', 'linear-gradient(160deg, #06263d 0%, #0f5c73 60%, #2fa3a0 100%)'],
+    ['mint', '민트 그라데이션', 'linear-gradient(160deg, #0e2a2a 0%, #1f6b5c 60%, #6fbf93 100%)'],
+    ['berry', '베리 그라데이션', 'linear-gradient(160deg, #1d0f2a 0%, #5b1f5e 55%, #c2417a 100%)']
   ];
   var DESIGNS = {
     glass:   { name: 'Glass',   desc: '사진 위 유리 타일',     p: { layout: 'grid',    tiles: 'glass', labels: true,  font: 'modern', dim: 1, bg: { type: 'preset', id: 'blue-ridges' } } },
@@ -156,15 +168,39 @@
   // ---------- backgrounds ----------
   function bgList() {
     var list = PRESETS.map(function (p) { return { type: 'preset', id: p[0] }; });
+    LIVE.forEach(function (l) { list.push({ type: 'live', id: l[0] }); });
+    COLORS.forEach(function (c) { list.push({ type: 'color', id: c[0] }); });
+    list.push({ type: 'app', id: 'focus' });
     PHOTOS.forEach(function (id) { list.push({ type: 'photo', id: id }); });
     return list;
   }
-  function bgUrl(b) { return b.type === 'photo' ? '/photo/' + b.id + '.jpg' : 'bg/' + b.id + '.jpg'; }
+  function find(list, id) { for (var i = 0; i < list.length; i++) if (list[i][0] === id) return list[i]; return null; }
+  function bgUrl(b) {
+    if (b.type === 'photo') return '/photo/' + b.id + '.jpg';
+    if (b.type === 'live') { var l = find(LIVE, b.id); return l && l[2] ? 'bg/' + l[2] + '.jpg' : ''; }
+    if (b.type === 'preset') return 'bg/' + b.id + '.jpg';
+    return '';
+  }
   function bgName(b) {
     if (!b) return '사용 안 함';
     if (b.type === 'photo') return '내 사진 ' + (PHOTOS.indexOf(b.id) + 1);
-    for (var i = 0; i < PRESETS.length; i++) if (PRESETS[i][0] === b.id) return PRESETS[i][1];
-    return b.id;
+    if (b.type === 'app') return '고른 앱 색';
+    var e = find(b.type === 'live' ? LIVE : b.type === 'color' ? COLORS : PRESETS, b.id);
+    return e ? e[1] : b.id;
+  }
+  // Small preview for the Appearance panel.
+  function bgThumb(b) {
+    if (!b) return '';
+    if (b.type === 'color') return '<span class="thumb" style="background:' + esc(find(COLORS, b.id)[2]) + '"></span>';
+    if (b.type === 'live' && !bgUrl(b)) return '<span class="thumb live-' + esc(b.id) + '"></span>';
+    if (b.type === 'app') return '<span class="thumb live-app"></span>';
+    return '<img class="thumb" src="' + bgUrl(b) + '" alt="">';
+  }
+  function validBg(b) {
+    if (!b) return false;
+    if (b.type === 'photo') return PHOTOS.indexOf(b.id) >= 0;
+    if (b.type === 'app') return true;
+    return !!find(b.type === 'live' ? LIVE : b.type === 'color' ? COLORS : PRESETS, b.id);
   }
   function sameBg(a, b) { return !!a && !!b && a.type === b.type && a.id === b.id; }
   function isNight() { var h = new Date().getHours(); return h >= NIGHT_FROM || h < NIGHT_TO; }
@@ -179,7 +215,16 @@
 
   var shownBg = '';
   function showBg() {
-    var url = bgUrl(activeBg());
+    var b = activeBg();
+    if (!validBg(b)) b = DEFAULTS.bg;
+    var kind = b.type === 'photo' ? 'preset' : b.type;
+    var url = bgUrl(b);
+    if (kind === 'live') kind = url ? 'overlay' : 'live';
+    $('bg').setAttribute('data-kind', kind);
+    if (kind === 'live' || kind === 'overlay') fx.start(b.id); else fx.stop();
+    if (kind === 'color') { $('bgFill').style.background = find(COLORS, b.id)[2]; return; }
+    if (kind === 'app') { appBg(true); return; }
+    if (kind === 'live') return;
     if (url === shownBg) return;
     shownBg = url;
     var a = $('bgA'), b = $('bgB');
@@ -188,6 +233,98 @@
     next.onerror = function () { if (!sameBg(P.bg, DEFAULTS.bg)) { P.bg = clone(DEFAULTS.bg); P.nightBg = null; render(); } };
     next.src = url;
   }
+
+  // Background that takes the colour (and blurred banner) of the focused app.
+  var appBgPkg = null;
+  function appBg(force) {
+    if ($('bg').getAttribute('data-kind') !== 'app') return;
+    var pkg = (focusEl && focusEl.getAttribute('data-pkg')) || lastFocus.home || visibleApps()[0];
+    if (!pkg || !BYPKG[pkg] || (pkg === appBgPkg && !force)) return;
+    appBgPkg = pkg;
+    var a = BYPKG[pkg], img = $('bgAppImg');
+    $('bgApp').style.setProperty('--appc', a.color || '#1a1f2b');
+    if (a.banner) { img.src = bannerUrl(a); img.style.opacity = 1; } else { img.style.opacity = 0; }
+  }
+
+  // Moving backgrounds. Drawn small and scaled up, at most ~30 frames a second, and paused when hidden.
+  var fx = {
+    id: null, raf: 0, last: 0,
+    start: function (id) {
+      if (this.id === id) return;
+      this.stop();
+      this.id = id;
+      var c = $('bgFx');
+      var hi = id !== 'flow';
+      c.width = hi ? 960 : 320; c.height = hi ? 540 : 180;
+      this.ctx = c.getContext('2d');
+      this.w = c.width; this.h = c.height;
+      this.init(id);
+      var self = this;
+      var loop = function (t) {
+        self.raf = requestAnimationFrame(loop);
+        if (document.hidden || t - self.last < 33) return;
+        self.last = t;
+        self.draw(t / 1000);
+      };
+      this.raf = requestAnimationFrame(loop);
+    },
+    stop: function () { cancelAnimationFrame(this.raf); this.id = null; },
+    init: function (id) {
+      var w = this.w, h = this.h, i;
+      this.p = [];
+      if (id === 'stars') {
+        for (i = 0; i < 420; i++) this.p.push({ x: Math.random() * w, y: Math.random() * h * 0.9, r: Math.random() < 0.92 ? 0.8 : 1.6, ph: Math.random() * 6.3, sp: 0.6 + Math.random() * 2.2 });
+        this.shoot = null;
+      } else if (id === 'snow') {
+        for (i = 0; i < 260; i++) this.p.push({ x: Math.random() * w, y: Math.random() * h, r: 0.8 + Math.random() * 2.6, vy: 18 + Math.random() * 42, ph: Math.random() * 6.3 });
+      }
+      this.prev = 0;
+    },
+    draw: function (t) {
+      var g = this.ctx, w = this.w, h = this.h, i, p;
+      var dt = this.prev ? Math.min(0.1, t - this.prev) : 0.033;
+      this.prev = t;
+      if (this.id === 'flow') {
+        g.fillStyle = '#0b1020'; g.fillRect(0, 0, w, h);
+        var blobs = [['rgba(64,140,255,.55)', 0.13, 0], ['rgba(255,90,170,.45)', 0.09, 2], ['rgba(60,220,190,.45)', 0.11, 4], ['rgba(150,110,255,.5)', 0.07, 1]];
+        g.globalCompositeOperation = 'lighter';
+        blobs.forEach(function (b) {
+          var x = w * (0.5 + 0.38 * Math.sin(t * b[1] + b[2])), y = h * (0.5 + 0.36 * Math.cos(t * b[1] * 1.3 + b[2] * 1.7));
+          var gr = g.createRadialGradient(x, y, 0, x, y, w * 0.55);
+          gr.addColorStop(0, b[0]); gr.addColorStop(1, 'rgba(0,0,0,0)');
+          g.fillStyle = gr; g.fillRect(0, 0, w, h);
+        });
+        g.globalCompositeOperation = 'source-over';
+      } else if (this.id === 'stars') {
+        if (!this.sky) { this.sky = g.createLinearGradient(0, 0, 0, h); this.sky.addColorStop(0, '#02030a'); this.sky.addColorStop(0.7, '#0b1233'); this.sky.addColorStop(1, '#1b1d45'); }
+        g.fillStyle = this.sky; g.fillRect(0, 0, w, h);
+        for (i = 0; i < this.p.length; i++) {
+          p = this.p[i];
+          g.globalAlpha = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * p.sp + p.ph));
+          g.fillStyle = '#fff'; g.fillRect(p.x, p.y, p.r, p.r);
+        }
+        g.globalAlpha = 1;
+        if (!this.shoot && Math.random() < 0.004) this.shoot = { x: Math.random() * w * 0.7, y: Math.random() * h * 0.3, life: 0 };
+        if (this.shoot) {
+          var s = this.shoot; s.life += dt;
+          var len = 120, k = s.life * 600;
+          var grd = g.createLinearGradient(s.x + k, s.y + k * 0.4, s.x + k - len, s.y + (k - len) * 0.4);
+          grd.addColorStop(0, 'rgba(255,255,255,' + Math.max(0, 1 - s.life * 1.4) + ')'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+          g.strokeStyle = grd; g.lineWidth = 2; g.beginPath(); g.moveTo(s.x + k, s.y + k * 0.4); g.lineTo(s.x + k - len, s.y + (k - len) * 0.4); g.stroke();
+          if (s.life > 0.8) this.shoot = null;
+        }
+      } else if (this.id === 'snow') {
+        g.clearRect(0, 0, w, h);
+        g.fillStyle = 'rgba(255,255,255,.85)';
+        for (i = 0; i < this.p.length; i++) {
+          p = this.p[i];
+          p.y += p.vy * dt; p.x += Math.sin(t * 0.8 + p.ph) * 12 * dt;
+          if (p.y > h + 4) { p.y = -4; p.x = Math.random() * w; }
+          g.beginPath(); g.arc(p.x, p.y, p.r, 0, 6.283); g.fill();
+        }
+      }
+    }
+  };
 
   // ---------- weather ----------
   var wx = { city: null, at: 0, data: null, busy: false };
@@ -349,6 +486,7 @@
     var pkg = focusEl.getAttribute('data-pkg');
     if (pkg) lastFocus[base] = pkg;
     keepVisible(focusEl);
+    appBg(false);
   }
 
   function keepVisible(el) {
@@ -660,8 +798,8 @@
   function lookRows() {
     var rows = [
       { name: '디자인', sub: DESIGNS[P.design].desc, val: DESIGNS[P.design].name, change: function (d) { applyDesign(cycle(DESIGN_IDS, P.design, d)); } },
-      { name: '배경', val: bgName(P.bg), thumb: bgUrl(P.bg), change: function (d) { set({ bg: stepBg(P.bg, d, false) }); } },
-      { name: '밤 배경', sub: '오후 7시부터 오전 6시까지', val: bgName(P.nightBg), thumb: P.nightBg ? bgUrl(P.nightBg) : '', change: function (d) { set({ nightBg: stepBg(P.nightBg, d, true) }); } },
+      { name: '배경', val: bgName(P.bg), thumb: bgThumb(P.bg), change: function (d) { set({ bg: stepBg(P.bg, d, false) }); } },
+      { name: '밤 배경', sub: '오후 7시부터 오전 6시까지', val: bgName(P.nightBg), thumb: bgThumb(P.nightBg), change: function (d) { set({ nightBg: stepBg(P.nightBg, d, true) }); } },
       { name: '배경 어둡게', val: DIMS[P.dim], change: function (d) { set({ dim: Math.max(0, Math.min(3, P.dim + d)) }); } },
       { name: '타일', val: labelOf(TILES, P.tiles), change: function (d) { set({ tiles: cycle(TILES, P.tiles, d) }); } },
       { name: '타일 모양', val: labelOf(SHAPES, P.shape), change: function (d) { set({ shape: cycle(SHAPES, P.shape, d) }); } },
@@ -943,7 +1081,7 @@
         : (r.val ? '<b>' + esc(r.val) + '</b>' : '') + (r.action ? '<span class="arrow">›</span>' : '');
       return '<div class="' + cls + '">' + left +
         '<div class="name">' + esc(r.name) + (r.sub ? '<small>' + esc(r.sub) + '</small>' : '') + '</div>' +
-        (r.thumb ? '<img class="thumb" src="' + r.thumb + '" alt="">' : '') +
+        (r.thumb || '') +
         '<div class="val">' + val + '</div></div>';
     }).join('');
 
@@ -1075,13 +1213,15 @@
     if (has(t, ['아이콘', 'icons'])) { applyDesign('icons'); done('Icons 디자인'); return; }
     if (has(t, ['미니멀', 'minimal', '심플'])) { applyDesign('minimal'); done('Minimal 디자인'); return; }
 
-    // background
-    for (var b = 0; b < PRESETS.length; b++) {
-      var key0 = norm(PRESETS[b][1]).slice(0, 2);
-      if (t.indexOf(norm(PRESETS[b][1])) >= 0 || (has(t, ['배경']) && t.indexOf(key0) >= 0)) {
-        set({ bg: { type: 'preset', id: PRESETS[b][0] } }); done(PRESETS[b][1] + ' 배경'); return;
-      }
-    }
+    // background by name (wallpapers, moving, colours)
+    var allBg = bgList().filter(function (x) { return x.type !== 'photo'; });
+    var hit = null, hitLen = 0;
+    allBg.forEach(function (x) {
+      var nm = norm(bgName(x));
+      if (nm.length > hitLen && (t.indexOf(nm) >= 0 || (has(t, ['배경']) && t.indexOf(nm.slice(0, 2)) >= 0 && nm.length >= 2))) { hit = x; hitLen = nm.length; }
+    });
+    if (!hit && has(t, ['앱색', '앱컬러'])) hit = { type: 'app', id: 'focus' };
+    if (hit) { set({ bg: hit }); done(bgName(hit) + ' 배경'); return; }
     if (has(t, ['배경']) && has(t, ['이전', '전'])) { set({ bg: stepBg(P.bg, -1, false) }); done('이전 배경'); return; }
     if (has(t, ['배경'])) { set({ bg: stepBg(P.bg, 1, false) }); done('다음 배경'); return; }
     if (has(t, ['어둡게', '어둡'])) { set({ dim: Math.min(3, P.dim + 1) }); done('배경 어둡게'); return; }

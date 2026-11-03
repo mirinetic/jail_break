@@ -193,3 +193,76 @@ band = np.exp(-((v - (0.35 + 0.12 * np.sin(u * 5.2))) / 0.06) ** 2)[..., None]
 img = img + band * hexc("#7cf2c8") * 0.35
 img = stars(img, 500, top=1.0, seed=9)
 finish(img, "soft-aurora", blur=1.2)
+
+# 9. Snowy peaks
+img = ramp(v, [(0, "#6f9ad6"), (0.45, "#c9dcf2"), (1, "#eef4fb")])
+img = glow(img, W * 0.3, H * 0.2, 0.15, "#ffffff", 0.35)
+for i, (y, a, c) in enumerate([(0.55, 260, "#f4f7fc"), (0.68, 200, "#b9c8de"), (0.8, 150, "#7f93b3")]):
+    img = ridge(img, H * y, a, 90 + i, c, "#dfe8f4", 0.2 - i * 0.06, octaves=4, base=4)
+img = trees(img, H * 0.97, 30, 95, "#1f2f2c", density=260)
+finish(img, "snowy-peaks")
+
+# 10. City at night
+img = ramp(v, [(0, "#070b1c"), (0.55, "#1b2450"), (0.78, "#523a6b"), (1, "#1a1426")])
+img = stars(img, 300, top=0.4, seed=11)
+img = glow(img, W * 0.5, H * 0.8, 0.45, "#ff9a5c", 0.25)
+r = np.random.default_rng(12)
+for layer, (base, hmin, hmax, col, lit) in enumerate([(0.82, 80, 260, "#1d2140", 0.08), (0.9, 120, 420, "#10132a", 0.16), (1.0, 60, 220, "#07081a", 0.1)]):
+    x = 0
+    while x < W:
+        bw = int(r.uniform(50, 140)); bh = int(r.uniform(hmin, hmax)); top = int(H * base - bh)
+        img[max(top, 0):int(H * base), x:x + bw] = hexc(col)
+        for wy in range(top + 10, int(H * base) - 8, 18):
+            for wx in range(x + 8, x + bw - 8, 16):
+                if r.random() < lit:
+                    img[wy:wy + 8, wx:wx + 6] = hexc("#ffd58a") * r.uniform(0.6, 1.0)
+        x += bw + int(r.uniform(2, 14))
+finish(img, "city-night")
+
+# 11. Sunny beach
+horizon = 0.55
+img = ramp(v, [(0, "#2f86d6"), (0.5, "#9fd2f2"), (1, "#9fd2f2")])
+for cx, cy, rr in [(0.2, 0.18, 0.06), (0.27, 0.2, 0.05), (0.7, 0.12, 0.07), (0.78, 0.15, 0.05)]:
+    d = (((xx - W * cx) / (W * rr)) ** 2 + ((yy - H * cy) / (H * rr * 0.9)) ** 2)
+    img = img + (np.exp(-d * 2.2)[..., None] * 0.5) * (hexc("#ffffff") - img)
+sea = ramp((v - horizon) / 0.2, [(0, "#1d79a8"), (1, "#36c1c4")])
+img = np.where((v > horizon)[..., None], sea, img)
+shore = H * 0.75 + 25 * np.sin(u[0] * 9) + 12 * np.sin(u[0] * 23)
+sand = ramp((v - 0.72) / 0.28, [(0, "#f2dfb8"), (1, "#d9b98a")])
+mask = (yy > shore[None, :])[..., None]
+foam = (np.abs(yy - shore[None, :]) < 6)[..., None]
+img = np.where(mask, sand, img)
+img = np.where(foam, hexc("#ffffff") * 0.95, img)
+finish(img, "sunny-beach")
+
+# 12. Autumn forest
+img = ramp(v, [(0, "#f4c99b"), (0.55, "#f7e2c4"), (1, "#f7e2c4")])
+for i, (y, c) in enumerate([(0.52, "#e3a46b"), (0.63, "#d9803f"), (0.75, "#b85a2a"), (0.88, "#7f3519"), (1.02, "#3d1c10")]):
+    img = trees(img, H * y, 35, 120 + i, c, density=150 + i * 40)
+    if i < 4:
+        fog = np.exp(-((yy - H * (y + 0.03)) / (H * 0.045)) ** 2)[..., None] * 0.45
+        img = img * (1 - fog) + hexc("#f7e6cf") * fog
+finish(img, "autumn-forest")
+
+# 13. Milky way
+img = ramp(v, [(0, "#03040c"), (0.7, "#0b1030"), (1, "#141a3a")])
+band = np.exp(-(((yy - (H * 0.95 - xx * 0.6)) / (H * 0.16)) ** 2))[..., None]
+cloudn = np.random.default_rng(14).normal(0, 1, (H // 8 + 1, W // 8 + 1))
+cloudn = np.array(Image.fromarray(((cloudn - cloudn.min()) / np.ptp(cloudn) * 255).astype(np.uint8)).resize((W, H), Image.BICUBIC).filter(ImageFilter.GaussianBlur(18))) / 255.0
+img = img + band * (0.25 + 0.5 * cloudn[..., None]) * hexc("#b9b3e6") * 0.6
+img = glow(img, W * 0.45, H * 0.5, 0.18, "#e7a8c9", 0.12)
+img = stars(img, 2600, top=1.0, seed=15)
+img = ridge(img, H * 0.93, 70, 140, "#05060d", "#05060d", 0.0, base=3)
+finish(img, "milky-way")
+
+# 14. Blossom dawn
+img = ramp(v, [(0, "#b8a6e0"), (0.45, "#f3c3d6"), (0.7, "#ffe2cf"), (1, "#ffe2cf")])
+r = np.random.default_rng(16)
+for _ in range(60):
+    cx, cy, rr = r.uniform(0, W), r.uniform(0, H * 0.75), r.uniform(20, 70)
+    d = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
+    a = np.clip((rr - d) / 6, 0, 1)[..., None] * r.uniform(0.08, 0.22)
+    img = img * (1 - a) + hexc("#ffd6e7") * a
+for i, (y, a, c) in enumerate([(0.74, 70, "#d9a3c4"), (0.84, 80, "#b77fa8"), (0.96, 70, "#7a4f7c")]):
+    img = ridge(img, H * y, a, 160 + i, c, "#f3d1e1", 0.3 - i * 0.1, base=3, octaves=4)
+finish(img, "blossom-dawn", blur=0.6)
