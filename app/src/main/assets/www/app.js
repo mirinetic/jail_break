@@ -453,6 +453,11 @@
     var sec = sectioned() || P.layout === 'theater';
     box.classList.toggle('sections', sec);
     box.style.setProperty('--cols', cols);
+    if (P.layout === 'dock') {
+      // Icon size that lets every icon, plus the grown focused one and its neighbours, fit on screen.
+      var dk = (82 - Math.max(0, n - 1) * 1.2) / (n + 0.9);
+      box.style.setProperty('--dk', Math.max(3, Math.min(6.4 * (P.size === 's' ? 0.82 : P.size === 'l' ? 1.2 : 1), dk)).toFixed(2) + 'rem');
+    }
     var banner = P.tiles === 'banner', round = P.shape === 'circle' || P.layout === 'dock';
     if (P.layout === 'column') {
       renderColumn(box, banner, round);
@@ -580,7 +585,7 @@
       var box = $('tiles'), br = box.getBoundingClientRect(), tr0 = el.getBoundingClientRect();
       if (tr0.top < br.top + 10) box.scrollTop -= (br.top + 10 - tr0.top);
       else if (tr0.bottom > br.bottom - 10) box.scrollTop += (tr0.bottom - br.bottom + 10);
-    } else if ((P.layout === 'minimal' || P.layout === 'dock') && el.classList.contains('tile')) {
+    } else if (P.layout === 'minimal' && el.classList.contains('tile')) {
       var row = $('tiles'), rr = row.getBoundingClientRect(), tr = el.getBoundingClientRect();
       if (tr.left < rr.left + 40) row.scrollLeft -= (rr.left + 40 - tr.left);
       else if (tr.right > rr.right - 40) row.scrollLeft += (tr.right - rr.right + 40);
