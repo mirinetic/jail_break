@@ -162,7 +162,7 @@
         <label>날짜<input id="evDate" type="date"></label>
         <label>시간 (비우면 종일)<input id="evTime" type="time"></label>
       </div>
-      <label>누구 일정<select id="evOwner" class="owner"><option value="family">가족 모두</option></select></label>
+      <label>누구 일정 (개인 일정은 그 프로필에만 보여요)<select id="evOwner" class="owner"><option value="family">가족 모두</option></select></label>
       <button class="go" id="evAdd">일정 추가</button>
       <p class="eg">음성으로도 돼요: "내일 오후 3시 치과 추가", "금요일 7시 가족 저녁 등록"</p>
     </div>
@@ -195,6 +195,14 @@
   <div style="margin-top:18px; display:grid; gap:12px">
     <div class="card">
       <textarea id="memoText" class="memo-in" placeholder="TV에 붙일 메모 (예: 6시에 저녁 먹자)"></textarea>
+      <div class="two">
+        <label>보내는 사람<select id="memoBy" class="who"></select></label>
+        <label>받는 사람<select id="memoTo" class="owner"><option value="family">가족 모두</option></select></label>
+      </div>
+      <div class="two">
+        <label>보이는 날<input id="memoFrom" type="date"></label>
+        <label>보이는 기간<select id="memoDays"><option value="0">지울 때까지</option><option value="1">그날 하루</option><option value="3">3일</option><option value="7">1주일</option><option value="30">한 달</option></select></label>
+      </div>
       <div class="swatches" id="memoColors"></div>
       <button class="go" id="memoAdd">TV에 붙이기</button>
     </div>
@@ -419,6 +427,8 @@
     post('/api/cal', JSON.stringify(obj)).then(function (r) { if (r && r.ok) { if (done) done(); setTimeout(loadState, 600); } else if (r) msg('보내지 못했어요'); });
   }
   (function () { var d = new Date(); $('evDate').value = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); })();
+  Array.prototype.forEach.call(document.querySelectorAll('select.owner, select.who'), function (sel) { sel.addEventListener('change', function () { sel.dataset.touched = '1'; }); });
+  (function () { var d = new Date(); $('memoFrom').value = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); })();
   $('evAdd').addEventListener('click', function () {
     var title = $('evTitle').value.trim(), date = $('evDate').value, time = $('evTime').value;
     if (!title || !date) { msg('제목과 날짜를 넣어 주세요'); return; }
@@ -434,7 +444,16 @@
   function renderCalState(root) {
     var profiles = root && Array.isArray(root.profiles) ? root.profiles : [];
     var opts = '<option value="family">가족 모두</option>' + profiles.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('');
-    Array.prototype.forEach.call(document.querySelectorAll('select.owner'), function (sel) { var v = sel.value; sel.innerHTML = opts; if (v) sel.value = v; });
+    var cur = root && root.current;
+    Array.prototype.forEach.call(document.querySelectorAll('select.owner'), function (sel) {
+      var v = sel.dataset.touched ? sel.value : (sel.id === 'memoTo' ? 'family' : cur);
+      sel.innerHTML = opts; if (v) sel.value = v;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('select.who'), function (sel) {
+      var v = sel.dataset.touched ? sel.value : cur;
+      sel.innerHTML = profiles.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('');
+      if (v) sel.value = v;
+    });
     var calData = (root && root.cal) || { events: [], subs: [] };
     var name = function (o) { if (o === 'family') return '가족'; var p = profiles.filter(function (x) { return x.id === o; })[0]; return p ? p.name : ''; };
     var today = new Date(); today.setHours(0, 0, 0, 0);
@@ -464,12 +483,16 @@
     var t = $('memoText').value.trim();
     if (!t) { msg('메모 내용을 써 주세요'); return; }
     buzz();
-    calPost({ op: 'memo', text: t, color: memoColor }, function () { $('memoText').value = ''; msg('TV에 붙였어요'); });
+    calPost({ op: 'memo', text: t, color: memoColor, by: $('memoBy').value, to: $('memoTo').value, from: $('memoFrom').value, days: +$('memoDays').value },
+      function () { $('memoText').value = ''; msg('TV에 붙였어요'); });
   });
   function renderMemos(root) {
-    var list = (root && root.memos) || [];
+    var list = (root && root.memos) || [], profiles = (root && root.profiles) || [];
+    var nm = function (id) { if (id === 'family') return '가족'; var p = profiles.filter(function (x) { return x.id === id; })[0]; return p ? p.name : ''; };
+    var md = function (k) { if (!k) return ''; var p = k.split('-'); return +p[1] + '/' + +p[2]; };
     $('memoList').innerHTML = list.map(function (m) {
-      return '<div class="mnote" style="--c:' + esc(m.color || '#ffe58a') + '"><div>' + esc(m.text) + '<small>' + esc(m.by || '') + '</small></div><button data-unmemo="' + esc(m.id) + '">떼기</button></div>';
+      var when = md(m.from) + (m.until ? '~' + md(m.until) : '부터');
+      return '<div class="mnote" style="--c:' + esc(m.color || '#ffe58a') + '"><div>' + esc(m.text) + '<small>' + esc(nm(m.by) || m.byName || '') + ' → ' + esc(nm(m.to || 'family')) + ' · ' + esc(when) + '</small></div><button data-unmemo="' + esc(m.id) + '">떼기</button></div>';
     }).join('');
     Array.prototype.forEach.call(document.querySelectorAll('[data-unmemo]'), function (b) {
       b.addEventListener('click', function () { calPost({ op: 'unmemo', id: b.getAttribute('data-unmemo') }, function () { msg('메모를 뗐어요'); }); });
