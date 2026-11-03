@@ -428,13 +428,18 @@
 
   function tileHtml(a, opts) {
     var useBanner = opts.banner && a.banner && !opts.round;
+    // A tile filled with colour takes the icon's own background colour, and shows only the logo layer of
+    // adaptive icons, so tile and icon read as one surface in any shape.
+    var filled = !useBanner && (opts.forceBrand || opts.banner || ['brand', 'gradient', 'poster'].indexOf(opts.style || P.tiles) >= 0);
+    var glyph = filled && a.glyph && N;
     var inner = useBanner
       ? '<img class="banner" src="' + bannerUrl(a) + '" alt="">'
-      : '<img class="icon" src="' + iconUrl(a) + '" alt="" onerror="this.outerHTML=\'<span class=initial>' + esc(a.label.charAt(0)) + '</span>\'">' +
+      : '<img class="icon' + (glyph ? ' glyph' : '') + '" src="' + (glyph ? '/glyph/' + encodeURIComponent(a.pkg) : iconUrl(a)) + '" alt="" onerror="this.outerHTML=\'<span class=initial>' + esc(a.label.charAt(0)) + '</span>\'">' +
         '<span class="pname">' + esc(a.label) + '</span>';
-    var brand = (opts.forceBrand || (opts.banner && !a.banner)) ? ' brand' : '';
+    var cls = (opts.forceBrand || (opts.banner && !a.banner) ? ' brand' : '') + (filled ? ' filled' : '') + (useBanner ? ' hasbanner' : '');
+    var ibg = a.iconBg || a.color || '#2a2f3a';
     return '<div class="tile focusable' + (moving === a.pkg && !opts.recent ? ' moving' : '') + '" data-pkg="' + esc(a.pkg) + '"' + (opts.recent ? ' data-recent="1"' : '') + '>' +
-      '<div class="face' + brand + '" style="--brand:' + esc(a.color || '#2a2f3a') + '">' + inner +
+      '<div class="face' + cls + '" style="--brand:' + esc(a.color || '#2a2f3a') + ';--ibg:' + esc(ibg) + '">' + inner +
       (P.locked.indexOf(a.pkg) >= 0 && hasPin() ? '<span class="lock"><svg viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="#fff" stroke-width="2"/><rect x="5" y="10" width="14" height="11" rx="2" fill="#fff"/></svg></span>' : '') + '</div>' +
       '<div class="label">' + esc(a.label) + '</div></div>';
   }
@@ -1433,7 +1438,7 @@
       var svg = function (w, h, fs) {
         return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '"><rect width="100%" height="100%" rx="' + (w === h ? 40 : 0) + '" fill="' + x[1] + '"/><text x="50%" y="54%" font-family="sans-serif" font-weight="700" font-size="' + fs + '" fill="#fff" text-anchor="middle" dominant-baseline="middle">' + x[2] + '</text></svg>');
       };
-      return { pkg: 'sample.app' + i, label: x[0], color: x[1], banner: i % 3 !== 2, icon: svg(192, 192, 90), bannerUrl: svg(640, 360, 120) };
+      return { pkg: 'sample.app' + i, label: x[0], color: x[1], iconBg: x[1], banner: i % 3 !== 2, icon: svg(192, 192, 90), bannerUrl: svg(640, 360, 120) };
     });
   }
 

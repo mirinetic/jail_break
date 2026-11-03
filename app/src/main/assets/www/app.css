@@ -62,16 +62,18 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 .tiles { margin-top: auto; display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr)); gap: 2.2rem 1.8rem; }
 .tile { position: relative; display: grid; gap: .8rem; transition: transform .2s var(--ease); }
-.face { position: relative; aspect-ratio: 16 / 9; border-radius: var(--radius, 1.1rem); overflow: hidden; display: grid; place-items: center;
+.face { position: relative; aspect-ratio: 16 / 9; border-radius: var(--radius, 1.1rem); overflow: hidden; display: grid; place-items: center; isolation: isolate;
   transition: box-shadow .2s var(--ease); box-shadow: 0 .6rem 1.6rem rgba(0,0,0,.28); }
-.face .banner { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.face .banner { position: absolute; inset: -2px; width: calc(100% + 4px); height: calc(100% + 4px); max-width: none; object-fit: cover; }
+.face.hasbanner { background: #000 !important; }
 .face .icon { width: 34%; aspect-ratio: 1; object-fit: contain; border-radius: 22%; }
 .face .initial { font-size: 2.6rem; font-weight: 700; }
 .label { font-size: 1.2rem; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 .2rem;
   text-shadow: 0 .1rem .6rem rgba(0,0,0,.5); transition: color .2s; }
 [data-labels="off"] .label { display: none; }
 .tile.focus { transform: scale(1.1); z-index: 2; }
-.tile.focus .face { box-shadow: 0 0 0 .22rem var(--focus), 0 0 2.6rem .4rem var(--glow), 0 1.4rem 3rem rgba(0,0,0,.45); }
+.face { outline: .22rem solid transparent; outline-offset: .32rem; transition: box-shadow .2s var(--ease), outline-color .15s; }
+.tile.focus .face { outline-color: var(--focus); box-shadow: 0 0 1.4rem 0 var(--glow), 0 .7rem 1.4rem rgba(0,0,0,.32); }
 .tile.focus .label { color: var(--ink); }
 
 /* tile styles */
@@ -84,10 +86,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 [data-tiles="banner"] .face { background: var(--brand); }
 [data-tiles="gradient"] .face { background-color: var(--brand); background-image: linear-gradient(145deg, rgba(255,255,255,.3) 0%, rgba(255,255,255,0) 45%, rgba(0,0,0,.5) 100%); }
 [data-tiles="neon"] .face { background: rgba(8,10,16,.6); box-shadow: inset 0 0 0 .14rem var(--brand), 0 0 1.6rem -.3rem var(--brand); }
-[data-tiles="neon"] .tile.focus .face { box-shadow: inset 0 0 0 .2rem var(--brand), 0 0 3.2rem .3rem var(--brand), 0 0 0 .22rem #fff; }
+[data-tiles="neon"] .tile.focus .face { box-shadow: inset 0 0 0 .2rem var(--brand), 0 0 2.6rem .2rem var(--brand); }
 [data-tiles="mono"] .face { background: rgba(28,31,38,.8); }
 [data-tiles="mono"] .face img { filter: grayscale(1) brightness(1.2); opacity: .8; transition: filter .25s, opacity .25s; }
-[data-tiles="mono"] .tile.focus .face { background: var(--brand); }
+[data-tiles="mono"] .tile.focus .face { background: var(--ibg, var(--brand)); }
 [data-tiles="mono"] .tile.focus .face img { filter: none; opacity: 1; }
 .face .pname { display: none; }
 [data-tiles="poster"] .face { aspect-ratio: 2 / 3; background-color: var(--brand); background-image: linear-gradient(180deg, rgba(255,255,255,.14), rgba(0,0,0,.72)); align-content: start; padding-top: 22%; }
@@ -143,14 +145,14 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 2.4rem); mask-image: linear-gradient(to bottom, transparent 0, #000 2.4rem); }
 .tiles.sections > .cat:first-child { margin-top: auto; }
 .cat { flex: none; }
-.cat h3 { margin: 0 0 .1rem .2rem; font-size: 1.35rem; font-weight: 500; color: var(--ink-dim); text-shadow: 0 .1rem .6rem rgba(0,0,0,.5); }
-.strip { display: flex; gap: 1.6rem; overflow: hidden; padding: 1.4rem 1.2rem 1rem; margin: 0 -1.2rem; }
+.cat h3 { margin: 0 0 .1rem 2.6rem; font-size: 1.35rem; font-weight: 500; color: var(--ink-dim); text-shadow: 0 .1rem .6rem rgba(0,0,0,.5); }
+.strip { display: flex; gap: 1.6rem; overflow: hidden; padding: 2rem 2.4rem 2rem; margin: 0; }
 .strip .tile { flex: 0 0 calc(var(--tw, 15.5rem) * var(--tsz, 1)); }
 [data-layout="icons"] .strip .tile { --tw: 13.5rem; }
-.hole { font-size: 1.1rem; color: var(--ink-dim); padding: 1.6rem 1.4rem; border: .1rem dashed rgba(255,255,255,.25); border-radius: 1rem; }
+.hole { flex: none; font-size: 1.1rem; color: var(--ink-dim); padding: 1.6rem 1.4rem; border: .1rem dashed rgba(255,255,255,.25); border-radius: 1rem; }
 
 /* move mode: the tile being moved */
-.tile.moving .face { box-shadow: 0 0 0 .3rem #ffd76b, 0 0 2.4rem .4rem rgba(255,215,107,.55); }
+.tile.moving .face { outline-color: #ffd76b; box-shadow: 0 0 1.8rem .2rem rgba(255,215,107,.5); }
 .tile.moving { animation: nudge 1.2s ease-in-out infinite; }
 @keyframes nudge { 50% { transform: scale(1.1) translateY(-.4rem); } }
 
@@ -161,7 +163,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .d-head { display: flex; align-items: baseline; gap: 1.2rem; }
 .d-head h2 { margin: 0; font-size: 2.6rem; font-weight: 500; }
 .d-head span { color: var(--ink-dim); font-size: 1.3rem; }
-.dgrid { flex: 1; overflow: hidden; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2rem 1.6rem; align-content: start; padding: 1rem .6rem; }
+.dgrid { flex: 1; overflow: hidden; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2rem 1.6rem; align-content: start; padding: 2rem 2.4rem; margin: 0 -2.4rem; }
 .dgrid .face { background: var(--brand); }
 .dgrid .face.glassy { background: rgba(255,255,255,.1); }
 
@@ -232,7 +234,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* a flat grid that grows past the screen scrolls with the focus (big tiles, many apps) */
 [data-layout="grid"] .tiles:not(.sections), [data-layout="icons"] .tiles:not(.sections) {
-  min-height: 0; overflow: hidden; padding: 1.4rem 1.2rem; margin-left: -1.2rem; margin-right: -1.2rem; }
+  min-height: 0; overflow: hidden; padding: 2rem 2.4rem; margin-left: -2.4rem; margin-right: -2.4rem; }
 [data-layout="icons"] .tiles:not(.sections) { margin-top: auto; margin-bottom: auto; }
 
 /* ---------- design: Theater ---------- */
@@ -260,7 +262,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .colitem span { font-size: 1.1rem; opacity: .7; }
 .colitem.cur { color: var(--ink); background: rgba(255,255,255,.12); }
 .colitem.focus { background: #fff; color: #11141b; text-shadow: none; transform: scale(1.04); }
-.colgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2rem 1.6rem; overflow: hidden; max-height: 100%; padding: 1.2rem; margin: -1.2rem; align-content: start; }
+.colgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2rem 1.6rem; overflow: hidden; max-height: 100%; padding: 2rem 2.4rem; margin: -2rem -2.4rem; align-content: start; }
 .colgrid .hole { grid-column: 1 / -1; }
 
 /* ---------- design: Dock ---------- */
@@ -286,10 +288,23 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* ---------- design: Collage ---------- */
 [data-layout="collage"] .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: dense; gap: 1.6rem; min-height: 0; overflow: hidden;
-  padding: 1.4rem 1.2rem; margin-left: -1.2rem; margin-right: -1.2rem; }
+  padding: 2rem 2.4rem; margin-left: -2.4rem; margin-right: -2.4rem; }
 [data-layout="collage"] .tile:first-child { grid-column: span 2; grid-row: span 2; display: flex; flex-direction: column; }
 [data-layout="collage"] .tile:first-child .face { flex: 1; aspect-ratio: auto; }
 [data-layout="collage"] .tile:first-child .face .icon { width: 30%; }
 [data-layout="collage"] .tile:nth-child(6n+4) { grid-column: span 2; }
 [data-layout="collage"] .tile:nth-child(6n+4) .face { aspect-ratio: 34 / 9; }
 [data-layout="collage"] .tile:nth-child(6n+4) .face .icon { width: 17%; }
+
+/* Filled tiles take the colour behind the app's icon, so the icon and the tile are one surface. */
+#home .face.filled, #drawer .face.filled { background-color: var(--ibg); }
+.face .icon.glyph { border-radius: 0; width: 52%; }
+[data-layout="icons"] .face .icon.glyph { width: 58%; }
+#home[data-shape="circle"] .face .icon.glyph, [data-layout="dock"] .face .icon.glyph { width: 74%; }
+#home[data-shape="pill"] .face .icon.glyph { width: 36%; }
+[data-tiles="poster"] .face .icon.glyph { width: 62%; }
+/* An ordinary icon on its own colour: soften its square edge into the tile */
+.face.filled .icon:not(.glyph) { border-radius: 24%; }
+
+/* rows live in a box that reaches past the screen padding, so the first and last tiles have room to grow */
+.tiles.sections { margin-left: -2.4rem; margin-right: -2.4rem; }

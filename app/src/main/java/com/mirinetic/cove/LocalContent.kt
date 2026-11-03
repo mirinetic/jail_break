@@ -42,6 +42,7 @@ class LocalContent(
             when {
                 path.startsWith("/banner/") -> bytes("image/png", apps.image("banner", path.removePrefix("/banner/")))
                 path.startsWith("/icon/") -> bytes("image/png", apps.image("icon", path.removePrefix("/icon/")))
+                path.startsWith("/glyph/") -> bytes("image/png", apps.image("glyph", path.removePrefix("/glyph/")))
                 path.startsWith("/photo/") -> {
                     val file = store.photoFile(path.removePrefix("/photo/").removeSuffix(".jpg"))
                     if (file == null) notFound() else ok("image/jpeg", file.inputStream())
