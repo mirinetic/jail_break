@@ -18,7 +18,10 @@
     minimal: { name: 'Minimal', desc: '큰 시계와 로고 한 줄',   p: { layout: 'minimal', tiles: 'clear', labels: false, font: 'light',  dim: 1, bg: { type: 'preset', id: 'night-peaks' } } }
   };
   var DESIGN_IDS = ['glass', 'icons', 'minimal'];
-  var TILES = [['banner', '앱 배너'], ['glass', '글래스'], ['brand', '브랜드 컬러'], ['frosted', '프로스트'], ['dark', '다크'], ['clear', '투명']];
+  var TILES = [['banner', '앱 배너'], ['glass', '글래스'], ['brand', '브랜드 컬러'], ['gradient', '그라데이션'], ['neon', '네온'], ['frosted', '프로스트'],
+    ['dark', '다크'], ['mono', '흑백'], ['poster', '포스터'], ['clear', '투명']];
+  var SHAPES = [['rounded', '둥근 사각형'], ['circle', '원형'], ['pill', '알약형'], ['square', '각진 모양']];
+  var SIZES = [['s', '작게'], ['m', '보통'], ['l', '크게']];
   var FONTS = [['modern', '모던'], ['light', '라이트'], ['classic', '클래식'], ['mono', '모노']];
   var CLOCKS = [['24', '24시간'], ['12', '12시간'], ['off', '숨김']];
   var DIMS = ['없음', '약하게', '보통', '강하게'];
@@ -42,7 +45,7 @@
   ];
   var CAT_NAMES = ['즐겨찾기', '영화·드라마', '예능', '음악', '키즈', '게임', '스포츠', '뉴스', '유틸리티', '기타'];
   // cats: the home screen's rows, in order. cat: pkg -> row id (an app without one sits in the first row).
-  var DEFAULTS = { design: 'glass', clock: '24', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null, locked: null, weather: null };
+  var DEFAULTS = { design: 'glass', clock: '24', shape: 'rounded', size: 'm', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null, locked: null, weather: null };
   Object.keys(DESIGNS.glass.p).forEach(function (k) { DEFAULTS[k] = DESIGNS.glass.p[k]; });
 
   // ---------- state ----------
@@ -263,6 +266,8 @@
     document.body.setAttribute('data-font', P.font);
     home.setAttribute('data-layout', P.layout);
     home.setAttribute('data-tiles', P.tiles);
+    home.setAttribute('data-shape', P.shape);
+    home.setAttribute('data-size', P.size);
     home.setAttribute('data-labels', P.labels ? 'on' : 'off');
     home.setAttribute('data-clock', P.clock === 'off' ? 'off' : 'on');
     document.documentElement.style.setProperty('--dim', DIM_VALUES[P.dim] || 0.22);
@@ -276,10 +281,11 @@
   }
 
   function tileHtml(a, opts) {
-    var useBanner = opts.banner && a.banner;
+    var useBanner = opts.banner && a.banner && !opts.round;
     var inner = useBanner
       ? '<img class="banner" src="' + bannerUrl(a) + '" alt="">'
-      : '<img class="icon" src="' + iconUrl(a) + '" alt="" onerror="this.outerHTML=\'<span class=initial>' + esc(a.label.charAt(0)) + '</span>\'">';
+      : '<img class="icon" src="' + iconUrl(a) + '" alt="" onerror="this.outerHTML=\'<span class=initial>' + esc(a.label.charAt(0)) + '</span>\'">' +
+        '<span class="pname">' + esc(a.label) + '</span>';
     var brand = (opts.forceBrand || (opts.banner && !a.banner)) ? ' brand' : '';
     return '<div class="tile focusable' + (moving === a.pkg && !opts.recent ? ' moving' : '') + '" data-pkg="' + esc(a.pkg) + '"' + (opts.recent ? ' data-recent="1"' : '') + '>' +
       '<div class="face' + brand + '" style="--brand:' + esc(a.color || '#2a2f3a') + '">' + inner +
@@ -290,19 +296,20 @@
   function renderTiles() {
     var ids = visibleApps();
     var n = ids.length;
-    cols = n <= 8 ? 4 : n <= 10 ? 5 : 6;
+    cols = (n <= 8 ? 4 : n <= 10 ? 5 : 6) + (P.size === 's' ? 1 : P.size === 'l' ? -1 : 0) + (P.tiles === 'poster' ? 2 : 0) + (P.shape === 'circle' ? 1 : 0);
+    cols = Math.max(3, Math.min(9, cols));
     var box = $('tiles');
     var sec = sectioned();
     box.classList.toggle('sections', sec);
     box.style.setProperty('--cols', cols);
-    var banner = P.tiles === 'banner';
+    var banner = P.tiles === 'banner', round = P.shape === 'circle';
     if (!sec) {
-      box.innerHTML = ids.map(function (pkg) { return tileHtml(BYPKG[pkg], { banner: banner }); }).join('');
+      box.innerHTML = ids.map(function (pkg) { return tileHtml(BYPKG[pkg], { banner: banner, round: round }); }).join('');
     } else {
       var html = '', rec = recentApps();
       var section = function (id, title, list, recent) {
         return '<div class="cat" data-cat="' + esc(id) + '"><h3>' + esc(title) + '</h3><div class="strip">' +
-          (list.length ? list.map(function (p) { return tileHtml(BYPKG[p], { banner: banner, recent: recent }); }).join('')
+          (list.length ? list.map(function (p) { return tileHtml(BYPKG[p], { banner: banner, round: round, recent: recent }); }).join('')
             : '<div class="hole">비어 있어요. 앱 메뉴에서 이 줄로 옮길 수 있어요</div>') + '</div></div>';
       };
       if (rec.length) html += section('recent', '최근 실행', rec, true);
@@ -356,6 +363,10 @@
       var tl = $('tiles'), tlr = tl.getBoundingClientRect(), cr = strip.parentNode.getBoundingClientRect();
       // whole rows: a row that doesn't fit is brought to the top edge
       if (cr.top < tlr.top || cr.bottom > tlr.bottom) tl.scrollTop += (cr.top - tlr.top);
+    } else if (el.classList.contains('tile') && el.parentNode.id === 'tiles' && P.layout !== 'minimal') {
+      var box = $('tiles'), br = box.getBoundingClientRect(), tr0 = el.getBoundingClientRect();
+      if (tr0.top < br.top + 10) box.scrollTop -= (br.top + 10 - tr0.top);
+      else if (tr0.bottom > br.bottom - 10) box.scrollTop += (tr0.bottom - br.bottom + 10);
     } else if (P.layout === 'minimal' && el.classList.contains('tile')) {
       var row = $('tiles'), rr = row.getBoundingClientRect(), tr = el.getBoundingClientRect();
       if (tr.left < rr.left + 40) row.scrollLeft -= (rr.left + 40 - tr.left);
@@ -653,6 +664,8 @@
       { name: '밤 배경', sub: '오후 7시부터 오전 6시까지', val: bgName(P.nightBg), thumb: P.nightBg ? bgUrl(P.nightBg) : '', change: function (d) { set({ nightBg: stepBg(P.nightBg, d, true) }); } },
       { name: '배경 어둡게', val: DIMS[P.dim], change: function (d) { set({ dim: Math.max(0, Math.min(3, P.dim + d)) }); } },
       { name: '타일', val: labelOf(TILES, P.tiles), change: function (d) { set({ tiles: cycle(TILES, P.tiles, d) }); } },
+      { name: '타일 모양', val: labelOf(SHAPES, P.shape), change: function (d) { set({ shape: cycle(SHAPES, P.shape, d) }); } },
+      { name: '타일 크기', val: labelOf(SIZES, P.size), change: function (d) { set({ size: cycle(SIZES, P.size, d) }); } },
       { name: '앱 이름', val: P.labels ? '표시' : '숨김', change: function () { set({ labels: !P.labels }); } },
       { name: '글꼴', val: labelOf(FONTS, P.font), change: function (d) { set({ font: cycle(FONTS, P.font, d) }); } },
       { name: '시계', val: labelOf(CLOCKS, P.clock), change: function (d) { set({ clock: cycle(CLOCKS, P.clock, d) }); } },
@@ -1090,6 +1103,17 @@
       else if (has(t, ['12'])) set({ clock: '12' });
       else set({ clock: '24' });
       done('시계 ' + labelOf(CLOCKS, P.clock)); return;
+    }
+    for (var ti = 0; ti < TILES.length; ti++) {
+      if (has(t, ['타일', '스타일']) && t.indexOf(norm(TILES[ti][1])) >= 0) { set({ tiles: TILES[ti][0] }); done('타일 ' + TILES[ti][1]); return; }
+    }
+    for (var si = 0; si < SHAPES.length; si++) {
+      if (t.indexOf(norm(SHAPES[si][1])) >= 0 || (SHAPES[si][0] === 'circle' && has(t, ['동그랗', '동그라미']))) { set({ shape: SHAPES[si][0] }); done('타일 ' + SHAPES[si][1]); return; }
+    }
+    if (has(t, ['타일', '아이콘']) && has(t, ['크게', '키워'])) { set({ size: P.size === 's' ? 'm' : 'l' }); done('타일 ' + labelOf(SIZES, P.size)); return; }
+    if (has(t, ['타일', '아이콘']) && has(t, ['작게', '줄여'])) { set({ size: P.size === 'l' ? 'm' : 's' }); done('타일 ' + labelOf(SIZES, P.size)); return; }
+    if (has(t, ['네온', '포스터', '흑백', '그라데이션'])) {
+      for (var tj = 0; tj < TILES.length; tj++) if (t.indexOf(norm(TILES[tj][1])) >= 0) { set({ tiles: TILES[tj][0] }); done('타일 ' + TILES[tj][1]); return; }
     }
     if (has(t, ['타일'])) { set({ tiles: cycle(TILES, P.tiles, 1) }); done('타일 ' + labelOf(TILES, P.tiles)); return; }
 

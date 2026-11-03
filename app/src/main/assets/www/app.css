@@ -76,6 +76,32 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 [data-tiles="clear"] .face { background: transparent; box-shadow: none; }
 [data-tiles="clear"] .face .icon { width: 40%; filter: drop-shadow(0 .3rem .8rem rgba(0,0,0,.45)); }
 [data-tiles="banner"] .face { background: var(--brand); }
+[data-tiles="gradient"] .face { background-color: var(--brand); background-image: linear-gradient(145deg, rgba(255,255,255,.3) 0%, rgba(255,255,255,0) 45%, rgba(0,0,0,.5) 100%); }
+[data-tiles="neon"] .face { background: rgba(8,10,16,.6); box-shadow: inset 0 0 0 .14rem var(--brand), 0 0 1.6rem -.3rem var(--brand); }
+[data-tiles="neon"] .tile.focus .face { box-shadow: inset 0 0 0 .2rem var(--brand), 0 0 3.2rem .3rem var(--brand), 0 0 0 .22rem #fff; }
+[data-tiles="mono"] .face { background: rgba(28,31,38,.8); }
+[data-tiles="mono"] .face img { filter: grayscale(1) brightness(1.2); opacity: .8; transition: filter .25s, opacity .25s; }
+[data-tiles="mono"] .tile.focus .face { background: var(--brand); }
+[data-tiles="mono"] .tile.focus .face img { filter: none; opacity: 1; }
+.face .pname { display: none; }
+[data-tiles="poster"] .face { aspect-ratio: 2 / 3; background-color: var(--brand); background-image: linear-gradient(180deg, rgba(255,255,255,.14), rgba(0,0,0,.72)); align-content: start; padding-top: 22%; }
+[data-tiles="poster"] .face .icon { width: 50%; }
+[data-tiles="poster"] .face .pname { display: block; position: absolute; left: .9rem; right: .9rem; bottom: .9rem; font-size: 1.15rem; font-weight: 600; line-height: 1.25; text-align: left; }
+[data-tiles="poster"] .strip .tile { --tw: 10rem; }
+
+/* tile shapes and sizes */
+#home { --tsz: 1; }
+#home[data-size="s"] { --tsz: .82; }
+#home[data-size="l"] { --tsz: 1.2; }
+#home[data-shape="pill"] .face { border-radius: 999px; aspect-ratio: 2 / 1; padding-top: 0; align-content: center; }
+#home[data-shape="pill"] .face .pname { display: none; }
+#home[data-shape="pill"] .face .icon { width: 26%; }
+#home[data-shape="square"] .face { border-radius: .25rem; }
+#home[data-shape="circle"] .face { aspect-ratio: 1 / 1; border-radius: 50%; width: min(100%, calc(9rem * var(--tsz))); justify-self: center; padding-top: 0; align-content: center; }
+#home[data-shape="circle"] .face .icon { width: 50%; }
+#home[data-shape="circle"] .face .pname { display: none; }
+#home[data-shape="circle"] .label { text-align: center; }
+#home[data-shape="circle"] .strip .tile { --tw: 10rem; }
 
 /* ---------- layout: grid (Glass) ---------- */
 [data-layout="grid"] .tiles { max-width: 100%; }
@@ -99,7 +125,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 /* auto margins centre the row while it fits, and let it scroll from the first app once it doesn't */
 [data-layout="minimal"] .tile:first-child { margin-left: auto; }
 [data-layout="minimal"] .tile:last-child { margin-right: auto; }
-[data-layout="minimal"] .tile { flex: 0 0 11.5rem; }
+[data-layout="minimal"] .tile { flex: 0 0 calc(11.5rem * var(--tsz, 1)); }
 [data-layout="minimal"] .face { --radius: 1rem; }
 [data-layout="minimal"] .label { text-align: center; font-size: 1.05rem; }
 
@@ -113,7 +139,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .cat { flex: none; }
 .cat h3 { margin: 0 0 .1rem .2rem; font-size: 1.35rem; font-weight: 500; color: var(--ink-dim); text-shadow: 0 .1rem .6rem rgba(0,0,0,.5); }
 .strip { display: flex; gap: 1.6rem; overflow: hidden; padding: 1.4rem 1.2rem 1rem; margin: 0 -1.2rem; }
-.strip .tile { flex: 0 0 var(--tw, 15.5rem); }
+.strip .tile { flex: 0 0 calc(var(--tw, 15.5rem) * var(--tsz, 1)); }
 [data-layout="icons"] .strip .tile { --tw: 13.5rem; }
 .hole { font-size: 1.1rem; color: var(--ink-dim); padding: 1.6rem 1.4rem; border: .1rem dashed rgba(255,255,255,.25); border-radius: 1rem; }
 
@@ -194,3 +220,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 [data-layout="icons"] .tiles.sections { margin: 0; max-width: none; align-self: stretch; }
+
+/* a flat grid that grows past the screen scrolls with the focus (big tiles, many apps) */
+[data-layout="grid"] .tiles:not(.sections), [data-layout="icons"] .tiles:not(.sections) {
+  min-height: 0; overflow: hidden; padding: 1.4rem 1.2rem; margin-left: -1.2rem; margin-right: -1.2rem; }
+[data-layout="icons"] .tiles:not(.sections) { margin-top: auto; margin-bottom: auto; }
