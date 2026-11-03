@@ -314,3 +314,22 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* rows live in a box that reaches past the screen padding, so the first and last tiles have room to grow */
 .tiles.sections { margin-left: -2.4rem; margin-right: -2.4rem; }
+
+/* ---------- row tabs (Minimal, Dock with categories) ---------- */
+.rtabs { display: flex; justify-content: center; flex-wrap: wrap; gap: .8rem; margin-top: auto; padding: 0 2rem; }
+.rtab { padding: .6rem 1.5rem; border-radius: 2rem; font-size: 1.25rem; color: var(--ink-dim); background: rgba(0,0,0,.28);
+  border: .08rem solid rgba(255,255,255,.12); transition: background .15s, color .15s, transform .15s; }
+.rtab.cur { color: var(--ink); background: rgba(255,255,255,.18); }
+.rtab.focus { background: #fff; color: #11141b; transform: scale(1.06); }
+#rtabs:not([hidden]) ~ .tiles { margin-top: .6rem !important; }
+[data-layout="minimal"] .hole, [data-layout="dock"] .hole { margin: 1rem auto; }
+
+/* ---------- Collage with categories: each row is its own collage ---------- */
+[data-layout="collage"] .tiles.sections { display: flex; padding: 2.4rem 0 0; }
+[data-layout="collage"] .tiles.sections .strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-flow: dense; gap: 1.6rem;
+  overflow: visible; padding: 1.6rem 2.4rem 1.6rem; }
+[data-layout="collage"] .tiles.sections .strip .tile { flex: none; }
+[data-layout="collage"] .tiles.sections .hole { grid-column: 1 / -1; }
+
+[data-layout="dock"] #rtabs:not([hidden]) ~ .tiles { margin-top: 4.2rem !important; }
+.tiles.sections { margin-top: .6rem; }

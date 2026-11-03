@@ -165,7 +165,10 @@
   function appsIn(id) { return visibleApps().filter(function (p) { return catOf(p) === id; }); }
   function recentApps() { return P.recentRow ? P.recent.filter(function (p) { return BYPKG[p]; }).slice(0, 8) : []; }
   // Rows with titles. Minimal always stays one plain row of logos.
-  function sectioned() { return ['grid', 'icons', 'theater'].indexOf(P.layout) >= 0 && (P.cats.length > 1 || !!P.cats[0].name || recentApps().length > 0); }
+  function hasRows() { return P.cats.length > 1 || !!P.cats[0].name || recentApps().length > 0; }
+  function sectioned() { return ['grid', 'icons', 'theater', 'collage'].indexOf(P.layout) >= 0 && hasRows(); }
+  // Minimal and Dock keep one row of apps; with categories they get tabs above it.
+  function tabsMode() { return (P.layout === 'minimal' || P.layout === 'dock') && hasRows(); }
   // Designs that show apps in a single horizontal row
   function oneRow() { return P.layout === 'minimal' || P.layout === 'dock' || (P.layout === 'theater' && !sectioned()); }
   function iconUrl(a) { return N ? '/icon/' + encodeURIComponent(a.pkg) : a.icon; }
@@ -459,12 +462,28 @@
       box.style.setProperty('--dk', Math.max(3, Math.min(6.4 * (P.size === 's' ? 0.82 : P.size === 'l' ? 1.2 : 1), dk)).toFixed(2) + 'rem');
     }
     var banner = P.tiles === 'banner', round = P.shape === 'circle' || P.layout === 'dock';
+    var tabs = $('rtabs');
+    tabs.hidden = !tabsMode();
+    if (tabsMode()) {
+      var titems = colItems().filter(function (x) { return x[0] !== 'all'; });
+      if (!colSel || !titems.some(function (x) { return x[0] === colSel; })) colSel = titems[0][0];
+      tabs.innerHTML = titems.map(function (x) {
+        return '<div class="rtab focusable' + (x[0] === colSel ? ' cur' : '') + '" data-col="' + esc(x[0]) + '">' + esc(x[1]) + '</div>';
+      }).join('');
+      ids = colApps(colSel);
+      n = ids.length;
+    }
+    if (P.layout === 'dock') {
+      var dk2 = (82 - Math.max(0, n - 1) * 1.2) / (n + 0.9);
+      box.style.setProperty('--dk', Math.max(3, Math.min(6.4 * (P.size === 's' ? 0.82 : P.size === 'l' ? 1.2 : 1), dk2)).toFixed(2) + 'rem');
+    }
     if (P.layout === 'column') {
       renderColumn(box, banner, round);
     } else if (P.layout === 'theater' && !sectioned()) {
       box.innerHTML = '<div class="cat"><div class="strip">' + ids.map(function (pkg) { return tileHtml(BYPKG[pkg], { banner: banner, round: round }); }).join('') + '</div></div>';
     } else if (!sec) {
-      box.innerHTML = ids.map(function (pkg) { return tileHtml(BYPKG[pkg], { banner: banner, round: round }); }).join('');
+      box.innerHTML = ids.length ? ids.map(function (pkg) { return tileHtml(BYPKG[pkg], { banner: banner, round: round, recent: colSel === 'recent' && tabsMode() }); }).join('')
+        : (tabsMode() ? '<div class="hole">이 줄은 비어 있어요. 앱 메뉴의 "줄"로 앱을 넣을 수 있어요</div>' : '');
     } else {
       var html = '', rec = recentApps();
       var section = function (id, title, list, recent) {
@@ -476,8 +495,19 @@
       P.cats.forEach(function (c) { html += section(c.id, c.name || '내 앱', appsIn(c.id), false); });
       box.innerHTML = html;
     }
-    $('empty').hidden = n > 0;
+    $('empty').hidden = visibleApps().length > 0;
     if (base === 'home' && !panel) restoreFocus('home');
+  }
+
+  // Minimal / Dock with tabs: show another tab's apps without moving the focus off the tab.
+  function fillRow() {
+    var keep = focusEl;
+    var saved = base;
+    base = 'tabs';           // renderTiles must not steal the focus from the tab
+    renderTiles();
+    base = saved;
+    if (keep && document.body.contains(keep)) setFocus(keep);
+    else { var t = document.querySelector('.rtab[data-col="' + cssEsc(colSel) + '"]'); if (t) setFocus(t); }
   }
 
   // Column design: a list of rows on the left, the chosen row's apps on the right.
@@ -554,7 +584,10 @@
     updateHero();
     // Column design: moving onto a list item shows its apps
     var col = focusEl.getAttribute('data-col');
-    if (col && col !== 'all' && col !== colSel) { colSel = col; fillColumn(); }
+    if (col && col !== 'all' && col !== colSel) {
+      colSel = col;
+      if (P.layout === 'column') fillColumn(); else fillRow();
+    }
     // Dock design: neighbours of the focused icon grow a little
     if (P.layout === 'dock') {
       Array.prototype.forEach.call(document.querySelectorAll('#tiles .near'), function (e) { e.classList.remove('near'); });
@@ -575,8 +608,15 @@
       if (er.left < sr.left + 30) strip.scrollLeft -= (sr.left + 30 - er.left);
       else if (er.right > sr.right - 30) strip.scrollLeft += (er.right - sr.right + 30);
       var tl = $('tiles'), tlr = tl.getBoundingClientRect(), cr = strip.parentNode.getBoundingClientRect();
-      // whole rows: a row that doesn't fit is brought to the top edge
-      if (cr.top < tlr.top || cr.bottom > tlr.bottom) tl.scrollTop += (cr.top - tlr.top);
+      // whole rows: a row that doesn't fit is brought to the top edge; a row taller than the area follows the tile
+      if (cr.height > tlr.height - 20) {
+        if (er.top < tlr.top + 40) tl.scrollTop -= (tlr.top + 40 - er.top);
+        else if (er.bottom > tlr.bottom - 20) tl.scrollTop += (er.bottom - tlr.bottom + 20);
+      } else {
+        // keep the row clear of the faded top edge (the box's top padding)
+        var padTop = parseFloat(getComputedStyle(tl).paddingTop) || 0;
+        if (cr.top < tlr.top + padTop || cr.bottom > tlr.bottom) tl.scrollTop += (cr.top - (tlr.top + padTop));
+      }
     } else if (el.classList.contains('tile') && el.parentNode.id === 'colGrid') {
       var cg = el.parentNode, cgr = cg.getBoundingClientRect(), ce = el.getBoundingClientRect();
       if (ce.top < cgr.top + 10) cg.scrollTop -= (cgr.top + 10 - ce.top);
@@ -683,6 +723,7 @@
 
   function startMove(pkg) {
     if (locked('위치 옮기기', function () { startMove(pkg); })) return;
+    if (focusEl && focusEl.getAttribute('data-recent')) { toast('최근 실행 줄에서는 옮길 수 없어요. 원래 줄에서 옮겨 주세요'); return; }
     if (base !== 'home' || !onHome(pkg)) return;
     moving = pkg;
     lastFocus.home = pkg;
@@ -692,7 +733,8 @@
   function shiftMoving(dir) {
     var list = visibleApps(), i = list.indexOf(moving);
     if (i < 0) { moving = null; renderTiles(); return; }
-    if (sectioned()) {
+    if (tabsMode() && (dir === 'up' || dir === 'down')) return;
+    if (sectioned() || tabsMode()) {
       var c = catOf(moving), same = list.filter(function (p) { return catOf(p) === c; }), k = same.indexOf(moving);
       if (dir === 'left' || dir === 'right') {
         var other = same[k + (dir === 'left' ? -1 : 1)];
@@ -1233,7 +1275,7 @@
       if (pkg) { launch(pkg); return; }
       var colId = focusEl && focusEl.getAttribute('data-col');
       if (colId === 'all') { openDrawer(); return; }
-      if (colId) { var firstT = $('colGrid') && $('colGrid').querySelector('.tile'); if (firstT) setFocus(firstT); return; }
+      if (colId) { var firstT = P.layout === 'column' ? ($('colGrid') && $('colGrid').querySelector('.tile')) : $('tiles').querySelector('.tile'); if (firstT) setFocus(firstT); return; }
       var act = focusEl && focusEl.getAttribute('data-act');
       if (act === 'drawer') openDrawer(); else if (act) openPanel(act);
       return;
@@ -1384,6 +1426,8 @@
   window.Cove = {
     key: key,
     say: say,
+    // Test hook: focus the n-th element matching a selector (used by the layout checks)
+    _focus: function (sel, n) { var e = document.querySelectorAll(sel)[n || 0]; if (e) setFocus(e); return !!e; },
     toast: toast,
     home: function () {
       closePanelQuiet();
