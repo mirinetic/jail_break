@@ -441,6 +441,9 @@
     var pr = current();
     $('pName').textContent = pr.name;
     $('pDot').style.setProperty('--pc', pr.color);
+    $('pDot').textContent = avatarOf(pr);
+    $('pDot').classList.toggle('emoji', !!avatarOf(pr));
+    if (base === 'me') renderMe();
     tick();
     renderTiles();
     $('hero').hidden = P.layout !== 'theater';
@@ -779,6 +782,7 @@
   var away = null;   // a TV app opened from Cove {pkg, pid, t}: its time is the time until Cove comes back
   function appData(pid, pkg) { ROOT.appdata = ROOT.appdata || {}; var d = ROOT.appdata[pid] = ROOT.appdata[pid] || {}; return d[pkg] || {}; }
   function openMini(pkg) {
+    leaveMe(true);
     var a = BYPKG[pkg];
     var from = base === 'drawer' ? 'drawer' : 'home';
     closePanelQuiet();
@@ -803,6 +807,7 @@
   }
   function closeMini() {
     var from = endMini();
+    if (backToMe()) return;
     if (from === 'drawer') openDrawer(); else restoreFocus('home');
   }
   function miniPost(m) { if (mini && mini.frame.contentWindow) mini.frame.contentWindow.postMessage(m, '*'); }
@@ -921,7 +926,7 @@
       change: function (d) {
         if (isMaster) { toast('마스터 프로필에는 시간 제한을 걸 수 없어요'); return; }
         if (!hasPin()) { needPinFirst(); return; }
-        pr.limit = +cycle(LIMITS, pr.limit || 0, d); savePrefs(); renderPanel();
+        gate('admin', '사용 시간 제한 바꾸기', function () { pr.limit = +cycle(LIMITS, pr.limit || 0, d); savePrefs(); renderPanel(); });
       } });
     var left = msLeft(pr);
     if (left !== Infinity) rows.push({ name: '오늘 남은 시간', val: left > 0 ? fmtMs(left) : '다 썼어요' });
@@ -965,6 +970,7 @@
   function removeFromHome(pkg) { var l = visibleApps(), i = l.indexOf(pkg); if (i >= 0) l.splice(i, 1); set({ apps: l }); }
 
   function openDrawer() {
+    leaveMe(false);
     closePanelQuiet();
     base = 'drawer';
     $('drawer').hidden = false;
@@ -1097,7 +1103,7 @@
     $('pin').hidden = false;
     renderPin();
   }
-  function closePin() { pinState = null; $('pin').hidden = true; }
+  function closePin() { pinState = null; $('pin').hidden = true; if (base === 'home' && !panel && backToMe()) return; }
   function renderPin() {
     var st = pinState;
     $('pinTitle').textContent = st.mode === 'new' ? '새 PIN 4자리' : st.mode === 'confirm' ? '한 번 더 입력하세요' : (st.title || 'PIN을 입력하세요');
@@ -1370,10 +1376,11 @@
   }
   function profileRows() {
     var m = master(), cur = current();
-    var rows = ROOT.profiles.map(function (pr) {
-      return { name: pr.name, dot: pr.color, sub: profileBadges(pr), val: pr.id === ROOT.current ? '사용 중' : '', action: pr.id !== ROOT.current,
-        act: function () { if (pr.id !== ROOT.current) { closePanelQuiet(); switchProfile(pr.id); if (!pinState) restoreFocus('home'); } } };
-    });
+    var rows = [{ id: 'me', name: '나의 프로필', sub: '내 꾸미기, 앱, 사용 시간, 일정, 메모를 한눈에', action: true, act: function () { closePanelQuiet(); openMe(); } }];
+    rows = rows.concat(ROOT.profiles.map(function (pr) {
+      return { name: (pr.avatar ? pr.avatar + ' ' : '') + pr.name, dot: pr.color, sub: profileBadges(pr), val: pr.id === ROOT.current ? '사용 중' : '', action: pr.id !== ROOT.current,
+        act: function () { if (pr.id !== ROOT.current) { closePanelQuiet(); switchProfile(pr.id); if (!pinState && base === 'home') restoreFocus('home'); } } };
+    }));
     rows.push({ id: 'add', name: '새 프로필 추가', sub: '마스터만 만들 수 있어요', action: true, act: addProfile });
     if (!isKids()) rows.push({ name: '이름', sub: 'OK로 직접 입력, ◀ ▶로 추천 이름', val: cur.name, action: true,
       act: function () { gate('self', '프로필 이름 바꾸기', function () { askText('프로필 이름', cur.name, function (txt) { if (txt !== null && txt.trim()) { renameProfile(txt); renderPanel(); } }); }); },
@@ -1586,13 +1593,14 @@
     if (type === 'allow') return allowRows();
     if (type === 'profmanage') return manageRows();
     if (type === 'usage') return usageRows();
+    if (type === 'mine') return mineRows();
     if (type === 'usageprof') return usageProfRows();
     return lookRows();
   }
 
   function openPanel(type, opts) {
-    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset', 'calev', 'ambient', 'memoitem', 'memoedit', 'profmanage', 'usage', 'usageprof'].indexOf(type) < 0) return;
-    var need = type === 'look' ? 'look' : (type === 'apps' || type === 'cats' || type === 'cat') ? 'apps' : (type === 'newprofile' || type === 'allow' || type === 'profmanage' || type === 'usage' || type === 'usageprof') ? 'admin' : null;
+    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset', 'calev', 'ambient', 'memoitem', 'memoedit', 'profmanage', 'usage', 'usageprof', 'mine'].indexOf(type) < 0) return;
+    var need = type === 'look' ? 'look' : (type === 'apps' || type === 'cats' || type === 'cat') ? 'apps' : (type === 'newprofile' || type === 'allow' || type === 'profmanage' || type === 'usage' || (type === 'usageprof' && (opts || {}).target !== ROOT.current)) ? 'admin' : null;
     if (need && blocked(need, type === 'look' ? '꾸미기' : need === 'apps' ? '앱 정리' : '마스터 메뉴', function () { openPanel(type, opts); })) return;
     if (type === 'look' || type === 'settings') loadPhotos();
     if (moving) { moving = null; renderTiles(); }
@@ -1617,6 +1625,8 @@
     }
     if (base === 'cal') { renderCal(); return; }
     if (base === 'memo') { renderMemo(); return; }
+    if (base === 'me') { renderMe(); return; }
+    if (backToMe()) return;
     if (base === 'drawer') restoreFocus('drawer'); else restoreFocus('home');
   }
 
@@ -1649,7 +1659,7 @@
     var rows = rowsFor(panel.type);
     panel.i = Math.max(0, Math.min(rows.length - 1, panel.i));
     var titles = { look: ['Appearance', '꾸미기'], apps: ['Apps', '앱 고르기'], settings: ['Settings', '설정'], profiles: ['Profiles', '프로필'], app: ['App', ''],
-      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'], calev: ['Event', '일정'], ambient: ['Screensaver', '화면 보호기'], memoitem: ['Memo', '메모'], memoedit: ['Memo', '메모'], profmanage: ['Manage profile', ''], usage: ['Usage', '사용 기록 · 시간 제한'], usageprof: ['Usage', ''] };
+      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'], calev: ['Event', '일정'], ambient: ['Screensaver', '화면 보호기'], memoitem: ['Memo', '메모'], memoedit: ['Memo', '메모'], profmanage: ['Manage profile', ''], usage: ['Usage', '사용 기록 · 시간 제한'], usageprof: ['Usage', ''], mine: ['My profile', '프로필 아이콘 · 이름 · 색'] };
     $('pKicker').textContent = titles[panel.type][0];
     $('pTitle').textContent = panel.type === 'app' ? (BYPKG[panel.pkg] ? BYPKG[panel.pkg].label : '')
       : panel.type === 'cat' ? ((catById(panel.cat) || {}).name || '내 앱')
@@ -1693,7 +1703,7 @@
       newprofile: [['◀ ▶', '바꾸기'], ['OK', '추가'], ['뒤로', '취소']], allow: [['OK', '허용 / 막기'], ['뒤로', '돌아가기']], calset: [['OK', '선택'], ['뒤로', '닫기']], calev: [['▲ ▼', '이동'], ['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '취소']],
       ambient: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '닫기']], memoitem: [['◀ ▶', '색'], ['OK', '선택'], ['뒤로', '닫기']],
       memoedit: [['▲ ▼', '이동'], ['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '취소']], profmanage: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']],
-      usage: [['OK', '자세히'], ['뒤로', '돌아가기']], usageprof: [['◀ ▶', '시간 제한'], ['OK', '선택'], ['뒤로', '돌아가기']] };
+      usage: [['OK', '자세히'], ['뒤로', '돌아가기']], usageprof: [['◀ ▶', '시간 제한'], ['OK', '선택'], ['뒤로', '돌아가기']], mine: [['◀ ▶', '바꾸기'], ['OK', '입력'], ['뒤로', '돌아가기']] };
     $('pHint').innerHTML = hints[panel.type].map(function (h) { return '<span><kbd>' + h[0] + '</kbd>' + h[1] + '</span>'; }).join('');
   }
 
@@ -1946,6 +1956,7 @@
   // (하루 / 이번 주 / 한 달 / 일정 추가 / 캘린더 설정).
   var CAL_HEAD = [['day', '하루'], ['week', '이번 주'], ['month', '한 달'], ['add', '＋ 일정 추가'], ['set', '캘린더 설정']];
   function openCal(mode, day) {
+    leaveMe(true);
     closePanelQuiet();
     if (base === 'drawer') $('drawer').hidden = true;
     if (focusEl) focusEl.classList.remove('focus');
@@ -1960,7 +1971,7 @@
     syncCalendars(false);
     renderCal();
   }
-  function closeCal() { base = 'home'; $('cal').hidden = true; restoreFocus('home'); }
+  function closeCal() { base = 'home'; $('cal').hidden = true; if (!backToMe()) restoreFocus('home'); }
   function dayItems() { return eventsOn(cal.day).concat([{ add: true }]); }
   function gridStart(day) { var m0 = new Date(day.getFullYear(), day.getMonth(), 1); return addDays(m0, -m0.getDay()); }
 
@@ -2288,6 +2299,7 @@
     el.hidden = false;
   }
   function openMemo() {
+    leaveMe(true);
     closePanelQuiet();
     if (base === 'drawer') $('drawer').hidden = true;
     if (focusEl) focusEl.classList.remove('focus');
@@ -2295,7 +2307,7 @@
     $('memo').hidden = false;
     renderMemo();
   }
-  function closeMemo() { base = 'home'; $('memo').hidden = true; restoreFocus('home'); }
+  function closeMemo() { base = 'home'; $('memo').hidden = true; if (!backToMe()) restoreFocus('home'); }
   function renderMemo() {
     var list = boardMemos();
     memoSel = Math.max(0, Math.min(list.length, memoSel));
@@ -2386,6 +2398,7 @@
     if (base === 'cal') { calKey(k); return; }
     if (base === 'memo') { memoKey(k); return; }
     if (base === 'mini') { if (mini) miniKey(k); else base = 'home'; return; }
+    if (base === 'me') { meKey(k); return; }
     if (moving) {
       if (k === 'ok' || k === 'back' || k === 'longok') endMove();
       else if (['up', 'down', 'left', 'right'].indexOf(k) >= 0) shiftMoving(k);
@@ -2401,7 +2414,7 @@
     }
     if (k === 'menu') { openPanel('look'); return; }
     if (k === 'back') { var first = document.querySelector('#tiles .tile'); if (first) setFocus(first); return; }
-    if (k === 'longok') { if (pkg) openPanel('app', { pkg: pkg }); return; }
+    if (k === 'longok') { if (pkg) openPanel('app', { pkg: pkg }); else if (focusEl && focusEl.getAttribute('data-act') === 'profiles') openMe(); return; }
     if (k === 'ok') {
       if (pkg) { launch(pkg); return; }
       var colId = focusEl && focusEl.getAttribute('data-col');
@@ -2412,6 +2425,144 @@
       return;
     }
     move(k);
+  }
+
+  // ---------- 나의 프로필: everything this profile has, on one screen ----------
+  var AVATARS = ['', '🙂', '😎', '🤓', '🥰', '🐱', '🐶', '🐻', '🐰', '🦊', '🐼', '🐯', '🐸', '🐧', '🦄', '🐳', '🌸', '🌻', '⭐', '🌙', '🚀', '⚽', '🎮', '🎧', '🎨', '📚', '🍀', '🍓'];
+  function avatarOf(pr) { return pr.avatar || ''; }
+  function avatarHtml(pr, cls) {
+    return '<span class="av ' + (cls || '') + (pr.avatar ? ' emoji' : '') + '" style="--pc:' + esc(pr.color) + '">' + esc(pr.avatar || pr.name.charAt(0)) + '</span>';
+  }
+  var meSel = 0, meItems = [], returnMe = false;
+  function openMe(again) {
+    if (!again) meSel = 0;   // a fresh visit starts at the top; coming back keeps the card
+    closePanelQuiet();
+    if (base === 'drawer') $('drawer').hidden = true;
+    if (focusEl) focusEl.classList.remove('focus');
+    base = 'me';
+    $('me').hidden = false;
+    renderMe();
+  }
+  function closeMe() { base = 'home'; $('me').hidden = true; restoreFocus('home'); }
+  // Opens another screen from a card; Back there comes back here.
+  function fromMe(fn) { returnMe = true; $('me').hidden = true; base = 'home'; fn(); if (base === 'home' && !panel && !pinState) { returnMe = false; openMe(true); } }
+  // Another screen opening on top of 나의 프로필 (voice, a PIN that let a card through): Back returns here.
+  function leaveMe(keep) { if (base !== 'me') return; $('me').hidden = true; returnMe = !!keep; base = 'home'; }
+  function backToMe() { if (!returnMe) return false; returnMe = false; openMe(true); return true; }
+
+  function meCard(title, body, act, extra) { return { title: title, body: body, act: act, style: extra || '' }; }
+  function renderMe() {
+    var pr = current(), now = new Date();
+    var lines = function (l) { return l.filter(Boolean).map(function (x) { return '<li>' + x + '</li>'; }).join(''); };
+    var none = function (t) { return '<p class="me-none">' + t + '</p>'; };
+    var cards = [];
+
+    // look
+    var bgStyle = '', b = P.bg;
+    if (b && (b.type === 'preset' || b.type === 'photo')) bgStyle = 'background-image:linear-gradient(0deg,rgba(8,10,16,.92),rgba(8,10,16,.35)),url(&quot;' + bgUrl(b) + '&quot;)';
+    else if (b && b.type === 'color') bgStyle = 'background-image:linear-gradient(0deg,rgba(8,10,16,.85),rgba(8,10,16,.2)),' + esc(find(COLORS, b.id)[2]).replace(/"/g, '&quot;');
+    cards.push(meCard('홈 꾸미기', '<b class="me-big">' + esc(DESIGNS[P.design].name) + '</b><ul>' + lines([
+      '배경 · ' + esc(bgName(P.bg)), P.nightBg ? '밤 배경 · ' + esc(bgName(P.nightBg)) : '',
+      '타일 · ' + esc(labelOf(TILES, P.tiles)) + ', ' + esc(labelOf(SHAPES, P.shape)) + ', ' + esc(labelOf(SIZES, P.size)),
+      '글꼴 · ' + esc(labelOf(FONTS, P.font)) + ' · 시계 ' + esc(labelOf(CLOCKS, P.clock)),
+      '날씨 · ' + (P.weather && cityOf(P.weather) ? esc(cityOf(P.weather)[1]) : '사용 안 함')]) + '</ul>',
+      function () { openPanel('look'); }, bgStyle));
+
+    // home apps
+    var vis = visibleApps();
+    cards.push(meCard('홈 앱', '<b class="me-big">' + vis.length + '개</b><div class="me-icons">' +
+      vis.slice(0, 10).map(function (p) { return '<img src="' + iconUrl(BYPKG[p]) + '" alt="">'; }).join('') + '</div><ul>' + lines([
+      hasRows() ? '카테고리 줄 ' + P.cats.length + '개' + (P.recentRow ? ' · 최근 실행 줄' : '') : '줄 없이 한 화면',
+      '새 앱 자동 추가 · ' + (P.autoAdd !== false ? '켜짐' : '꺼짐'),
+      P.locked.length && hasPin() ? '잠근 앱 ' + P.locked.length + '개' : '']) + '</ul>',
+      function () { openPanel('apps'); }));
+
+    // usage
+    var u = (ROOT.usage || {})[pr.id] || {}, left = msLeft(pr);
+    var top = Object.keys(u).filter(function (p) { return BYPKG[p] && !BYPKG[p].screen && daysMs(u[p], 7) > 0; })
+      .sort(function (a, c) { return daysMs(u[c], 7) - daysMs(u[a], 7); }).slice(0, 3);
+    cards.push(meCard('사용 시간', '<b class="me-big">오늘 ' + fmtMs(profileMs(pr.id, 1)) + '</b><ul>' + lines(
+      ['최근 7일 · ' + fmtMs(profileMs(pr.id, 7))].concat(top.map(function (p) {
+        return '<img class="ic" src="' + iconUrl(BYPKG[p]) + '" alt="">' + esc(BYPKG[p].label) + ' · ' + (BYPKG[p].mini ? '' : '약 ') + fmtMs(daysMs(u[p], 7)); }))
+      .concat([left === Infinity ? '하루 제한 없음' : '하루 ' + esc(labelOf(LIMITS, pr.limit)) + ' · ' + (left > 0 ? fmtMs(left) + ' 남음' : '오늘 다 썼어요')])) + '</ul>',
+      function () { openPanel('usageprof', { target: pr.id }); }));
+
+    // calendar
+    var evs = occurrences(now, addDays(startOfDay(now), 14)).filter(function (o) { return o.allDay ? startOfDay(o.start) >= startOfDay(now) : o.start >= now; });
+    var mineN = calData().events.filter(function (e) { return e.owner === pr.id; }).length;
+    var subsN = calData().subs.filter(function (s) { return visibleOwner(s.owner); }).length;
+    cards.push(meCard('일정', (evs.length ? '<ul class="me-ev">' + lines(evs.slice(0, 3).map(function (o) {
+        return '<b>' + esc(relDay(o.start)) + (o.allDay ? '' : ' ' + esc(fmtTime(o.start))) + '</b>' + esc(cut(o.title, 16)) + (o.owner === pr.id ? ' <i>개인</i>' : ''); })) + '</ul>'
+      : none('2주 안에 일정이 없어요')) + '<ul>' + lines(['2주 안 ' + evs.length + '개 · 내 개인 일정 ' + mineN + '개', subsN ? '구독 캘린더 ' + subsN + '개' : '']) + '</ul>',
+      function () { openCal('month'); }));
+
+    // memos
+    var inbox = activeMemos(), sent = memos().filter(function (m) { return m.by === pr.id; });
+    cards.push(meCard('메모', (inbox.length ? '<ul class="me-memo">' + lines(inbox.slice(0, 2).map(function (m) {
+        var from = profileById(m.by); return '“' + esc(cut(m.text.split('\n')[0], 18)) + '”' + (from && from.id !== pr.id ? ' <i>' + esc(from.name) + '</i>' : ''); })) + '</ul>'
+      : none('나에게 온 메모가 없어요')) + '<ul>' + lines(['받은 메모 ' + inbox.length + '개 · 보낸 메모 ' + sent.length + '개']) + '</ul>',
+      function () { openMemo(); }));
+
+    // cinema
+    var cin = appData(pr.id, 'cove.cinema'), hist = cin.hist || [], cont = hist.filter(function (h) { return !h.done; });
+    cards.push(meCard('Cove 시네마', (hist.length ? '<ul>' + lines(hist.slice(0, 3).map(function (h) {
+        return esc(cut(h.title, 14)) + ' <i>' + (h.done ? '다 봤어요' : Math.round(100 * h.pos / h.dur) + '%') + '</i>'; })) + '</ul>'
+      : none('아직 본 작품이 없어요')) + '<ul>' + lines(['이어 보기 ' + cont.length + '편 · 찜 ' + (cin.fav || []).length + '편']) + '</ul>',
+      function () { launch('cove.cinema'); }));
+
+    // cards game
+    var cg = appData(pr.id, 'cove.cards'), best = cg.best || {};
+    var lvName = { '3x4': '쉬움', '4x4': '보통', '4x5': '어려움' };
+    cards.push(meCard('짝꿍 카드', (Object.keys(best).length ? '<ul>' + lines(['3x4', '4x4', '4x5'].filter(function (k) { return best[k]; }).map(function (k) {
+        return lvName[k] + ' · ' + best[k].moves + '번 · ' + fmtSecs(best[k].secs); })) + '</ul>' : none('아직 기록이 없어요')) +
+      '<ul>' + lines(['플레이 ' + (cg.played || 0) + '판']) + '</ul>',
+      function () { launch('cove.cards'); }));
+
+    // permissions
+    var kids = isKids(pr);
+    cards.push(meCard('잠금 · 권한', '<b class="me-big">' + (pr.id === master().id ? '마스터' : kids ? '키즈' : '일반') + '</b><ul>' + lines([
+      pr.id === master().id ? 'PIN, 프로필, 잠금을 관리해요' : kids ? '허용 앱 ' + (pr.allow || []).length + '개 · 꾸미기 ' + (pr.kidsLook !== false ? '허용' : '막음') : '모든 앱을 쓸 수 있어요',
+      '이 프로필로 바꿀 때 PIN · ' + (pr.lockIn ? '켜짐' : '꺼짐'),
+      kids ? '나갈 때 PIN이 필요해요' : '', '잠금 PIN · ' + (hasPin() ? '설정됨' : '없음')]) + '</ul>',
+      function () { openPanel('profiles'); }));
+
+    meItems = [{ act: function () { openPanel('mine'); } }, { act: function () { openPanel('profiles'); } }].concat(cards);
+    meSel = Math.max(0, Math.min(meItems.length - 1, meSel));
+    var badges = profileBadges(pr) || '일반';
+    $('meHead').innerHTML = avatarHtml(pr, 'big') + '<div class="me-who"><h2>' + esc(pr.name) + '</h2><p>' + esc(badges) + ' · 프로필 ' + (ROOT.profiles.indexOf(pr) + 1) + ' / ' + ROOT.profiles.length + '</p></div>' +
+      '<div class="me-btns"><span class="me-btn' + (meSel === 0 ? ' cfocus' : '') + '">아이콘 · 이름 · 색 바꾸기</span><span class="me-btn' + (meSel === 1 ? ' cfocus' : '') + '">다른 프로필로</span></div>';
+    $('meGrid').innerHTML = cards.map(function (c, i) {
+      return '<div class="me-card' + (meSel === i + 2 ? ' cfocus' : '') + '" style="' + c.style + '"><h3>' + c.title + '</h3>' + c.body + '</div>';
+    }).join('');
+  }
+  function meKey(k) {
+    var n = meItems.length - 2, cols = 4;
+    if (k === 'back') { closeMe(); return; }
+    if (k === 'ok') { var it = meItems[meSel]; if (it) fromMe(it.act); return; }
+    if (meSel < 2) {
+      if (k === 'left') meSel = 0; else if (k === 'right') meSel = 1; else if (k === 'down') meSel = 2;
+    } else {
+      var i = meSel - 2;
+      if (k === 'left' && i % cols > 0) i--;
+      else if (k === 'right' && i % cols < cols - 1 && i + 1 < n) i++;
+      else if (k === 'up') { if (i < cols) { meSel = 0; renderMe(); return; } i -= cols; }
+      else if (k === 'down' && i + cols < n) i += cols;
+      meSel = i + 2;
+    }
+    renderMe();
+  }
+  // the 'mine' panel: icon, name and colour of the current profile
+  function mineRows() {
+    var pr = current();
+    return [
+      { name: '아이콘', sub: '◀ ▶로 골라요', val: pr.avatar || '이름 첫 글자', change: function (d) {
+        if (blocked('look', '프로필 아이콘 바꾸기', function () {})) return;
+        pr.avatar = AVATARS[(AVATARS.indexOf(pr.avatar || '') + d + AVATARS.length) % AVATARS.length]; savePrefs(); render(); } },
+      { name: '이름', sub: 'OK로 직접 입력, ◀ ▶로 추천 이름', val: pr.name, action: true,
+        act: function () { gate('self', '프로필 이름 바꾸기', function () { askText('프로필 이름', pr.name, function (txt) { if (txt !== null && txt.trim()) { renameProfile(txt); renderPanel(); } }); }); },
+        change: function (d) { cycleName(d); renderPanel(); } },
+      { name: '색', dot: pr.color, val: '', change: function (d) { cycleColor(d); renderPanel(); } }
+    ];
   }
 
   // ---------- voice / typed commands from the phone ----------
@@ -2491,6 +2642,7 @@
     if (!t) return;
     if (pinState) { raw.replace(/\D/g, '').split('').forEach(pinPress); return; }
     var done = function (msg) { toast('🎙 "' + raw + '" → ' + msg); };
+    if (has(t, ['내프로필', '나의프로필', '프로필정보', '내정보'])) { openMe(); done('나의 프로필'); return; }
 
     // row rename: "줄 이름을 영화로 바꿔" (the row of the focused app)
     var mc = raw.match(/(?:줄|카테고리)\s*이름(?:을|를)?\s*(.+?)\s*(?:으로|로)\s*(?:바꿔|변경|해)/);
@@ -2653,6 +2805,8 @@
     home: function () {
       if (mini) endMini();
       backFromApp();
+      returnMe = false;
+      if (base === 'me') { base = 'home'; $('me').hidden = true; }
       closePanelQuiet();
       moving = null;
       if (base === 'drawer') { base = 'home'; $('drawer').hidden = true; }
@@ -2688,6 +2842,7 @@
       var parts = cmd.split(':');
       if (parts[0] === 'panel') {
         if (parts[1] === 'memo') { if (base === 'memo') closeMemo(); else openMemo(); }
+        else if (parts[1] === 'me') { if (base === 'me') closeMe(); else openMe(); }
         else if (parts[1] === 'calendar') { if (base === 'cal') closeCal(); else openCal('month'); }
         else if (parts[1] === 'drawer') { if (base === 'drawer') closeDrawer(); else openDrawer(); }
         else if (panel && panel.type === parts[1]) closePanel();
