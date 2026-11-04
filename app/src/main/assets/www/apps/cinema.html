@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cove 시네마</title>
+<style>
+  html { font-size: calc(100vw / 96); background: #07080d; }
+  body { margin: 0; height: 100vh; overflow: hidden; color: #f4f5f8; background: #07080d; cursor: none;
+    font-family: "Roboto", "Noto Sans CJK KR", "Noto Sans KR", sans-serif; -webkit-font-smoothing: antialiased; }
+  [hidden] { display: none !important; }
+  .brand { position: absolute; top: 2rem; left: 3.2rem; z-index: 3; font-weight: 800; font-size: 1.5rem; letter-spacing: .02em; }
+  .brand b { color: #f472b6; }
+  .brand small { margin-left: .9rem; font-weight: 500; font-size: 1rem; opacity: .65; }
+
+  /* browse */
+  #hero { position: absolute; inset: 0 0 auto 0; height: 58vh; overflow: hidden; }
+  #heroArt { position: absolute; inset: 0; background-size: cover; background-position: center 30%; transition: opacity .35s; }
+  #hero::after { content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, rgba(7,8,13,.95) 0%, rgba(7,8,13,.6) 38%, rgba(7,8,13,0) 70%), linear-gradient(0deg, #07080d 0%, rgba(7,8,13,0) 45%); }
+  .h-text { position: absolute; left: 3.2rem; bottom: 4.2rem; width: 38rem; z-index: 2; }
+  .h-text h1 { margin: 0 0 .6rem; font-size: 3.4rem; line-height: 1.1; letter-spacing: -.02em; }
+  .meta { display: flex; gap: .7rem; align-items: center; font-size: 1.05rem; opacity: .85; flex-wrap: wrap; }
+  .rate { display: inline-grid; place-items: center; min-width: 1.9rem; height: 1.6rem; padding: 0 .35rem; border-radius: .35rem; font-size: .9rem; font-weight: 800; color: #111; }
+  .rate.r0 { background: #4ade80; } .rate.r12 { background: #facc15; } .rate.r15 { background: #fb923c; }
+  .h-text p { margin: .8rem 0 0; font-size: 1.2rem; line-height: 1.5; opacity: .85; }
+  .prog { height: .3rem; border-radius: .2rem; background: rgba(255,255,255,.2); overflow: hidden; }
+  .prog i { display: block; height: 100%; background: #f472b6; }
+  .h-text .prog { width: 18rem; margin-top: 1rem; }
+
+  #rows { position: absolute; left: 0; right: 0; top: 52vh; bottom: 0; overflow: hidden; }
+  #rowsIn { transition: transform .3s cubic-bezier(.2,.7,.2,1); }
+  .row { padding: 0 0 1.2rem; }
+  .row h3 { margin: 0 0 .6rem 3.2rem; font-size: 1.3rem; font-weight: 600; opacity: .9; }
+  .strip { display: flex; gap: 1.1rem; padding: .6rem 3.2rem; transition: transform .3s cubic-bezier(.2,.7,.2,1); }
+  .poster { flex: 0 0 9.6rem; height: 14.4rem; border-radius: .8rem; background-size: cover; background-position: center; position: relative;
+    box-shadow: 0 .5rem 1.4rem rgba(0,0,0,.45); transition: transform .2s, outline-color .2s; outline: .22rem solid transparent; outline-offset: .25rem; }
+  .poster .prog { position: absolute; left: .7rem; right: .7rem; bottom: .7rem; }
+  .poster.focus { transform: scale(1.08); outline-color: #fff; }
+  .row:not(.cur) .poster.focus { transform: none; outline-color: transparent; }
+
+  /* detail */
+  #detail { position: absolute; inset: 0; z-index: 4; background: #07080d; }
+  #dArt { position: absolute; inset: 0; background-size: cover; background-position: center; }
+  #detail::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(7,8,13,.97) 0%, rgba(7,8,13,.75) 45%, rgba(7,8,13,.1) 100%); }
+  .d-text { position: absolute; left: 4rem; top: 50%; transform: translateY(-50%); width: 44rem; z-index: 2; }
+  .d-text h1 { margin: 0 0 .9rem; font-size: 4rem; letter-spacing: -.02em; line-height: 1.1; }
+  .d-text p { font-size: 1.3rem; line-height: 1.6; opacity: .88; margin: 1.2rem 0 2rem; }
+  .btns { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .btn { padding: .9rem 1.7rem; border-radius: .7rem; font-size: 1.2rem; font-weight: 600; background: rgba(255,255,255,.14); outline: .2rem solid transparent; outline-offset: .2rem; }
+  .btn.focus { background: #fff; color: #111; outline-color: rgba(255,255,255,.5); }
+  .d-text .prog { width: 22rem; margin: -1rem 0 1.6rem; }
+  .d-text small { display: block; margin-bottom: 1.6rem; font-size: 1rem; opacity: .7; }
+
+  /* player */
+  #player { position: absolute; inset: 0; z-index: 6; background: #000; }
+  #screen { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .sub { position: absolute; left: 0; right: 0; bottom: 12%; text-align: center; font-size: 1.8rem; font-weight: 600; text-shadow: 0 .15rem .5rem #000, 0 0 .2rem #000; transition: opacity .4s; }
+  .osd { position: absolute; left: 0; right: 0; bottom: 0; padding: 4rem 3.2rem 2.4rem; background: linear-gradient(0deg, rgba(0,0,0,.85), rgba(0,0,0,0)); transition: opacity .3s; }
+  .osd h2 { margin: 0 0 1rem; font-size: 1.8rem; }
+  .bar { display: flex; align-items: center; gap: 1.2rem; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+  .bar .prog { flex: 1; height: .45rem; }
+  .keys { margin-top: 1rem; display: flex; gap: 1.6rem; font-size: 1rem; opacity: .75; }
+  .keys kbd { font: inherit; font-weight: 700; padding: .1rem .5rem; border-radius: .3rem; background: rgba(255,255,255,.18); margin-right: .4rem; }
+  .big { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); width: 7rem; height: 7rem; border-radius: 50%; background: rgba(0,0,0,.55); display: grid; place-items: center; }
+  .big svg { width: 3rem; height: 3rem; fill: #fff; }
+  .seek { position: absolute; top: 45%; transform: translateY(-50%); font-size: 1.6rem; font-weight: 700; padding: .8rem 1.3rem; border-radius: 2rem; background: rgba(0,0,0,.55); opacity: 0; transition: opacity .3s; }
+  .seek.on { opacity: 1; }
+  .fake { position: absolute; top: 1.6rem; right: 2rem; font-size: .9rem; opacity: .55; }
+  .hide { opacity: 0; }
+  #empty { position: absolute; left: 3.2rem; top: 60vh; font-size: 1.3rem; opacity: .7; }
+</style>
+</head>
+<body>
+  <div class="brand">COVE <b>시네마</b><small id="who"></small></div>
+  <section id="browse">
+    <div id="hero"><div id="heroArt"></div>
+      <div class="h-text"><h1 id="hTitle"></h1><div class="meta" id="hMeta"></div><div class="prog" id="hProg" hidden><i></i></div><p id="hDesc"></p></div>
+    </div>
+    <div id="rows"><div id="rowsIn"></div></div>
+    <p id="empty" hidden>볼 수 있는 작품이 없어요.</p>
+  </section>
+  <section id="detail" hidden>
+    <div id="dArt"></div>
+    <div class="d-text"><h1 id="dTitle"></h1><div class="meta" id="dMeta"></div><p id="dDesc"></p><div class="prog" id="dProg" hidden><i></i></div><small id="dNote"></small><div class="btns" id="dBtns"></div></div>
+  </section>
+  <section id="player" hidden>
+    <canvas id="screen"></canvas>
+    <div class="fake">Cove 시네마의 연습용 가상 영상이에요</div>
+    <div class="sub" id="sub"></div>
+    <div class="big" id="big" hidden><svg viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></div>
+    <div class="seek" id="seekL" style="left:18%">« 30초</div>
+    <div class="seek" id="seekR" style="right:18%">30초 »</div>
+    <div class="osd" id="osd"><h2 id="pTitle"></h2>
+      <div class="bar"><span id="pNow">0:00</span><div class="prog"><i id="pBar"></i></div><span id="pDur">0:00</span></div>
+      <div class="keys"><span><kbd>OK</kbd>일시정지 / 재생</span><span><kbd>◀ ▶</kbd>30초 이동</span><span><kbd>뒤로</kbd>그만 보기 (이어 보기로 저장)</span></div>
+    </div>
+  </section>
+
+<script src="sdk.js"></script>
+<script>
+(function () {
+  'use strict';
+  // A made-up catalogue: every title, picture and line here is invented for Cove.
+  // rating: 0 = 전체, 12 = 12세, 15 = 15세. The kids profile sees only 전체 titles.
+  var T = [
+    ['moon',  '달빛 정원', 0, '판타지', 96, ['#1e1b4b', '#6d28d9', '#fde68a'], 'moon', '보름달이 뜨는 밤마다 할머니 정원의 꽃들이 이야기를 시작한다.'],
+    ['lib',   '바다 아래 도서관', 0, '모험', 104, ['#082f49', '#0e7490', '#a5f3fc'], 'waves', '잠수함을 탄 남매가 바다 밑에 가라앉은 도서관의 마지막 책을 찾아 나선다.'],
+    ['momo',  '고양이 탐정 모모', 0, '키즈', 72, ['#7c2d12', '#ea580c', '#fef3c7'], 'cat', '동네 생선 가게의 정어리가 사라졌다. 모모의 수염이 떨리기 시작한다.'],
+    ['star',  '별을 줍는 소년', 0, '판타지', 88, ['#0f172a', '#1d4ed8', '#fef9c3'], 'stars', '밤마다 떨어진 별을 주워 하늘로 돌려보내는 소년의 비밀 아르바이트.'],
+    ['cloud', '구름 우체국', 0, '키즈', 64, ['#0c4a6e', '#38bdf8', '#ffffff'], 'cloud', '구름 위 우체국에서 일하는 펭귄 집배원 포포의 바쁜 하루.'],
+    ['orch',  '숲속 오케스트라', 0, '키즈', 70, ['#14532d', '#16a34a', '#fde047'], 'forest', '숲의 동물들이 첫 음악회를 열기까지 남은 시간은 단 사흘.'],
+    ['train', '마지막 기차의 손님', 12, '미스터리', 112, ['#111827', '#7f1d1d', '#fca5a5'], 'train', '종착역에 도착한 마지막 기차, 승객 명단에 없는 한 사람이 내렸다.'],
+    ['dawn',  '서울, 새벽 4시', 15, '드라마', 118, ['#0b1120', '#334155', '#fbbf24'], 'city', '같은 새벽을 사는 네 사람의 하룻밤이 한 편의점에서 겹친다.'],
+    ['map',   '붉은 사막의 지도', 12, '모험', 109, ['#7c2d12', '#c2410c', '#fde68a'], 'desert', '아버지가 남긴 반쪽 지도를 들고 사막을 건너는 딸의 여정.'],
+    ['mio',   '로봇 수리점 미오', 0, '키즈', 78, ['#134e4a', '#14b8a6', '#fef08a'], 'robot', '고장 난 로봇은 무엇이든 고치는 작은 수리점, 오늘의 손님은 우주 탐사선이다.'],
+    ['jeju',  '제주 바람 레시피', 0, '다큐', 52, ['#164e63', '#0891b2', '#fed7aa'], 'sun', '제주 해녀 할머니들의 부엌에서 배우는 바다의 맛 사계절.'],
+    ['bear',  '북극곰의 겨울', 0, '다큐', 58, ['#0f172a', '#475569', '#f8fafc'], 'snow', '얼음이 녹기 시작한 북극에서 어미곰과 새끼곰의 첫 겨울을 따라간다.'],
+    ['mart',  '은하 끝 편의점', 12, 'SF', 98, ['#1e1b4b', '#be185d', '#a5b4fc'], 'planet', '우주 고속도로 마지막 휴게소, 24시간 문을 여는 편의점의 기묘한 손님들.'],
+    ['quiet', '조용한 이웃', 15, '스릴러', 107, ['#0a0a0a', '#3f3f46', '#e11d48'], 'window', '이사 온 첫날부터 옆집에서는 아무 소리도 들리지 않았다.'],
+    ['king',  '하루만 왕', 12, '코미디', 94, ['#713f12', '#ca8a04', '#fef3c7'], 'crown', '평범한 회사원이 하루 동안 작은 섬나라의 왕이 되어 버렸다.'],
+    ['wave',  '파도를 그리는 사람', 12, '드라마', 101, ['#172554', '#2563eb', '#e0f2fe'], 'waves', '바다를 떠나지 못하는 화가와 바다를 처음 본 소녀의 여름.'],
+    ['dino',  '공룡 박물관의 밤', 0, '키즈', 80, ['#1c1917', '#57534e', '#86efac'], 'bones', '박물관 문이 닫히면 공룡 뼈들이 하나둘 일어나 숨바꼭질을 한다.'],
+    ['clock', '시간 수선공', 12, 'SF', 115, ['#1f2937', '#9a3412', '#fcd34d'], 'clock', '고장 난 시계를 고치면 그 시계 주인의 하루가 되돌아간다.'],
+    ['fog',   '안개 호수', 15, '미스터리', 110, ['#111827', '#4b5563', '#c7d2fe'], 'mountain', '안개가 걷히는 날에만 보이는 호숫가 마을, 그곳에서 사라진 동생.'],
+    ['chef',  '꼬마 요리사 대회', 0, '키즈', 60, ['#831843', '#f43f5e', '#fde68a'], 'sun', '열 살 요리사 여덟 명이 마을 축제 최고의 디저트에 도전한다.']
+  ].map(function (x) { return { id: x[0], title: x[1], rate: x[2], genre: x[3], mins: x[4], pal: x[5], motif: x[6], desc: x[7], year: 2019 + (x[0].charCodeAt(0) + x[0].length) % 7 }; });
+  var BYID = {}; T.forEach(function (t) { BYID[t.id] = t; });
+
+  // ---------- poster art (drawn here, no image files) ----------
+  function rnd(seed) { var s = 0; for (var i = 0; i < seed.length; i++) s = (s * 31 + seed.charCodeAt(i)) >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  function motif(t, W, H) {
+    var r = rnd(t.id), a = t.pal[2], o = '', i;
+    var stars = function (n) { for (var k = 0; k < n; k++) o += '<circle cx="' + (r() * W) + '" cy="' + (r() * H * .6) + '" r="' + (r() * 2.2 + .5) + '" fill="#fff" opacity="' + (.4 + r() * .6) + '"/>'; };
+    switch (t.motif) {
+      case 'moon': stars(40); o += '<circle cx="' + W * .66 + '" cy="' + H * .28 + '" r="' + W * .16 + '" fill="' + a + '"/><circle cx="' + W * .66 + '" cy="' + H * .28 + '" r="' + W * .26 + '" fill="' + a + '" opacity=".12"/>';
+        for (i = 0; i < 9; i++) o += '<circle cx="' + (r() * W) + '" cy="' + (H * .8 + r() * H * .2) + '" r="' + (W * (.05 + r() * .06)) + '" fill="' + ['#f472b6', '#c084fc', '#fbbf24'][i % 3] + '" opacity=".85"/>'; break;
+      case 'waves': for (i = 0; i < 5; i++) { var y = H * (.5 + i * .11); o += '<path d="M0 ' + y + ' Q ' + W * .25 + ' ' + (y - 30) + ' ' + W * .5 + ' ' + y + ' T ' + W + ' ' + y + ' V ' + H + ' H 0Z" fill="' + a + '" opacity="' + (.12 + i * .1) + '"/>'; } o += '<circle cx="' + W * .3 + '" cy="' + H * .25 + '" r="' + W * .09 + '" fill="' + a + '" opacity=".7"/>'; break;
+      case 'cat': o += '<circle cx="' + W * .5 + '" cy="' + H * .55 + '" r="' + W * .28 + '" fill="#111" opacity=".85"/><path d="M' + W * .27 + ' ' + H * .45 + ' L' + W * .3 + ' ' + H * .22 + ' L' + W * .44 + ' ' + H * .33 + 'Z M' + W * .73 + ' ' + H * .45 + ' L' + W * .7 + ' ' + H * .22 + ' L' + W * .56 + ' ' + H * .33 + 'Z" fill="#111" opacity=".85"/><circle cx="' + W * .41 + '" cy="' + H * .52 + '" r="' + W * .04 + '" fill="' + a + '"/><circle cx="' + W * .59 + '" cy="' + H * .52 + '" r="' + W * .04 + '" fill="' + a + '"/>'; break;
+      case 'stars': stars(90); o += '<path d="M0 ' + H * .85 + ' Q ' + W * .5 + ' ' + H * .7 + ' ' + W + ' ' + H * .85 + ' V ' + H + ' H 0Z" fill="#000" opacity=".5"/><circle cx="' + W * .5 + '" cy="' + H * .4 + '" r="' + W * .05 + '" fill="' + a + '"/>'; break;
+      case 'cloud': for (i = 0; i < 6; i++) { var cx = r() * W, cy = H * (.2 + r() * .6), s = W * (.08 + r() * .07); o += '<g fill="' + a + '" opacity="' + (.5 + r() * .4) + '"><circle cx="' + cx + '" cy="' + cy + '" r="' + s + '"/><circle cx="' + (cx + s) + '" cy="' + (cy + s * .2) + '" r="' + s * .8 + '"/><circle cx="' + (cx - s) + '" cy="' + (cy + s * .25) + '" r="' + s * .7 + '"/></g>'; } break;
+      case 'forest': for (i = 0; i < 14; i++) { var x = r() * W, h = H * (.25 + r() * .3), b = H * (.75 + r() * .25); o += '<path d="M' + x + ' ' + (b - h) + ' L' + (x + h * .3) + ' ' + b + ' L' + (x - h * .3) + ' ' + b + 'Z" fill="#052e16" opacity="' + (.5 + r() * .5) + '"/>'; } o += '<circle cx="' + W * .7 + '" cy="' + H * .2 + '" r="' + W * .07 + '" fill="' + a + '"/>'; break;
+      case 'train': o += '<path d="M' + W * .45 + ' ' + H * .45 + ' L0 ' + H + ' M' + W * .55 + ' ' + H * .45 + ' L' + W + ' ' + H + '" stroke="' + a + '" stroke-width="4" opacity=".7"/>'; for (i = 1; i < 9; i++) { var yy = H * .45 + Math.pow(i / 8, 2) * H * .55; o += '<path d="M' + (W * .45 - (yy - H * .45) * .8) + ' ' + yy + ' H ' + (W * .55 + (yy - H * .45) * .8) + '" stroke="' + a + '" stroke-width="2" opacity=".4"/>'; } o += '<circle cx="' + W * .5 + '" cy="' + H * .42 + '" r="' + W * .06 + '" fill="#fff"/><circle cx="' + W * .5 + '" cy="' + H * .42 + '" r="' + W * .2 + '" fill="' + a + '" opacity=".18"/>'; break;
+      case 'city': for (i = 0; i < 12; i++) { var bw = W * (.06 + r() * .08), bh = H * (.2 + r() * .45), bx = i * W / 11 - bw / 2; o += '<rect x="' + bx + '" y="' + (H - bh) + '" width="' + bw + '" height="' + bh + '" fill="#020617" opacity=".9"/>'; for (var w = 0; w < 6; w++) if (r() > .6) o += '<rect x="' + (bx + r() * (bw - 6)) + '" y="' + (H - r() * bh) + '" width="4" height="5" fill="' + a + '"/>'; } break;
+      case 'desert': o += '<circle cx="' + W * .5 + '" cy="' + H * .35 + '" r="' + W * .2 + '" fill="' + a + '" opacity=".8"/>'; for (i = 0; i < 4; i++) { var dy = H * (.6 + i * .1); o += '<path d="M0 ' + dy + ' Q ' + W * (.3 + r() * .4) + ' ' + (dy - 50) + ' ' + W + ' ' + (dy + 10) + ' V ' + H + ' H 0Z" fill="#431407" opacity="' + (.35 + i * .15) + '"/>'; } break;
+      case 'robot': o += '<rect x="' + W * .28 + '" y="' + H * .3 + '" width="' + W * .44 + '" height="' + H * .26 + '" rx="' + W * .06 + '" fill="#e5e7eb"/><circle cx="' + W * .4 + '" cy="' + H * .43 + '" r="' + W * .045 + '" fill="#0f766e"/><circle cx="' + W * .6 + '" cy="' + H * .43 + '" r="' + W * .045 + '" fill="#0f766e"/><path d="M' + W * .5 + ' ' + H * .3 + ' V ' + H * .22 + '" stroke="#e5e7eb" stroke-width="5"/><circle cx="' + W * .5 + '" cy="' + H * .21 + '" r="' + W * .03 + '" fill="' + a + '"/><rect x="' + W * .34 + '" y="' + H * .58 + '" width="' + W * .32 + '" height="' + H * .2 + '" rx="10" fill="#cbd5e1"/>'; break;
+      case 'sun': o += '<circle cx="' + W * .5 + '" cy="' + H * .62 + '" r="' + W * .24 + '" fill="' + a + '"/>'; for (i = 0; i < 12; i++) { var an = Math.PI + i * Math.PI / 11; o += '<path d="M' + (W * .5 + Math.cos(an) * W * .3) + ' ' + (H * .62 + Math.sin(an) * W * .3) + ' L' + (W * .5 + Math.cos(an) * W * .42) + ' ' + (H * .62 + Math.sin(an) * W * .42) + '" stroke="' + a + '" stroke-width="5" stroke-linecap="round"/>'; } o += '<rect y="' + H * .66 + '" width="' + W + '" height="' + H * .34 + '" fill="#000" opacity=".35"/>'; break;
+      case 'snow': stars(30); o += '<path d="M0 ' + H * .7 + ' Q ' + W * .4 + ' ' + H * .55 + ' ' + W + ' ' + H * .72 + ' V ' + H + ' H 0Z" fill="' + a + '"/><ellipse cx="' + W * .55 + '" cy="' + H * .64 + '" rx="' + W * .14 + '" ry="' + W * .08 + '" fill="#fff"/><circle cx="' + W * .45 + '" cy="' + H * .6 + '" r="' + W * .06 + '" fill="#fff"/>'; break;
+      case 'planet': stars(60); o += '<circle cx="' + W * .55 + '" cy="' + H * .4 + '" r="' + W * .2 + '" fill="' + a + '"/><ellipse cx="' + W * .55 + '" cy="' + H * .4 + '" rx="' + W * .34 + '" ry="' + W * .07 + '" fill="none" stroke="#fff" stroke-width="4" opacity=".7" transform="rotate(-18 ' + W * .55 + ' ' + H * .4 + ')"/>'; break;
+      case 'window': o += '<rect x="' + W * .3 + '" y="' + H * .28 + '" width="' + W * .4 + '" height="' + H * .3 + '" fill="' + a + '" opacity=".85"/><path d="M' + W * .5 + ' ' + H * .28 + ' V ' + H * .58 + ' M' + W * .3 + ' ' + H * .43 + ' H ' + W * .7 + '" stroke="#0a0a0a" stroke-width="6"/><circle cx="' + W * .58 + '" cy="' + H * .5 + '" r="' + W * .04 + '" fill="#0a0a0a"/>'; break;
+      case 'crown': o += '<path d="M' + W * .25 + ' ' + H * .55 + ' L' + W * .25 + ' ' + H * .32 + ' L' + W * .38 + ' ' + H * .44 + ' L' + W * .5 + ' ' + H * .26 + ' L' + W * .62 + ' ' + H * .44 + ' L' + W * .75 + ' ' + H * .32 + ' L' + W * .75 + ' ' + H * .55 + 'Z" fill="' + a + '"/><circle cx="' + W * .5 + '" cy="' + H * .47 + '" r="' + W * .03 + '" fill="#dc2626"/>'; break;
+      case 'bones': o += '<path d="M' + W * .2 + ' ' + H * .7 + ' Q ' + W * .3 + ' ' + H * .35 + ' ' + W * .6 + ' ' + H * .4 + ' Q ' + W * .8 + ' ' + H * .42 + ' ' + W * .82 + ' ' + H * .3 + '" stroke="' + a + '" stroke-width="10" fill="none" stroke-linecap="round"/>'; for (i = 0; i < 6; i++) o += '<path d="M' + W * (.32 + i * .06) + ' ' + H * (.43 - i * .005) + ' v ' + H * .14 + '" stroke="' + a + '" stroke-width="6" stroke-linecap="round" opacity=".8"/>'; o += '<circle cx="' + W * .84 + '" cy="' + H * .27 + '" r="' + W * .05 + '" fill="' + a + '"/>'; break;
+      case 'clock': o += '<circle cx="' + W * .5 + '" cy="' + H * .42 + '" r="' + W * .26 + '" fill="none" stroke="' + a + '" stroke-width="7"/>'; for (i = 0; i < 12; i++) { var c = i * Math.PI / 6; o += '<circle cx="' + (W * .5 + Math.cos(c) * W * .21) + '" cy="' + (H * .42 + Math.sin(c) * W * .21) + '" r="3" fill="' + a + '"/>'; } o += '<path d="M' + W * .5 + ' ' + H * .42 + ' L' + W * .5 + ' ' + H * .3 + ' M' + W * .5 + ' ' + H * .42 + ' L' + W * .62 + ' ' + H * .46 + '" stroke="' + a + '" stroke-width="6" stroke-linecap="round"/>'; break;
+      case 'mountain': for (i = 0; i < 4; i++) { var py = H * (.45 + i * .1); o += '<path d="M' + (-W * .2 + r() * W * .3) + ' ' + H + ' L' + (W * (.2 + r() * .6)) + ' ' + py + ' L' + (W * 1.2) + ' ' + H + 'Z" fill="#030712" opacity="' + (.25 + i * .18) + '"/>'; } o += '<rect y="' + H * .5 + '" width="' + W + '" height="' + H * .12 + '" fill="' + a + '" opacity=".15"/>'; break;
+    }
+    return o;
+  }
+  var artCache = {};
+  function art(t, wide) {
+    var k = t.id + (wide ? 'w' : 'p');
+    if (artCache[k]) return artCache[k];
+    var W = wide ? 640 : 320, H = wide ? 360 : 480;
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">' +
+      '<defs><linearGradient id="g" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="' + t.pal[0] + '"/><stop offset="1" stop-color="' + t.pal[1] + '"/></linearGradient></defs>' +
+      '<rect width="' + W + '" height="' + H + '" fill="url(#g)"/>' + motif(t, W, H) +
+      (wide ? '' : '<rect y="' + H * .72 + '" width="' + W + '" height="' + H * .28 + '" fill="#000" opacity=".35"/><text x="20" y="' + (H - 28) + '" font-family="sans-serif" font-weight="800" font-size="' + (t.title.length > 7 ? 30 : 36) + '" fill="#fff">' + t.title + '</text>') + '</svg>';
+    return (artCache[k] = 'data:image/svg+xml,' + encodeURIComponent(s));
+  }
+
+  // ---------- state ----------
+  var $ = function (id) { return document.getElementById(id); };
+  var who = { kids: false, name: '' }, data = { hist: [], fav: [] };
+  var view = 'browse', rows = [], ri = 0, cols = {}, cur = null, dBtn = 0, play = null;
+  function allowed(t) { return !who.kids || t.rate === 0; }
+  function rateHtml(t) { return '<span class="rate r' + t.rate + '">' + (t.rate ? t.rate : '전체') + '</span>'; }
+  function hist(id) { for (var i = 0; i < data.hist.length; i++) if (data.hist[i].id === id) return data.hist[i]; return null; }
+  function mmss(s) { s = Math.max(0, Math.floor(s)); var h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60; return (h ? h + ':' + ('0' + m).slice(-2) : m) + ':' + ('0' + x).slice(-2); }
+  function save() { CoveApp.save(data); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+
+  function buildRows() {
+    var ok = T.filter(allowed);
+    var today = new Date(), seed = today.getFullYear() * 400 + today.getMonth() * 32 + today.getDate();
+    var pick = ok.slice().sort(function (a, b) { return ((a.id.charCodeAt(0) * seed) % 97) - ((b.id.charCodeAt(0) * seed) % 97); }).slice(0, 8);
+    var g = function (list) { return ok.filter(function (t) { return list.indexOf(t.genre) >= 0; }); };
+    var cont = data.hist.filter(function (h) { return !h.done && BYID[h.id] && allowed(BYID[h.id]); }).map(function (h) { return BYID[h.id]; });
+    var favs = data.fav.map(function (id) { return BYID[id]; }).filter(function (t) { return t && allowed(t); });
+    var r = [
+      ['이어 보기', cont], ['내가 찜한 작품', favs], ['오늘의 추천', pick],
+      who.kids ? ['키즈', g(['키즈'])] : ['키즈 · 가족', ok.filter(function (t) { return t.rate === 0; })],
+      ['모험 · 판타지', g(['모험', '판타지'])], ['미스터리 · 스릴러', g(['미스터리', '스릴러'])],
+      ['SF · 코미디', g(['SF', '코미디'])], ['다큐 · 드라마', g(['다큐', '드라마'])]
+    ];
+    rows = r.filter(function (x) { return x[1].length; }).map(function (x) { return { name: x[0], items: x[1] }; });
+  }
+  function renderBrowse(keepRow) {
+    var name = keepRow && rows[ri] ? rows[ri].name : null;
+    buildRows();
+    ri = 0;
+    if (name) for (var i = 0; i < rows.length; i++) if (rows[i].name === name) ri = i;
+    $('empty').hidden = rows.length > 0;
+    $('rowsIn').innerHTML = rows.map(function (r, i) {
+      return '<div class="row" data-r="' + i + '"><h3>' + esc(r.name) + '</h3><div class="strip">' + r.items.map(function (t) {
+        var h = hist(t.id), p = h && !h.done ? '<div class="prog"><i style="width:' + Math.round(100 * h.pos / h.dur) + '%"></i></div>' : '';
+        return '<div class="poster" style="background-image:url(&quot;' + art(t) + '&quot;)">' + p + '</div>';
+      }).join('') + '</div></div>';
+    }).join('');
+    showFocus();
+  }
+  function showFocus() {
+    if (!rows.length) return;
+    var els = document.querySelectorAll('.row');
+    els.forEach(function (el, i) { el.classList.toggle('cur', i === ri); });
+    var row = rows[ri], ci = Math.min(cols[row.name] || 0, row.items.length - 1);
+    cols[row.name] = ci;
+    document.querySelectorAll('.poster.focus').forEach(function (p) { p.classList.remove('focus'); });
+    els.forEach(function (el, i) {
+      var n = rows[i].name, c = Math.min(cols[n] || 0, rows[i].items.length - 1), strip = el.querySelector('.strip');
+      var p = strip.children[c];
+      if (p) p.classList.add('focus');
+      var rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      strip.style.transform = 'translateX(' + (-Math.max(0, c - 2) * 10.7 * rem) + 'px)';
+    });
+    var target = els[ri];
+    $('rowsIn').style.transform = 'translateY(' + (-target.offsetTop) + 'px)';
+    cur = row.items[ci];
+    $('heroArt').style.backgroundImage = 'url("' + art(cur, true) + '")';
+    $('hTitle').textContent = cur.title;
+    $('hMeta').innerHTML = rateHtml(cur) + '<span>' + cur.year + '</span><span>·</span><span>' + cur.genre + '</span><span>·</span><span>' + Math.floor(cur.mins / 60) + '시간 ' + (cur.mins % 60) + '분</span>';
+    $('hDesc').textContent = cur.desc;
+    var h = hist(cur.id);
+    $('hProg').hidden = !(h && !h.done);
+    if (h && !h.done) $('hProg').firstChild.style.width = Math.round(100 * h.pos / h.dur) + '%';
+  }
+  function browseKey(k) {
+    if (k === 'back') { CoveApp.exit(); return; }
+    if (!rows.length) return;
+    var row = rows[ri];
+    if (k === 'left') cols[row.name] = Math.max(0, (cols[row.name] || 0) - 1);
+    else if (k === 'right') cols[row.name] = Math.min(row.items.length - 1, (cols[row.name] || 0) + 1);
+    else if (k === 'up') ri = Math.max(0, ri - 1);
+    else if (k === 'down') ri = Math.min(rows.length - 1, ri + 1);
+    else if (k === 'ok') { openDetail(cur); return; }
+    showFocus();
+  }
+
+  // ---------- detail ----------
+  function detailBtns() {
+    var h = hist(cur.id), b = [];
+    if (h && !h.done) b.push(['resume', '▶ 이어 보기 ' + mmss(h.pos)], ['start', '처음부터']);
+    else b.push(['start', '▶ 재생']);
+    b.push(['fav', data.fav.indexOf(cur.id) >= 0 ? '✓ 찜함' : '+ 찜하기']);
+    return b;
+  }
+  function openDetail(t) {
+    cur = t; view = 'detail'; dBtn = 0;
+    $('detail').hidden = false;
+    renderDetail();
+  }
+  function renderDetail() {
+    var t = cur, h = hist(t.id);
+    $('dArt').style.backgroundImage = 'url("' + art(t, true) + '")';
+    $('dTitle').textContent = t.title;
+    $('dMeta').innerHTML = rateHtml(t) + '<span>' + t.year + '</span><span>·</span><span>' + t.genre + '</span><span>·</span><span>' + Math.floor(t.mins / 60) + '시간 ' + (t.mins % 60) + '분</span>';
+    $('dDesc').textContent = t.desc;
+    $('dProg').hidden = !(h && !h.done);
+    if (h && !h.done) $('dProg').firstChild.style.width = Math.round(100 * h.pos / h.dur) + '%';
+    $('dNote').textContent = h ? (h.done ? '끝까지 본 작품이에요' : '남은 시간 ' + mmss(h.dur - h.pos)) : '';
+    var b = detailBtns();
+    dBtn = Math.min(dBtn, b.length - 1);
+    $('dBtns').innerHTML = b.map(function (x, i) { return '<div class="btn' + (i === dBtn ? ' focus' : '') + '">' + x[1] + '</div>'; }).join('');
+  }
+  function detailKey(k) {
+    var b = detailBtns();
+    if (k === 'back') { view = 'browse'; $('detail').hidden = true; renderBrowse(true); return; }
+    if (k === 'left') dBtn = Math.max(0, dBtn - 1);
+    else if (k === 'right') dBtn = Math.min(b.length - 1, dBtn + 1);
+    else if (k === 'ok') {
+      var a = b[dBtn][0];
+      if (a === 'fav') {
+        var i = data.fav.indexOf(cur.id);
+        if (i >= 0) data.fav.splice(i, 1); else data.fav.unshift(cur.id);
+        save();
+      } else { startPlay(a === 'resume' ? hist(cur.id).pos : 0); return; }
+    }
+    renderDetail();
+  }
+
+  // ---------- the pretend player ----------
+  var LINES = ['…', '여기가 맞는 것 같아.', '조금만 더 가 보자.', '들었어? 방금 그 소리.', '괜찮아, 내가 옆에 있을게.', '이건 처음 보는 길이야.',
+    '그때도 이런 밤이었지.', '서두르지 않아도 돼.', '저 불빛 따라가면 될까?', '비밀로 해 줄 수 있어?', '와… 정말 예쁘다.', '내일 다시 오자.'];
+  function startPlay(pos) {
+    var t = cur;
+    view = 'player';
+    $('player').hidden = false;
+    $('pTitle').textContent = t.title;
+    var img = new Image();
+    img.src = art(t, true);
+    play = { t: t, pos: pos, dur: t.mins * 60, last: Date.now(), paused: false, img: img, osdUntil: Date.now() + 4000, saved: Date.now(), parts: [] };
+    var r = rnd(t.id + 'p');
+    for (var i = 0; i < 40; i++) play.parts.push({ x: r(), y: r(), s: r() * 2 + .6, v: r() * .02 + .005 });
+    loop();
+  }
+  function stopPlay(done) {
+    if (!play) return;
+    var t = play.t, h = hist(t.id);
+    if (!h) { h = { id: t.id }; data.hist.unshift(h); }
+    else { data.hist.splice(data.hist.indexOf(h), 1); data.hist.unshift(h); }
+    h.title = t.title; h.dur = play.dur; h.t = Date.now();
+    h.done = !!done || play.pos >= play.dur - 60;
+    h.pos = h.done ? 0 : Math.floor(play.pos);
+    data.hist = data.hist.slice(0, 30);
+    save();
+    play = null;
+    $('player').hidden = true;
+    view = 'detail';
+    renderDetail();
+  }
+  function playerKey(k) {
+    if (k === 'back') { stopPlay(false); return; }
+    play.osdUntil = Date.now() + 4000;
+    if (k === 'ok') { play.paused = !play.paused; play.last = Date.now(); }
+    else if (k === 'left' || k === 'right') {
+      play.pos = Math.max(0, Math.min(play.dur - 1, play.pos + (k === 'left' ? -30 : 30)));
+      var el = $(k === 'left' ? 'seekL' : 'seekR');
+      el.classList.add('on'); clearTimeout(el._t); el._t = setTimeout(function () { el.classList.remove('on'); }, 600);
+    }
+  }
+  function loop() {
+    if (!play) return;
+    var now = Date.now();
+    if (!play.paused) play.pos += Math.min(1, (now - play.last) / 1000);   // no jump after the TV slept
+    play.last = now;
+    if (play.pos >= play.dur) { stopPlay(true); return; }
+    if (now - play.saved > 20000) { play.saved = now; var keep = play; stopPlayQuiet(keep); }
+    var c = $('screen'), W = c.clientWidth, H = c.clientHeight;
+    if (c.width !== W) { c.width = W; c.height = H; }
+    var x = c.getContext('2d');
+    x.fillStyle = '#000'; x.fillRect(0, 0, W, H);
+    // slow pan and zoom over the title's picture, so time visibly moves
+    var z = 1.15 + .1 * Math.sin(play.pos / 23), ox = Math.sin(play.pos / 31) * W * .04, oy = Math.cos(play.pos / 37) * H * .03;
+    if (play.img.complete) x.drawImage(play.img, (W - W * z) / 2 + ox, (H - H * z) / 2 + oy, W * z, H * z);
+    x.fillStyle = 'rgba(255,255,255,.7)';
+    play.parts.forEach(function (p) {
+      var yy = ((p.y - play.pos * p.v) % 1 + 1) % 1;
+      x.beginPath(); x.arc(p.x * W, yy * H, p.s * W / 960, 0, 7); x.fill();
+    });
+    var bh = H * .09; x.fillStyle = '#000'; x.fillRect(0, 0, W, bh); x.fillRect(0, H - bh, W, bh);
+    var li = Math.floor(play.pos / 6);
+    $('sub').textContent = li % 3 === 2 ? '' : LINES[(li * 7 + play.t.id.length) % LINES.length];
+    var show = play.paused || now < play.osdUntil;
+    $('osd').classList.toggle('hide', !show);
+    $('big').hidden = !play.paused;
+    $('pNow').textContent = mmss(play.pos); $('pDur').textContent = mmss(play.dur);
+    $('pBar').style.width = (100 * play.pos / play.dur) + '%';
+    requestAnimationFrame(loop);
+  }
+  // keep the place every 20 s, so switching the TV off mid-film still resumes close to where it stopped
+  function stopPlayQuiet(p) {
+    var h = hist(p.t.id);
+    if (!h) { h = { id: p.t.id }; data.hist.unshift(h); }
+    h.title = p.t.title; h.dur = p.dur; h.t = Date.now(); h.done = false; h.pos = Math.floor(p.pos);
+    save();
+  }
+
+  CoveApp.onInit(function (profile, d) {
+    who = profile || who;
+    data = d && typeof d === 'object' ? d : {};
+    if (!Array.isArray(data.hist)) data.hist = [];
+    if (!Array.isArray(data.fav)) data.fav = [];
+    $('who').textContent = (who.name || '') + (who.kids ? ' · 키즈' : '');
+    renderBrowse(false);
+  });
+  CoveApp.onKey(function (k) {
+    if (view === 'player') playerKey(k);
+    else if (view === 'detail') detailKey(k);
+    else browseKey(k);
+  });
+})();
+</script>
+</body>
+</html>

@@ -160,7 +160,8 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         // Stops moving backgrounds and other page work while another app is on screen.
-        if (::web.isInitialized) web.onPause()
+        // Cove.pause() first, so a mini app's timer stops while the TV sleeps or another app is in front.
+        if (::web.isInitialized) { js("Cove.pause && Cove.pause()"); web.onPause() }
         super.onPause()
     }
 

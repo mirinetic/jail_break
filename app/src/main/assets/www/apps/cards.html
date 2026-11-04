@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>짝꿍 카드</title>
+<style>
+  html { font-size: calc(100vw / 96); background: #062a26; }
+  body { margin: 0; height: 100vh; overflow: hidden; color: #f4f5f8; cursor: none;
+    background: radial-gradient(ellipse at 30% 20%, #0f766e 0%, #064e45 45%, #042f2a 100%);
+    font-family: "Roboto", "Noto Sans CJK KR", "Noto Sans KR", sans-serif; -webkit-font-smoothing: antialiased; }
+  [hidden] { display: none !important; }
+  header { position: absolute; top: 2rem; left: 3.2rem; right: 3.2rem; display: flex; align-items: baseline; gap: 1.2rem; }
+  header h1 { margin: 0; font-size: 2rem; font-weight: 800; }
+  header span { font-size: 1.1rem; opacity: .75; }
+  .stats { margin-left: auto; display: flex; gap: 2rem; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+  .stats b { font-size: 1.6rem; margin-left: .4rem; }
+
+  /* level select */
+  #menu { position: absolute; inset: 0; display: grid; place-items: center; }
+  .levels { display: flex; gap: 2.4rem; }
+  .lv { width: 17rem; padding: 2rem 1.8rem; border-radius: 1.4rem; background: rgba(255,255,255,.08); text-align: center;
+    outline: .25rem solid transparent; outline-offset: .3rem; transition: transform .2s, background .2s; }
+  .lv.focus { transform: scale(1.06); background: rgba(255,255,255,.18); outline-color: #fde68a; }
+  .lv h2 { margin: .4rem 0 .3rem; font-size: 1.9rem; }
+  .lv .size { font-size: 1.2rem; opacity: .8; }
+  .lv .mini { display: grid; gap: .3rem; justify-content: center; margin: 0 auto 1rem; }
+  .lv .mini i { width: 1.3rem; height: 1.7rem; border-radius: .25rem; background: #fde68a; opacity: .85; }
+  .lv .best { margin-top: 1.1rem; font-size: 1.05rem; opacity: .85; min-height: 2.6rem; line-height: 1.3; }
+  .intro { text-align: center; margin-bottom: 2.6rem; font-size: 1.3rem; opacity: .85; line-height: 1.6; }
+
+  /* board */
+  #game { position: absolute; inset: 6rem 0 4rem; display: grid; place-items: center; }
+  .board { display: grid; gap: 1.1rem; }
+  .card { position: relative; perspective: 60rem; border-radius: 1rem; outline: .3rem solid transparent; outline-offset: .3rem; transition: outline-color .15s, transform .15s; }
+  .card.focus { outline-color: #fde68a; transform: scale(1.05); }
+  .card .in { position: absolute; inset: 0; transition: transform .35s cubic-bezier(.3,.7,.3,1); transform-style: preserve-3d; }
+  .card.up .in { transform: rotateY(180deg); }
+  .card .f, .card .b { position: absolute; inset: 0; border-radius: 1rem; -webkit-backface-visibility: hidden; backface-visibility: hidden; display: grid; place-items: center; }
+  .card .b { background: repeating-linear-gradient(45deg, #fbbf24 0 .6rem, #f59e0b .6rem 1.2rem); box-shadow: inset 0 0 0 .4rem #fff7; }
+  .card .b::after { content: "?"; font-size: 3rem; font-weight: 800; color: #fff; text-shadow: 0 .15rem .3rem rgba(0,0,0,.25); }
+  .card .f { background: #fffdf5; transform: rotateY(180deg); box-shadow: 0 .4rem 1rem rgba(0,0,0,.3); }
+  .card .f svg { width: 68%; height: 68%; }
+  .card.done .f { box-shadow: 0 0 0 .3rem #4ade80, 0 .4rem 1rem rgba(0,0,0,.3); }
+  .card.done { opacity: .78; }
+
+  #win { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(2,20,18,.7); }
+  .win { text-align: center; padding: 3rem 4rem; border-radius: 1.6rem; background: rgba(255,255,255,.1); }
+  .win h2 { margin: 0 0 1rem; font-size: 3rem; }
+  .win p { font-size: 1.4rem; margin: .5rem 0; }
+  .win .new { color: #fde68a; font-weight: 800; }
+  .hint { position: absolute; left: 0; right: 0; bottom: 1.6rem; display: flex; justify-content: center; gap: 2rem; font-size: 1.05rem; opacity: .75; }
+  .hint kbd { font: inherit; font-weight: 700; padding: .1rem .5rem; border-radius: .3rem; background: rgba(255,255,255,.18); margin-right: .4rem; }
+</style>
+</head>
+<body>
+  <header><h1>짝꿍 카드</h1><span id="who"></span><div class="stats" id="stats" hidden><span>뒤집기<b id="moves">0</b></span><span>시간<b id="time">0:00</b></span><span>찾은 짝<b id="pairs">0</b></span></div></header>
+  <section id="menu">
+    <div><div class="intro">같은 그림 두 장을 찾아요. 시간 제한은 없으니 천천히 기억해 보세요.</div><div class="levels" id="levels"></div></div>
+  </section>
+  <section id="game" hidden><div class="board" id="board"></div></section>
+  <section id="win" hidden><div class="win"><h2>다 찾았어요! 🎉</h2><p id="winText"></p><p id="winBest"></p><p style="opacity:.75;font-size:1.1rem;margin-top:1.6rem">OK 한 번 더 · 뒤로 단계 고르기</p></div></section>
+  <div class="hint" id="hint"></div>
+
+<script src="sdk.js"></script>
+<script>
+(function () {
+  'use strict';
+  var LEVELS = [{ id: '3x4', name: '쉬움', r: 3, c: 4 }, { id: '4x4', name: '보통', r: 4, c: 4 }, { id: '4x5', name: '어려움', r: 4, c: 5 }];
+  // ten simple pictures, each in its own colour so they can be told apart quickly
+  var PICS = [
+    '<path d="M50 84C22 64 10 50 10 34a20 20 0 0 1 40-6 20 20 0 0 1 40 6c0 16-12 30-40 50z" fill="#ef4444"/>',
+    '<path d="M50 8l12 26 28 3-21 19 6 28-25-14-25 14 6-28L10 37l28-3z" fill="#f59e0b"/>',
+    '<path d="M62 10a38 38 0 1 0 28 56A32 32 0 0 1 62 10z" fill="#6366f1"/>',
+    '<circle cx="50" cy="50" r="20" fill="#f97316"/><g stroke="#f97316" stroke-width="7" stroke-linecap="round"><path d="M50 10v12M50 78v12M10 50h12M78 50h12M22 22l8 8M70 70l8 8M78 22l-8 8M30 70l-8 8"/></g>',
+    '<g fill="#ec4899"><circle cx="50" cy="28" r="15"/><circle cx="72" cy="45" r="15"/><circle cx="64" cy="70" r="15"/><circle cx="36" cy="70" r="15"/><circle cx="28" cy="45" r="15"/></g><circle cx="50" cy="52" r="11" fill="#fde047"/>',
+    '<path d="M12 50c14-20 40-26 58-12l18-14v52L70 62C52 76 26 70 12 50z" fill="#0ea5e9"/><circle cx="30" cy="46" r="4" fill="#fff"/>',
+    '<path d="M50 90V40M50 40c-30 0-36-24-30-32 26 0 34 14 30 32zM50 56c26 0 34-20 28-28-22 0-30 12-28 28z" fill="#22c55e" stroke="#15803d" stroke-width="4" stroke-linejoin="round"/>',
+    '<path d="M50 8C36 32 24 46 24 62a26 26 0 0 0 52 0C76 46 64 32 50 8z" fill="#06b6d4"/>',
+    '<path d="M58 6L18 56h26l-8 38 42-52H52z" fill="#eab308"/>',
+    '<path d="M36 74V20l46-10v52" fill="none" stroke="#8b5cf6" stroke-width="8" stroke-linejoin="round"/><ellipse cx="26" cy="74" rx="12" ry="9" fill="#8b5cf6"/><ellipse cx="72" cy="64" rx="12" ry="9" fill="#8b5cf6"/>'
+  ];
+  var $ = function (id) { return document.getElementById(id); };
+  var who = {}, data = {};
+  var view = 'menu', lvSel = 0, lv = null, cards = [], sel = 0, open = [], moves = 0, found = 0, t0 = 0, lock = false, timer = null, backArmed = 0, lastWin = null;
+
+  function fmt(s) { s = Math.round(s); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
+  function hint(list) { $('hint').innerHTML = list.map(function (h) { return '<span><kbd>' + h[0] + '</kbd>' + h[1] + '</span>'; }).join(''); }
+
+  function renderMenu() {
+    view = 'menu';
+    $('menu').hidden = false; $('game').hidden = true; $('win').hidden = true; $('stats').hidden = true;
+    var best = data.best || {};
+    $('levels').innerHTML = LEVELS.map(function (l, i) {
+      var b = best[l.id], dots = '';
+      for (var k = 0; k < l.r * l.c; k++) dots += '<i></i>';
+      return '<div class="lv' + (i === lvSel ? ' focus' : '') + '"><div class="mini" style="grid-template-columns:repeat(' + l.c + ',1.3rem)">' + dots + '</div>' +
+        '<h2>' + l.name + '</h2><div class="size">' + l.r + ' × ' + l.c + ' · 짝 ' + (l.r * l.c / 2) + '쌍</div>' +
+        '<div class="best">' + (b ? '최고 기록<br>' + b.moves + '번 · ' + fmt(b.secs) : '아직 기록이 없어요') + '</div></div>';
+    }).join('');
+    hint([['◀ ▶', '단계 고르기'], ['OK', '시작'], ['뒤로', '나가기']]);
+  }
+
+  function start(l) {
+    lv = l; view = 'game';
+    var n = l.r * l.c / 2, pics = [];
+    var order = PICS.map(function (_, i) { return i; }).sort(function () { return Math.random() - .5; }).slice(0, n);
+    order.forEach(function (p) { pics.push(p, p); });
+    for (var i = pics.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), x = pics[i]; pics[i] = pics[j]; pics[j] = x; }
+    cards = pics.map(function (p) { return { pic: p, up: false, done: false }; });
+    sel = 0; open = []; moves = 0; found = 0; t0 = 0; lock = false; backArmed = 0;
+    $('menu').hidden = true; $('win').hidden = true; $('game').hidden = false; $('stats').hidden = false;
+    // cards sized to fit the screen between the header and the hints
+    var rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    var h = Math.min((innerHeight - 10 * rem - (l.r - 1) * 1.1 * rem) / l.r, ((innerWidth - 8 * rem) - (l.c - 1) * 1.1 * rem) / l.c / .75);
+    var w = h * .75;
+    var b = $('board');
+    b.style.gridTemplateColumns = 'repeat(' + l.c + ',' + w + 'px)';
+    b.innerHTML = cards.map(function (c) {
+      return '<div class="card" style="width:' + w + 'px;height:' + h + 'px"><div class="in"><div class="b"></div><div class="f"><svg viewBox="0 0 100 100">' + PICS[c.pic] + '</svg></div></div></div>';
+    }).join('');
+    clearInterval(timer);
+    timer = setInterval(stats, 500);
+    renderBoard();
+    hint([['방향키', '이동'], ['OK', '뒤집기'], ['뒤로', '단계 고르기']]);
+  }
+  function stats() {
+    $('moves').textContent = moves;
+    $('pairs').textContent = found + ' / ' + cards.length / 2;
+    $('time').textContent = fmt(t0 ? (Date.now() - t0) / 1000 : 0);
+  }
+  function renderBoard() {
+    var els = $('board').children;
+    for (var i = 0; i < els.length; i++) {
+      els[i].classList.toggle('up', cards[i].up || cards[i].done);
+      els[i].classList.toggle('done', cards[i].done);
+      els[i].classList.toggle('focus', i === sel);
+    }
+    stats();
+  }
+  function flip() {
+    var c = cards[sel];
+    if (c.up || c.done) return;
+    if (lock) settle();           // pressing on while two wrong cards are showing turns them back at once
+    if (!t0) t0 = Date.now();
+    c.up = true; open.push(sel);
+    if (open.length === 2) {
+      moves++;
+      var a = cards[open[0]], b = cards[open[1]];
+      if (a.pic === b.pic) { a.done = b.done = true; a.up = b.up = false; open = []; found++; if (found === cards.length / 2) { renderBoard(); setTimeout(win, 500); return; } }
+      else { lock = true; clearTimeout(flip.t); flip.t = setTimeout(function () { settle(); renderBoard(); }, 1100); }
+    }
+    renderBoard();
+  }
+  function settle() { clearTimeout(flip.t); open.forEach(function (i) { cards[i].up = false; }); open = []; lock = false; }
+  function win() {
+    clearInterval(timer);
+    var secs = (Date.now() - t0) / 1000;
+    data.best = data.best || {};
+    var b = data.best[lv.id], isNew = !b || moves < b.moves || (moves === b.moves && secs < b.secs);
+    if (isNew) data.best[lv.id] = { moves: moves, secs: Math.round(secs), t: Date.now() };
+    data.played = (data.played || 0) + 1;
+    CoveApp.save(data);
+    view = 'win';
+    $('winText').textContent = moves + '번 뒤집어서 ' + fmt(secs) + ' 만에 ' + (cards.length / 2) + '쌍을 모두 찾았어요';
+    $('winBest').innerHTML = isNew ? '<span class="new">★ 새 최고 기록!</span>' : '최고 기록 ' + b.moves + '번 · ' + fmt(b.secs);
+    $('win').hidden = false;
+    hint([['OK', '한 번 더'], ['뒤로', '단계 고르기']]);
+  }
+  function gameKey(k) {
+    if (k === 'back') {
+      if (!t0 || Date.now() - backArmed < 2500) { clearInterval(timer); renderMenu(); return; }
+      backArmed = Date.now(); CoveApp.toast('한 번 더 누르면 단계 고르기로 나가요'); return;
+    }
+    var r = Math.floor(sel / lv.c), c = sel % lv.c;
+    if (k === 'left') c = (c + lv.c - 1) % lv.c;
+    else if (k === 'right') c = (c + 1) % lv.c;
+    else if (k === 'up') r = (r + lv.r - 1) % lv.r;
+    else if (k === 'down') r = (r + 1) % lv.r;
+    else if (k === 'ok') { flip(); return; }
+    sel = r * lv.c + c;
+    renderBoard();
+  }
+
+  CoveApp.onInit(function (profile, d) {
+    who = profile || {};
+    data = d && typeof d === 'object' ? d : {};
+    $('who').textContent = who.name ? who.name + '의 기록' : '';
+    renderMenu();
+  });
+  CoveApp.onKey(function (k) {
+    if (view === 'menu') {
+      if (k === 'back') CoveApp.exit();
+      else if (k === 'left') { lvSel = Math.max(0, lvSel - 1); renderMenu(); }
+      else if (k === 'right') { lvSel = Math.min(LEVELS.length - 1, lvSel + 1); renderMenu(); }
+      else if (k === 'ok') start(LEVELS[lvSel]);
+    } else if (view === 'win') {
+      if (k === 'ok') start(lv); else if (k === 'back') renderMenu();
+    } else gameKey(k);
+  });
+})();
+</script>
+</body>
+</html>

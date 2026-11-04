@@ -142,6 +142,7 @@
   // that has "새 앱 자동 추가" on.
   function loadApps() {
     try { APPS = N ? JSON.parse(N.apps()) : sampleApps(); } catch (e) { APPS = []; }
+    APPS = APPS.concat(miniApps());
     BYPKG = {};
     APPS.forEach(function (a) { BYPKG[a.pkg] = a; });
     var pkgs = APPS.map(function (a) { return a.pkg; });
@@ -151,6 +152,8 @@
       fresh.forEach(function (p) {
         ROOT.profiles.forEach(function (pr) {
           if (pr.prefs.autoAdd !== false && Array.isArray(pr.prefs.apps) && pr.prefs.apps.indexOf(p) < 0) { pr.prefs.apps.push(p); changed = true; }
+          // Cove's own mini apps are safe for children (the cinema shows them only all-ages titles)
+          if (pr.kind === 'kids' && BYPKG[p].mini && Array.isArray(pr.allow) && pr.allow.indexOf(p) < 0) { pr.allow.push(p); changed = true; }
         });
       });
     }
@@ -182,8 +185,8 @@
   function tabsMode() { return (P.layout === 'minimal' || P.layout === 'dock') && hasRows(); }
   // Designs that show apps in a single horizontal row
   function oneRow() { return P.layout === 'minimal' || P.layout === 'dock' || (P.layout === 'theater' && !sectioned()); }
-  function iconUrl(a) { return N ? '/icon/' + encodeURIComponent(a.pkg) : a.icon; }
-  function bannerUrl(a) { return N ? '/banner/' + encodeURIComponent(a.pkg) : a.bannerUrl; }
+  function iconUrl(a) { return N && !a.mini ? '/icon/' + encodeURIComponent(a.pkg) : a.icon; }
+  function bannerUrl(a) { return N && !a.mini ? '/banner/' + encodeURIComponent(a.pkg) : a.bannerUrl; }
   function sortedApps() { return APPS.slice().sort(function (a, b) { return a.label.localeCompare(b.label, 'ko'); }); }
 
   // ---------- backgrounds ----------
@@ -419,7 +422,7 @@
     showNextEvent();
     showMemoLine();
     if (ROOT && ROOT.cal && ROOT.cal.subs && ROOT.cal.subs.length) syncCalendars(false);
-    if (ROOT) idleCheck();
+    if (ROOT) { idleCheck(); limitTick(); }
   }
 
   // ---------- render ----------
@@ -681,12 +684,217 @@
       openPin({ mode: 'check', title: '"' + (BYPKG[pkg] ? BYPKG[pkg].label : pkg) + '" 열기', onOk: function () { launch(pkg); } });
       return;
     }
+    if (msLeft(current()) <= 0) { timeUp(function () { launch(pkg, true); }); return; }
     var a = BYPKG[pkg];
     P.recent = [pkg].concat(P.recent.filter(function (x) { return x !== pkg; })).slice(0, 12);
     savePrefs();
-    if (N) { if (!N.launch(pkg)) toast('앱을 열 수 없어요'); }
-    else toast((a ? a.label : pkg) + ' 실행 (미리보기에서는 실제로 열리지 않아요)');
+    if (a && a.mini) { openMini(pkg); return; }
+    if (N) {
+      if (!N.launch(pkg)) { toast('앱을 열 수 없어요'); return; }
+      countOpen(pkg);
+      away = { pkg: pkg, pid: ROOT.current, t: Date.now() };
+    }
+    else { countOpen(pkg); toast((a ? a.label : pkg) + ' 실행 (미리보기에서는 실제로 열리지 않아요)'); }
   }
+
+  // ---------- mini apps: pages that run inside Cove ----------
+  // They need no TV permission. Cove passes them the remote keys and the profile, keeps their data per
+  // profile (ROOT.appdata) and counts their use; Back at their first screen returns here.
+  var MINI = [
+    { pkg: 'cove.cinema', label: 'Cove 시네마', page: 'apps/cinema.html', c1: '#4c1d95', c2: '#db2777', words: ['시네마', '영화관'],
+      sym: '<rect x="44" y="56" width="104" height="80" rx="14" fill="none" stroke="#fff" stroke-width="9"/><path d="M84 76v40l34-20z" fill="#fff"/><path d="M60 40l20 16M132 40l-20 16" stroke="#fff" stroke-width="8" stroke-linecap="round"/>' },
+    { pkg: 'cove.cards', label: '짝꿍 카드', page: 'apps/cards.html', c1: '#0f766e', c2: '#22c55e', words: ['짝꿍', '카드게임', '카드놀이', '같은그림'],
+      sym: '<rect x="40" y="52" width="62" height="88" rx="12" fill="#fff" transform="rotate(-12 71 96)"/><rect x="90" y="52" width="62" height="88" rx="12" fill="#fde68a" transform="rotate(10 121 96)"/><path d="M71 84c-6-9-20-4-15 7 2 5 9 10 15 15 6-5 13-10 15-15 5-11-9-16-15-7z" fill="#ef4444" transform="rotate(-12 71 96)"/><path d="M121 78l5 11 12 1-9 8 3 12-11-6-11 6 3-12-9-8 12-1z" fill="#0f766e" transform="rotate(10 121 96)"/>' }
+  ];
+  function miniSvg(m, w, h) {
+    var sq = w === h;
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
+      '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + m.c1 + '"/><stop offset="1" stop-color="' + m.c2 + '"/></linearGradient></defs>' +
+      '<rect width="' + w + '" height="' + h + '" rx="' + (sq ? 40 : 0) + '" fill="url(#g)"/>' +
+      (sq ? m.sym : '<g transform="translate(36 84)">' + m.sym + '</g><text x="246" y="196" font-family="sans-serif" font-weight="800" font-size="50" fill="#fff">' + m.label + '</text>') + '</svg>';
+    return 'data:image/svg+xml,' + encodeURIComponent(s);
+  }
+  function miniApps() {
+    return MINI.map(function (m) {
+      return { pkg: m.pkg, label: m.label, color: m.c1, iconBg: m.c1, banner: true, mini: true, page: m.page, icon: miniSvg(m, 192, 192), bannerUrl: miniSvg(m, 640, 360) };
+    });
+  }
+  function isMini(pkg) { return !!(BYPKG[pkg] && BYPKG[pkg].mini); }
+
+  var mini = null;   // the open mini app {pkg, pid, start, from, frame, ready}
+  var away = null;   // a TV app opened from Cove {pkg, pid, t}: its time is the time until Cove comes back
+  function appData(pid, pkg) { ROOT.appdata = ROOT.appdata || {}; var d = ROOT.appdata[pid] = ROOT.appdata[pid] || {}; return d[pkg] || {}; }
+  function openMini(pkg) {
+    var a = BYPKG[pkg];
+    var from = base === 'drawer' ? 'drawer' : 'home';
+    closePanelQuiet();
+    if (focusEl) { lastFocus[from] = focusEl.getAttribute('data-pkg') || lastFocus[from]; focusEl.classList.remove('focus'); }
+    $('drawer').hidden = true;
+    base = 'mini';
+    var box = $('mini');
+    box.innerHTML = '<iframe src="' + a.page + '" tabindex="-1" title="' + esc(a.label) + '"></iframe>';
+    box.hidden = false;
+    mini = { pkg: pkg, pid: ROOT.current, start: Date.now(), from: from, frame: box.querySelector('iframe'), ready: false };
+    countOpen(pkg);
+  }
+  function endMini() {
+    if (!mini) return null;
+    if (mini.start) addTime(mini.pid, mini.pkg, Date.now() - mini.start);
+    var from = mini.from;
+    mini = null;
+    $('mini').hidden = true;
+    $('mini').innerHTML = '';
+    base = 'home';
+    return from;
+  }
+  function closeMini() {
+    var from = endMini();
+    if (from === 'drawer') openDrawer(); else restoreFocus('home');
+  }
+  function miniPost(m) { if (mini && mini.frame.contentWindow) mini.frame.contentWindow.postMessage(m, '*'); }
+  function miniKey(k) {
+    if (!mini.ready) { if (k === 'back') closeMini(); return; }
+    miniPost({ type: 'key', key: k === 'longok' ? 'ok' : k });
+  }
+  window.addEventListener('message', function (e) {
+    if (!mini || e.source !== mini.frame.contentWindow) return;
+    var m = e.data || {};
+    if (m.type === 'ready') {
+      mini.ready = true;
+      var pr = profileById(mini.pid);
+      miniPost({ type: 'init', profile: { id: pr.id, name: pr.name, kids: pr.kind === 'kids' }, data: appData(mini.pid, mini.pkg) });
+    } else if (m.type === 'save' && m.data && typeof m.data === 'object') {
+      appData(mini.pid, mini.pkg);
+      ROOT.appdata[mini.pid][mini.pkg] = m.data;
+      savePrefs();
+    } else if (m.type === 'exit') closeMini();
+    else if (m.type === 'toast') toast(String(m.text || '').slice(0, 120));
+  });
+
+  // ---------- usage history and the daily time limit ----------
+  // ROOT.usage[profileId][pkg] = {opens, ms, last, days: {'2026-11-04': ms}}. Mini apps are timed exactly;
+  // a TV app's time is how long Cove stayed in the background after opening it (an estimate).
+  var LIMITS = [['0', '끄기'], ['15', '15분'], ['30', '30분'], ['60', '1시간'], ['90', '1시간 30분'], ['120', '2시간'], ['180', '3시간']];
+  var EXTRA_MIN = 30;
+  var warned = {};
+  function todayKey() { return dayKey(new Date()); }
+  function usageOf(pid, pkg) {
+    ROOT.usage = ROOT.usage || {};
+    var u = ROOT.usage[pid] = ROOT.usage[pid] || {};
+    if (!u[pkg]) u[pkg] = { opens: 0, ms: 0, last: 0, days: {} };
+    return u[pkg];
+  }
+  function pruneDays(u) { var old = dayKey(new Date(Date.now() - 14 * 86400000)); Object.keys(u.days).forEach(function (k) { if (k < old) delete u.days[k]; }); }
+  function countOpen(pkg) { var u = usageOf(ROOT.current, pkg); u.opens++; u.last = Date.now(); pruneDays(u); savePrefs(); }
+  function addTime(pid, pkg, ms) {
+    if (!(ms > 0)) return;
+    ms = Math.min(ms, 3 * 3600000);   // a TV left on in an app overnight should not count as a whole night
+    var u = usageOf(pid, pkg), k = todayKey();
+    u.ms += ms; u.days[k] = (u.days[k] || 0) + ms;
+    savePrefs();
+  }
+  function daysMs(u, n) { var t = 0; for (var i = 0; i < n; i++) t += u.days[dayKey(new Date(Date.now() - i * 86400000))] || 0; return t; }
+  function profileMs(pid, n) {
+    var u = (ROOT.usage || {})[pid] || {}, t = 0;
+    Object.keys(u).forEach(function (pkg) { t += daysMs(u[pkg], n); });
+    if (mini && mini.pid === pid && mini.start) t += Date.now() - mini.start;
+    return t;
+  }
+  function limitOf(pr) { return pr.id === ROOT.masterId ? 0 : (pr.limit || 0); }
+  function msLeft(pr) {
+    var lim = limitOf(pr);
+    if (!lim) return Infinity;
+    var extra = pr.extra && pr.extra.day === todayKey() ? pr.extra.min : 0;
+    return (lim + extra) * 60000 - profileMs(pr.id, 1);
+  }
+  function fmtMs(ms) {
+    var m = Math.round(ms / 60000);
+    if (ms > 0 && m < 1) return '1분 미만';
+    var h = Math.floor(m / 60);
+    return h ? h + '시간' + (m % 60 ? ' ' + (m % 60) + '분' : '') : m + '분';
+  }
+  // Out of time: the PIN gives 30 more minutes.
+  function timeUp(then) {
+    var pr = current();
+    if (!hasPin()) { toast('오늘 쓸 수 있는 시간이 끝났어요'); return; }
+    openPin({ mode: 'check', title: '오늘 쓸 수 있는 시간이 끝났어요', sub: '어른이 PIN을 넣으면 ' + EXTRA_MIN + '분 더 쓸 수 있어요', onOk: function () {
+      var day = todayKey(), had = pr.extra && pr.extra.day === day ? pr.extra.min : 0;
+      // the extra time counts from now, even if the limit was passed a while ago
+      var over = Math.max(0, -msLeft(pr)) / 60000;
+      pr.extra = { day: day, min: had + Math.ceil(over) + EXTRA_MIN };
+      delete warned[pr.id];
+      savePrefs();
+      toast(EXTRA_MIN + '분 더 쓸 수 있어요');
+      if (then) then();
+    } });
+  }
+  // Every 10 s: warn 5 minutes before the end, and close a mini app when the time is up.
+  function limitTick() {
+    if (!mini) return;
+    var pr = profileById(mini.pid), left = msLeft(pr);
+    if (left === Infinity) return;
+    if (left <= 0) { closeMini(); toast('오늘 쓸 수 있는 시간이 끝났어요'); return; }
+    if (left <= 5 * 60000 && warned[pr.id] !== todayKey()) { warned[pr.id] = todayKey(); toast('오늘 쓸 수 있는 시간이 ' + fmtMs(left) + ' 남았어요'); }
+  }
+  function backFromApp() {
+    if (!away) return;
+    addTime(away.pid, away.pkg, Date.now() - away.t);
+    away = null;
+  }
+
+  function usageRows() {
+    return ROOT.profiles.map(function (pr) {
+      var lim = limitOf(pr);
+      return { id: pr.id, name: pr.name, dot: pr.color, action: true,
+        sub: '오늘 ' + fmtMs(profileMs(pr.id, 1)) + ' · 최근 7일 ' + fmtMs(profileMs(pr.id, 7)),
+        val: lim ? '하루 ' + labelOf(LIMITS, lim) : (pr.id === ROOT.masterId ? '마스터' : ''),
+        act: function () { openPanel('usageprof', { target: pr.id, back: { type: 'usage', id: pr.id } }); } };
+    });
+  }
+  function whenText(t) {
+    if (!t) return '';
+    var d = new Date(t), today = todayKey(), hm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    if (dayKey(d) === today) return '오늘 ' + hm;
+    if (dayKey(d) === dayKey(new Date(Date.now() - 86400000))) return '어제 ' + hm;
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm;
+  }
+  function usageProfRows() {
+    var pr = profileById(panel.target);
+    if (!pr) return [{ name: '이 프로필이 없어요' }];
+    var isMaster = pr.id === ROOT.masterId, rows = [];
+    rows.push({ name: '하루 사용 시간', sub: isMaster ? '마스터 프로필에는 제한이 없어요' : '다 쓰면 앱이 열리지 않아요. PIN으로 ' + EXTRA_MIN + '분씩 늘려요',
+      val: isMaster ? '제한 없음' : labelOf(LIMITS, pr.limit || 0),
+      change: function (d) {
+        if (isMaster) { toast('마스터 프로필에는 시간 제한을 걸 수 없어요'); return; }
+        if (!hasPin()) { needPinFirst(); return; }
+        pr.limit = +cycle(LIMITS, pr.limit || 0, d); savePrefs(); renderPanel();
+      } });
+    var left = msLeft(pr);
+    if (left !== Infinity) rows.push({ name: '오늘 남은 시간', val: left > 0 ? fmtMs(left) : '다 썼어요' });
+    var u = (ROOT.usage || {})[pr.id] || {};
+    var list = Object.keys(u).filter(function (p) { return u[p].opens || u[p].ms; })
+      .sort(function (a, b) { return (daysMs(u[b], 7) - daysMs(u[a], 7)) || (u[b].last - u[a].last); });
+    if (!list.length) rows.push({ name: '아직 기록이 없어요', sub: '이 프로필에서 앱을 열면 여기에 쌓여요' });
+    list.forEach(function (p) {
+      var a = BYPKG[p], x = u[p], est = a && !a.mini ? '약 ' : '';
+      rows.push({ name: a ? a.label : p, appicon: a ? iconUrl(a) : '',
+        sub: '오늘 ' + est + fmtMs(daysMs(x, 1)) + ' · 7일 ' + est + fmtMs(daysMs(x, 7)) + ' · ' + x.opens + '번 열기',
+        val: whenText(x.last) });
+    });
+    var cin = appData(pr.id, 'cove.cinema').hist || [];
+    cin.slice(0, 5).forEach(function (h) {
+      rows.push({ name: '🎬 ' + h.title, sub: h.done ? '끝까지 봤어요' : fmtMs(h.pos * 1000) + ' / ' + fmtMs(h.dur * 1000) + '까지 봤어요', val: whenText(h.t) });
+    });
+    var best = appData(pr.id, 'cove.cards').best || {};
+    Object.keys(best).sort().forEach(function (lv) {
+      var b = best[lv];
+      rows.push({ name: '🃏 짝꿍 카드 ' + lv.replace('x', '×') + ' 최고 기록', sub: b.moves + '번 뒤집기 · ' + fmtSecs(b.secs), val: whenText(b.t) });
+    });
+    if (list.length) rows.push({ name: '이 프로필의 사용 기록 지우기', danger: true, action: true, val: armed === 'delusage' ? '한 번 더 누르면 지우기' : '',
+      act: function () { twice('delusage', function () { delete ROOT.usage[pr.id]; savePrefs(); renderPanel(); toast('사용 기록을 지웠어요'); }); } });
+    return rows;
+  }
+  function fmtSecs(s) { s = Math.round(s || 0); return Math.floor(s / 60) + '분 ' + ('0' + s % 60).slice(-2) + '초'; }
 
   function set(changes) {
     var appKeys = ['apps', 'cats', 'cat', 'autoAdd', 'recentRow'];
@@ -840,7 +1048,7 @@
     var st = pinState;
     $('pinTitle').textContent = st.mode === 'new' ? '새 PIN 4자리' : st.mode === 'confirm' ? '한 번 더 입력하세요' : (st.title || 'PIN을 입력하세요');
     var sub = $('pinSub');
-    sub.textContent = st.bad || (st.mode === 'check' ? 'PIN 4자리를 입력하세요' : '잊어버리면 Cove 앱 데이터를 지워야 해요');
+    sub.textContent = st.bad || st.sub || (st.mode === 'check' ? 'PIN 4자리를 입력하세요' : '잊어버리면 Cove 앱 데이터를 지워야 해요');
     sub.className = st.bad ? 'bad' : '';
     var dots = '';
     for (var d = 0; d < 4; d++) dots += '<i class="' + (d < st.entry.length ? 'on' : '') + '"></i>';
@@ -912,7 +1120,8 @@
     savePrefs();
     render();
     okGuardUntil = Math.max(okGuardUntil, Date.now() + 700);
-    if (!quiet) toast(current().name + ' 프로필로 바꿨어요');
+    var left = msLeft(current());
+    if (!quiet) toast(current().name + ' 프로필로 바꿨어요' + (left !== Infinity ? ' · 오늘 ' + (left > 0 ? fmtMs(left) + ' 남았어요' : '쓸 시간이 끝났어요') : ''));
   }
   // "New profile" opens a screen to choose name, colour, kind and starting point; nothing is created until "추가".
   function addProfile() {
@@ -924,7 +1133,7 @@
     });
   }
   function kidsDefaults() {
-    return APPS.filter(function (a) { return /kids|키즈|junior|주니어/i.test(a.label + ' ' + a.pkg); }).map(function (a) { return a.pkg; });
+    return APPS.filter(function (a) { return a.mini || /kids|키즈|junior|주니어/i.test(a.label + ' ' + a.pkg); }).map(function (a) { return a.pkg; });
   }
   function createProfile(d) {
     if (d.kind === 'kids' && !hasPin()) {
@@ -1094,6 +1303,7 @@
         });
       } });
     }
+    if (isMini(pkg)) return rows;
     rows.push({ name: '앱 정보', sub: '저장공간, 권한, 강제 종료 · 마스터', action: true, act: function () { gate('admin', '앱 정보', function () { if (N) N.appInfo(pkg); else toast('TV에서만 열 수 있어요'); }); } });
     rows.push({ name: '앱 삭제', sub: 'TV의 삭제 확인 화면이 열려요 · 마스터', danger: true, action: true, act: function () {
       gate('admin', '앱 삭제', function () { closePanel(); if (N) N.uninstall(pkg); else toast('TV에서만 삭제할 수 있어요'); }); } });
@@ -1153,6 +1363,8 @@
         act: function () { openPanel('allow', { target: t.id, back: { type: 'profmanage', id: 'allow', opts: { target: t.id, back: panel.back } } }); } });
       rows.push({ name: '아이가 꾸미기 바꾸기', sub: '디자인, 배경, 타일', val: t.kidsLook !== false ? '허용' : '막음', change: function () { t.kidsLook = t.kidsLook === false; savePrefs(); renderPanel(); } });
     }
+    rows.push({ id: 'usage', name: '사용 기록 · 시간 제한', sub: t.id === ROOT.masterId ? '마스터 프로필에는 제한이 없어요' : '하루에 쓸 수 있는 시간', val: limitOf(t) ? labelOf(LIMITS, t.limit) : '', action: true,
+      act: function () { openPanel('usageprof', { target: t.id, back: { type: 'profmanage', id: 'usage', opts: { target: t.id, back: panel.back } } }); } });
     rows.push({ name: '이 프로필로 바꿀 때 PIN', sub: '다른 프로필에서 넘어올 때 PIN을 물어요', val: t.lockIn ? '켜짐' : '꺼짐',
       change: function () { if (!hasPin()) { needPinFirst(); return; } t.lockIn = !t.lockIn; savePrefs(); renderPanel(); } });
     rows.push({ name: '이 프로필 삭제', danger: true, action: true, val: armed === 'delprofile' ? '한 번 더 누르면 삭제' : '',
@@ -1285,6 +1497,7 @@
           ROOT.masterId = list[(i + d + list.length) % list.length].id;
           savePrefs(); renderPanel(); toast('"' + master().name + '" 프로필이 마스터예요');
         }); } },
+      { name: '사용 기록 · 시간 제한', id: 'usage', sub: '프로필별 앱 사용 시간, 하루 제한 · 마스터', action: true, act: function () { openPanel('usage', { back: { type: 'settings', id: 'usage' } }); } },
       { name: '화면 보호기 · 대기 화면', id: 'ambient', sub: '사진, 시계, 날씨, 일정, 메모', action: true, act: function () { openPanel('ambient', { back: { type: 'settings', id: 'ambient' } }); } },
       { name: '잠금 PIN', sub: hasPin() ? 'OK를 누르면 PIN을 바꿔요 · 마스터' : '프로필, 키즈, 앱 잠금에 쓰는 4자리 · 마스터', val: hasPin() ? '설정됨' : '없음', action: true,
         act: function () { gate('admin', 'PIN 바꾸기', function () { openPin({ mode: 'new' }); }); } },
@@ -1317,12 +1530,14 @@
     if (type === 'memoitem' || type === 'memoedit') return memoRows();
     if (type === 'allow') return allowRows();
     if (type === 'profmanage') return manageRows();
+    if (type === 'usage') return usageRows();
+    if (type === 'usageprof') return usageProfRows();
     return lookRows();
   }
 
   function openPanel(type, opts) {
-    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset', 'calev', 'ambient', 'memoitem', 'memoedit', 'profmanage'].indexOf(type) < 0) return;
-    var need = type === 'look' ? 'look' : (type === 'apps' || type === 'cats' || type === 'cat') ? 'apps' : (type === 'newprofile' || type === 'allow' || type === 'profmanage') ? 'admin' : null;
+    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset', 'calev', 'ambient', 'memoitem', 'memoedit', 'profmanage', 'usage', 'usageprof'].indexOf(type) < 0) return;
+    var need = type === 'look' ? 'look' : (type === 'apps' || type === 'cats' || type === 'cat') ? 'apps' : (type === 'newprofile' || type === 'allow' || type === 'profmanage' || type === 'usage' || type === 'usageprof') ? 'admin' : null;
     if (need && blocked(need, type === 'look' ? '꾸미기' : need === 'apps' ? '앱 정리' : '마스터 메뉴', function () { openPanel(type, opts); })) return;
     if (type === 'look' || type === 'settings') loadPhotos();
     if (moving) { moving = null; renderTiles(); }
@@ -1379,13 +1594,15 @@
     var rows = rowsFor(panel.type);
     panel.i = Math.max(0, Math.min(rows.length - 1, panel.i));
     var titles = { look: ['Appearance', '꾸미기'], apps: ['Apps', '앱 고르기'], settings: ['Settings', '설정'], profiles: ['Profiles', '프로필'], app: ['App', ''],
-      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'], calev: ['Event', '일정'], ambient: ['Screensaver', '화면 보호기'], memoitem: ['Memo', '메모'], memoedit: ['Memo', '메모'], profmanage: ['Manage profile', ''] };
+      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'], calev: ['Event', '일정'], ambient: ['Screensaver', '화면 보호기'], memoitem: ['Memo', '메모'], memoedit: ['Memo', '메모'], profmanage: ['Manage profile', ''], usage: ['Usage', '사용 기록 · 시간 제한'], usageprof: ['Usage', ''] };
     $('pKicker').textContent = titles[panel.type][0];
     $('pTitle').textContent = panel.type === 'app' ? (BYPKG[panel.pkg] ? BYPKG[panel.pkg].label : '')
       : panel.type === 'cat' ? ((catById(panel.cat) || {}).name || '내 앱')
       : panel.type === 'profmanage' ? (profileById(panel.target) || {}).name || ''
+      : panel.type === 'usageprof' ? ((profileById(panel.target) || {}).name || '') + ' · 사용 기록'
       : panel.type === 'allow' ? '허용 앱 · ' + ((profileById(panel.target) || current()).name) : titles[panel.type][1];
     $('pExtra').innerHTML = panel.type === 'settings' ? (helpOpen ? helpBlock() : remoteBlock())
+      : panel.type === 'usage' ? '<div class="help">프로필마다 앱을 얼마나 썼는지 보고, 하루 사용 시간을 정해요. Cove 미니 앱은 정확히, TV 앱은 Cove로 돌아오기까지의 시간으로 어림잡아요.</div>'
       : panel.type === 'ambient' ? '<div class="help"><div><b>TV 화면 보호기 목록에 Cove가 없나요?</b> 일부 Google TV는 이 메뉴를 숨겨 둬요. PC나 폰에서 ADB로 한 번 설정하면 돼요:</div><code>adb shell settings put secure screensaver_components com.mirinetic.cove/.CoveDream</code></div>'
       : panel.type === 'calset' ? '<div class="help">구독 캘린더 추가와 일정 추가는 폰 리모컨의 <b>일정</b>에서 해요. Google 캘린더와 아이폰 캘린더 주소를 넣는 방법도 거기 있어요.</div>'
       : panel.type === 'allow' ? '<div class="help">체크한 앱만 "' + esc((profileById(panel.target) || current()).name) + '" 프로필의 홈과 모든 앱에 보이고 열려요. 아이는 이 앱들 안에서 꾸미기 → 앱 고르기로 자유롭게 정리할 수 있어요.</div>'
@@ -1420,7 +1637,8 @@
       cats: [['OK', '편집'], ['◀ ▶', '순서'], ['뒤로', '돌아가기']], cat: [['OK', '이 줄에 넣기 / 빼기'], ['◀ ▶', '이름'], ['뒤로', '돌아가기']],
       newprofile: [['◀ ▶', '바꾸기'], ['OK', '추가'], ['뒤로', '취소']], allow: [['OK', '허용 / 막기'], ['뒤로', '돌아가기']], calset: [['OK', '선택'], ['뒤로', '닫기']], calev: [['▲ ▼', '이동'], ['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '취소']],
       ambient: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '닫기']], memoitem: [['◀ ▶', '색'], ['OK', '선택'], ['뒤로', '닫기']],
-      memoedit: [['▲ ▼', '이동'], ['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '취소']], profmanage: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']] };
+      memoedit: [['▲ ▼', '이동'], ['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '취소']], profmanage: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']],
+      usage: [['OK', '자세히'], ['뒤로', '돌아가기']], usageprof: [['◀ ▶', '시간 제한'], ['OK', '선택'], ['뒤로', '돌아가기']] };
     $('pHint').innerHTML = hints[panel.type].map(function (h) { return '<span><kbd>' + h[0] + '</kbd>' + h[1] + '</span>'; }).join('');
   }
 
@@ -2106,6 +2324,7 @@
     if (panel) { panelKey(k); return; }
     if (base === 'cal') { calKey(k); return; }
     if (base === 'memo') { memoKey(k); return; }
+    if (base === 'mini') { if (mini) miniKey(k); else base = 'home'; return; }
     if (moving) {
       if (k === 'ok' || k === 'back' || k === 'longok') endMove();
       else if (['up', 'down', 'left', 'right'].indexOf(k) >= 0) shiftMoving(k);
@@ -2146,6 +2365,7 @@
   function has(t, words) { for (var i = 0; i < words.length; i++) if (t.indexOf(words[i]) >= 0) return true; return false; }
 
   function findApp(t) {
+    for (var mi = 0; mi < MINI.length; mi++) if (BYPKG[MINI[mi].pkg] && has(t, MINI[mi].words)) return BYPKG[MINI[mi].pkg];
     var en = t;
     ALIAS.forEach(function (a) { en = en.split(a[0]).join(a[1]); });
     // Whole name first ("youtube music" beats "youtube"), then the first word of a name ("prime" for "Prime Video").
@@ -2368,6 +2588,8 @@
     _focus: function (sel, n) { var e = document.querySelectorAll(sel)[n || 0]; if (e) setFocus(e); return !!e; },
     toast: toast,
     home: function () {
+      if (mini) endMini();
+      backFromApp();
       closePanelQuiet();
       moving = null;
       if (base === 'drawer') { base = 'home'; $('drawer').hidden = true; }
@@ -2377,7 +2599,9 @@
       lastFocus.home = null;
       renderTiles();
     },
-    resume: function () { loadApps(); loadPhotos(); render(); },
+    // Android pauses Cove when the TV sleeps or another app comes to the front: a mini app's clock stops meanwhile.
+    pause: function () { if (mini && mini.start) { addTime(mini.pid, mini.pkg, Date.now() - mini.start); mini.start = 0; } },
+    resume: function () { backFromApp(); if (mini && !mini.start) mini.start = Date.now(); loadApps(); loadPhotos(); if (!mini) render(); },
     appsChanged: function () { loadApps(); render(); },
     photoAdded: function (id) { loadPhotos(); set({ bg: { type: 'photo', id: id } }); toast('폰에서 보낸 사진을 배경으로 설정했어요'); },
     updateResult: function (json) {
