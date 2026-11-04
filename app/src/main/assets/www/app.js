@@ -61,7 +61,7 @@
   ];
   var CAT_NAMES = ['즐겨찾기', '영화·드라마', '예능', '음악', '키즈', '게임', '스포츠', '뉴스', '유틸리티', '기타'];
   // cats: the home screen's rows, in order. cat: pkg -> row id (an app without one sits in the first row).
-  var DEFAULTS = { design: 'glass', clock: '24', shape: 'rounded', size: 'm', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null, locked: null, weather: null, calPreview: true, memoPreview: true };
+  var DEFAULTS = { design: 'glass', clock: '24', shape: 'rounded', size: 'm', apps: null, autoAdd: true, nightBg: null, cats: null, cat: null, recentRow: false, recent: null, locked: null, weather: null, calPreview: true, memoPreview: true, topBtns: true };
   Object.keys(DESIGNS.glass.p).forEach(function (k) { DEFAULTS[k] = DESIGNS.glass.p[k]; });
 
   // ---------- state ----------
@@ -129,6 +129,7 @@
       var s = JSON.stringify(ROOT);
       try { if (N) N.savePrefs(s); else localStorage.setItem('cove.prefs', s); } catch (e) {}
       saveSnapshot();
+      refreshLive();
     }, 250);
   }
 
@@ -422,7 +423,7 @@
     showNextEvent();
     showMemoLine();
     if (ROOT && ROOT.cal && ROOT.cal.subs && ROOT.cal.subs.length) syncCalendars(false);
-    if (ROOT) { idleCheck(); limitTick(); }
+    if (ROOT) { idleCheck(); limitTick(); refreshLive(); }
   }
 
   // ---------- render ----------
@@ -436,6 +437,7 @@
     home.setAttribute('data-labels', P.labels ? 'on' : 'off');
     home.setAttribute('data-clock', P.clock === 'off' ? 'off' : 'on');
     document.documentElement.style.setProperty('--dim', DIM_VALUES[P.dim] || 0.22);
+    ['calendar', 'memo'].forEach(function (act) { document.querySelector('.qbtn[data-act="' + act + '"]').hidden = P.topBtns === false; });
     var pr = current();
     $('pName').textContent = pr.name;
     $('pDot').style.setProperty('--pc', pr.color);
@@ -587,7 +589,7 @@
   // ---------- focus & navigation ----------
   function focusables() {
     var sel = base === 'drawer' ? '#drawer .focusable' : '#home .focusable';
-    return Array.prototype.slice.call(document.querySelectorAll(sel));
+    return Array.prototype.slice.call(document.querySelectorAll(sel)).filter(function (e) { return e.getClientRects().length > 0; });
   }
 
   function setFocus(el) {
@@ -684,8 +686,9 @@
       openPin({ mode: 'check', title: '"' + (BYPKG[pkg] ? BYPKG[pkg].label : pkg) + '" 열기', onOk: function () { launch(pkg); } });
       return;
     }
-    if (msLeft(current()) <= 0) { timeUp(function () { launch(pkg, true); }); return; }
     var a = BYPKG[pkg];
+    if (a && a.screen) { countOpen(pkg); if (a.screen === 'cal') openCal('month'); else openMemo(); return; }   // not limited by time
+    if (msLeft(current()) <= 0) { timeUp(function () { launch(pkg, true); }); return; }
     P.recent = [pkg].concat(P.recent.filter(function (x) { return x !== pkg; })).slice(0, 12);
     savePrefs();
     if (a && a.mini) { openMini(pkg); return; }
@@ -706,17 +709,68 @@
     { pkg: 'cove.cards', label: '짝꿍 카드', page: 'apps/cards.html', c1: '#0f766e', c2: '#22c55e', words: ['짝꿍', '카드게임', '카드놀이', '같은그림'],
       sym: '<rect x="40" y="52" width="62" height="88" rx="12" fill="#fff" transform="rotate(-12 71 96)"/><rect x="90" y="52" width="62" height="88" rx="12" fill="#fde68a" transform="rotate(10 121 96)"/><path d="M71 84c-6-9-20-4-15 7 2 5 9 10 15 15 6-5 13-10 15-15 5-11-9-16-15-7z" fill="#ef4444" transform="rotate(-12 71 96)"/><path d="M121 78l5 11 12 1-9 8 3 12-11-6-11 6 3-12-9-8 12-1z" fill="#0f766e" transform="rotate(10 121 96)"/>' }
   ];
+  // Calendar and memo are Cove's own screens, shown as app tiles too. Their pictures are drawn live:
+  // today's date and the next event, the newest memo and how many there are.
+  MINI.push({ pkg: 'cove.calendar', label: '일정', screen: 'cal', c1: '#1e3a8a', c2: '#0284c7' },
+            { pkg: 'cove.memo', label: '메모', screen: 'memo', c1: '#a16207', c2: '#f59e0b' });
+  function xesc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]; }); }
+  function cut(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+  function liveSym(m) {
+    var now = new Date();
+    if (m.screen === 'cal') {
+      return '<rect x="36" y="40" width="120" height="116" rx="20" fill="#fff"/><path d="M36 60a20 20 0 0 1 20-20h80a20 20 0 0 1 20 20v14H36z" fill="#ef4444"/>' +
+        '<text x="96" y="66" font-family="sans-serif" font-weight="700" font-size="20" fill="#fff" text-anchor="middle">' + '일월화수목금토'.charAt(now.getDay()) + '요일</text>' +
+        '<text x="96" y="136" font-family="sans-serif" font-weight="800" font-size="62" fill="#1f2937" text-anchor="middle">' + now.getDate() + '</text>';
+    }
+    var n = activeMemos().length;
+    return '<path d="M44 40h104v84l-32 32H44z" fill="#fef08a"/><path d="M116 156v-32h32z" fill="#facc15"/>' +
+      '<path d="M62 74h68M62 96h52M62 118h36" stroke="#a16207" stroke-width="8" stroke-linecap="round"/>' +
+      (n ? '<circle cx="146" cy="46" r="24" fill="#ef4444"/><text x="146" y="55" font-family="sans-serif" font-weight="800" font-size="' + (n > 9 ? 22 : 26) + '" fill="#fff" text-anchor="middle">' + (n > 99 ? '99' : n) + '</text>' : '');
+  }
+  function liveText(m) {
+    var now = new Date();
+    if (m.screen === 'cal') {
+      var ne = nextEvent();
+      return [(now.getMonth() + 1) + '월 ' + now.getDate() + '일',
+        ne ? relDay(ne.first.start) + (ne.first.allDay ? '' : ' ' + fmtTime(ne.first.start)) : '다가오는 일정이 없어요',
+        ne ? cut(ne.first.title, 13) + (ne.more > 0 ? ' 외 ' + ne.more + '개' : '') : ''];
+    }
+    var list = activeMemos();
+    return ['메모', list.length ? '메모 ' + list.length + '개' : '새 메모가 없어요', list.length ? cut(list[0].text.split('\n')[0], 13) : ''];
+  }
   function miniSvg(m, w, h) {
     var sq = w === h;
     var s = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
       '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + m.c1 + '"/><stop offset="1" stop-color="' + m.c2 + '"/></linearGradient></defs>' +
       '<rect width="' + w + '" height="' + h + '" rx="' + (sq ? 40 : 0) + '" fill="url(#g)"/>' +
-      (sq ? m.sym : '<g transform="translate(36 84)">' + m.sym + '</g><text x="246" y="196" font-family="sans-serif" font-weight="800" font-size="50" fill="#fff">' + m.label + '</text>') + '</svg>';
+      (m.screen ? liveArt(m, sq) : sq ? m.sym : '<g transform="translate(36 84)">' + m.sym + '</g><text x="246" y="196" font-family="sans-serif" font-weight="800" font-size="50" fill="#fff">' + m.label + '</text>') + '</svg>';
     return 'data:image/svg+xml,' + encodeURIComponent(s);
+  }
+  function liveArt(m, sq) {
+    if (sq) return liveSym(m);
+    var t = liveText(m);
+    return '<g transform="translate(28 84)">' + liveSym(m) + '</g>' +
+      '<text x="240" y="138" font-family="sans-serif" font-weight="800" font-size="44" fill="#fff">' + xesc(t[0]) + '</text>' +
+      '<text x="240" y="198" font-family="sans-serif" font-weight="700" font-size="30" fill="#fff" opacity=".92">' + xesc(t[1]) + '</text>' +
+      '<text x="240" y="244" font-family="sans-serif" font-size="28" fill="#fff" opacity=".85">' + xesc(t[2]) + '</text>';
+  }
+  // Redraws the calendar and memo tiles when what they show has changed.
+  function refreshLive() {
+    var changed = false;
+    MINI.forEach(function (m) {
+      var a = BYPKG[m.pkg];
+      if (!m.screen || !a) return;
+      var ic = miniSvg(m, 192, 192), bn = miniSvg(m, 640, 360);
+      if (ic !== a.icon || bn !== a.bannerUrl) { a.icon = ic; a.bannerUrl = bn; changed = true; }
+    });
+    if (!changed) return;
+    renderTiles();
+    if (P.layout === 'theater') updateHero();
+    if (base === 'drawer') renderDrawer();
   }
   function miniApps() {
     return MINI.map(function (m) {
-      return { pkg: m.pkg, label: m.label, color: m.c1, iconBg: m.c1, banner: true, mini: true, page: m.page, icon: miniSvg(m, 192, 192), bannerUrl: miniSvg(m, 640, 360) };
+      return { pkg: m.pkg, label: m.label, color: m.c1, iconBg: m.c1, banner: true, mini: true, page: m.page, screen: m.screen, icon: miniSvg(m, 192, 192), bannerUrl: miniSvg(m, 640, 360) };
     });
   }
   function isMini(pkg) { return !!(BYPKG[pkg] && BYPKG[pkg].mini); }
@@ -878,7 +932,7 @@
     list.forEach(function (p) {
       var a = BYPKG[p], x = u[p], est = a && !a.mini ? '약 ' : '';
       rows.push({ name: a ? a.label : p, appicon: a ? iconUrl(a) : '',
-        sub: '오늘 ' + est + fmtMs(daysMs(x, 1)) + ' · 7일 ' + est + fmtMs(daysMs(x, 7)) + ' · ' + x.opens + '번 열기',
+        sub: a && a.screen ? x.opens + '번 열기' : '오늘 ' + est + fmtMs(daysMs(x, 1)) + ' · 7일 ' + est + fmtMs(daysMs(x, 7)) + ' · ' + x.opens + '번 열기',
         val: whenText(x.last) });
     });
     var cin = appData(pr.id, 'cove.cinema').hist || [];
@@ -1227,6 +1281,7 @@
           set({ weather: ids[(ids.indexOf(P.weather || null) + d + ids.length) % ids.length] });
         } },
       { name: '메모', sub: '시계 아래에 최근 메모를 한 줄로', val: P.memoPreview !== false ? '표시' : '숨김', change: function () { set({ memoPreview: P.memoPreview === false }); } },
+      { name: '위쪽 일정·메모 버튼', sub: '홈의 일정·메모 타일로도 열 수 있어요', val: P.topBtns !== false ? '표시' : '숨김', change: function () { set({ topBtns: P.topBtns === false }); } },
       { name: '다음 일정', sub: '시계 아래에 오늘·내일 일정을 한 줄로', val: P.calPreview !== false ? '표시' : '숨김', change: function () { set({ calPreview: P.calPreview === false }); } },
       { name: '카테고리 줄', id: 'cats', sub: '앱을 소제목 달린 줄로 묶어요', val: P.cats.length > 1 || P.cats[0].name ? P.cats.length + '줄' : '사용 안 함', action: true,
         act: function () { openPanel('cats', { back: { type: 'look', id: 'cats' } }); } },
@@ -1866,15 +1921,21 @@
   }
 
   // --- home preview: the next event today (or tomorrow) under the clock ---
+  // The next event today or tomorrow, and how many more follow today.
+  function nextEvent() {
+    var now = new Date(), list = occurrences(now, addDays(startOfDay(now), 2)).filter(function (o) { return o.allDay ? startOfDay(o.start) >= startOfDay(now) : o.start >= now; });
+    var todayList = eventsOn(now).filter(function (o) { return o.allDay || o.start >= now; });
+    var first = list[0];
+    if (!first) return null;
+    return { first: first, more: startOfDay(first.start).getTime() === startOfDay(now).getTime() ? todayList.length - 1 : 0 };
+  }
   function showNextEvent() {
     var el = $('nextEvt');
     if (!el) return;
     if (P.calPreview === false) { el.hidden = true; return; }
-    var now = new Date(), list = occurrences(now, addDays(startOfDay(now), 2)).filter(function (o) { return o.allDay ? startOfDay(o.start) >= startOfDay(now) : o.start >= now; });
-    var todayList = eventsOn(now).filter(function (o) { return o.allDay || o.start >= now; });
-    var first = list[0];
-    if (!first) { el.hidden = true; return; }
-    var more = startOfDay(first.start).getTime() === startOfDay(now).getTime() ? todayList.length - 1 : 0;
+    var ne = nextEvent();
+    if (!ne) { el.hidden = true; return; }
+    var first = ne.first, more = ne.more;
     el.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' +
       '<b>' + relDay(first.start) + (first.allDay ? '' : ' ' + fmtTime(first.start)) + '</b><span>' + esc(first.title) + (more > 0 ? ' 외 ' + more + '개' : '') + '</span>';
     el.hidden = false;
@@ -2365,17 +2426,19 @@
   function has(t, words) { for (var i = 0; i < words.length; i++) if (t.indexOf(words[i]) >= 0) return true; return false; }
 
   function findApp(t) {
-    for (var mi = 0; mi < MINI.length; mi++) if (BYPKG[MINI[mi].pkg] && has(t, MINI[mi].words)) return BYPKG[MINI[mi].pkg];
+    for (var mi = 0; mi < MINI.length; mi++) if (MINI[mi].words && BYPKG[MINI[mi].pkg] && has(t, MINI[mi].words)) return BYPKG[MINI[mi].pkg];
     var en = t;
     ALIAS.forEach(function (a) { en = en.split(a[0]).join(a[1]); });
     // Whole name first ("youtube music" beats "youtube"), then the first word of a name ("prime" for "Prime Video").
     var best = null, len = 0;
     APPS.forEach(function (a) {
+      if (a.screen) return;
       var l = norm(a.label);
       if (l.length >= 2 && (en.indexOf(l) >= 0 || t.indexOf(l) >= 0) && l.length > len) { best = a; len = l.length; }
     });
     if (best) return best;
     APPS.forEach(function (a) {
+      if (a.screen) return;
       var w = norm(String(a.label).split(/\s+/)[0]);
       if (w.length >= 3 && (en.indexOf(w) >= 0 || t.indexOf(w) >= 0) && w.length > len) { best = a; len = w.length; }
     });
