@@ -82,6 +82,8 @@
   var update = null;     // {phase, ...result}
   var pinState = null;   // {mode:'check'|'new'|'confirm', title, onOk, entry, first, i}
   var unlockedUntil = 0; // a correct PIN keeps things open for 5 minutes
+  var okGuardUntil = 0;  // OK is ignored briefly after a PIN is accepted (a "confirm" press must not open an app)
+  var lastOkAt = 0;      // some remotes send two OK signals for one press
 
   var $ = function (id) { return document.getElementById(id); };
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -862,7 +864,7 @@
     var st = pinState;
     if (!st) return;
     if (st.mode === 'check') {
-      if (hashPin(st.entry) === ROOT.pinHash) { unlockedUntil = Date.now() + 5 * 60 * 1000; closePin(); if (st.onOk) st.onOk(); }
+      if (hashPin(st.entry) === ROOT.pinHash) { unlockedUntil = Date.now() + 5 * 60 * 1000; okGuardUntil = Date.now() + 1200; closePin(); if (st.onOk) st.onOk(); }
       else { st.entry = ''; st.bad = 'PIN이 맞지 않아요'; renderPin(); var d = $('pinDots'); d.classList.remove('shake'); void d.offsetWidth; d.classList.add('shake'); }
     } else if (st.mode === 'new') {
       st.first = st.entry; st.entry = ''; st.mode = 'confirm'; renderPin();
@@ -870,6 +872,7 @@
       if (st.entry === st.first) {
         ROOT.pinHash = hashPin(st.entry); savePrefs();
         unlockedUntil = Date.now() + 5 * 60 * 1000;
+        okGuardUntil = Date.now() + 1200;
         closePin(); toast('PIN을 저장했어요');
         if (st.onOk) st.onOk();
         if (panel) renderPanel();
@@ -908,6 +911,7 @@
     moving = null;
     savePrefs();
     render();
+    okGuardUntil = Math.max(okGuardUntil, Date.now() + 700);
     if (!quiet) toast(current().name + ' 프로필로 바꿨어요');
   }
   // "New profile" opens a screen to choose name, colour, kind and starting point; nothing is created until "추가".
@@ -2091,6 +2095,13 @@
   function key(k) {
     if (wake()) return;
     if (pinState) { pinKey(k); return; }
+    // An OK that would open an app right after a PIN / profile switch is a stray "confirm" press;
+    // a second OK within 0.3 s is a doubled signal. Menus and panels are not affected.
+    if ((k === 'ok' || k === 'longok') && !panel && (base === 'home' || base === 'drawer') && focusEl && focusEl.getAttribute('data-pkg')) {
+      var t0 = Date.now();
+      if (t0 < okGuardUntil || t0 - lastOkAt < 300) return;
+      lastOkAt = t0;
+    }
     if (k.charAt(0) === 'n' && k.length === 2) return;   // number keys only matter on the PIN pad
     if (panel) { panelKey(k); return; }
     if (base === 'cal') { calKey(k); return; }
