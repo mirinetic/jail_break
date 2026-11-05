@@ -146,7 +146,7 @@
       // older versions: "protect this profile's settings" becomes a kids profile
       if (!pr.kind) pr.kind = pr.guard ? 'kids' : 'normal';
       if (pr.guard) { pr.kidsLook = false; delete pr.guard; }
-      if (pr.kind === 'kids' && !Array.isArray(pr.allow)) pr.allow = (pr.prefs.apps || []).slice();
+      if ((pr.kind === 'kids' || pr.kind === 'guest') && !Array.isArray(pr.allow)) pr.allow = (pr.prefs.apps || []).slice();
     });
     if (!profileById(ROOT.masterId)) ROOT.masterId = ROOT.profiles[0].id;
     if (!current()) ROOT.current = ROOT.profiles[0].id;
@@ -189,7 +189,7 @@
         ROOT.profiles.forEach(function (pr) {
           if (pr.prefs.autoAdd !== false && Array.isArray(pr.prefs.apps) && pr.prefs.apps.indexOf(p) < 0) { pr.prefs.apps.push(p); changed = true; }
           // Cove's own mini apps are safe for children (the cinema shows them only all-ages titles)
-          if (pr.kind === 'kids' && BYPKG[p].mini && Array.isArray(pr.allow) && pr.allow.indexOf(p) < 0) { pr.allow.push(p); changed = true; }
+          if ((pr.kind === 'kids' || pr.kind === 'guest') && BYPKG[p].mini && Array.isArray(pr.allow) && pr.allow.indexOf(p) < 0) { pr.allow.push(p); changed = true; }
         });
       });
     }
@@ -208,7 +208,7 @@
     });
   }
 
-  function kidsAllows(pkg) { return !isKids() || (current().allow || []).indexOf(pkg) >= 0; }
+  function kidsAllows(pkg) { return !isKids() && !isGuest() || (current().allow || []).indexOf(pkg) >= 0; }
   function visibleApps() { return (P.apps || []).filter(function (p) { return BYPKG[p] && kidsAllows(p); }); }
   function catById(id) { for (var i = 0; i < P.cats.length; i++) if (P.cats[i].id === id) return P.cats[i]; return null; }
   function catOf(pkg) { return catById(P.cat[pkg]) ? P.cat[pkg] : P.cats[0].id; }
@@ -1243,8 +1243,7 @@
     var a = BYPKG[pkg];
     if (a && a.screen) { countOpen(pkg); if (a.screen === 'cal') openCal('month'); else openMemo(); return; }   // not limited by time
     if (msLeft(current()) <= 0) { timeUp(function () { launch(pkg, true, intent); }); return; }
-    P.recent = [pkg].concat(P.recent.filter(function (x) { return x !== pkg; })).slice(0, 12);
-    savePrefs();
+    if (!isGuest()) { P.recent = [pkg].concat(P.recent.filter(function (x) { return x !== pkg; })).slice(0, 12); savePrefs(); }
     if (a && a.mini) { openMini(pkg, intent); return; }
     if (N) {
       if (!N.launch(pkg)) { toast('앱을 열 수 없어요'); return; }
@@ -1402,7 +1401,7 @@
     var box = $('mini');
     box.innerHTML = '<iframe src="' + a.page + '" tabindex="-1" title="' + esc(a.label) + '"></iframe>';
     box.hidden = false;
-    mini = { pkg: pkg, pid: ROOT.current, start: Date.now(), from: from, frame: box.querySelector('iframe'), ready: false, intent: intent || null };
+    mini = { pkg: pkg, pid: ROOT.current, start: Date.now(), from: from, frame: box.querySelector('iframe'), ready: false, intent: intent || null, guest: isGuest() };
     countOpen(pkg);
   }
   function endMini() {
@@ -1410,13 +1409,13 @@
     // collect what the app had not sent yet (it may close in the middle of a delayed save)
     try {
       var last = mini.frame.contentWindow.CoveApp && mini.frame.contentWindow.CoveApp._close();
-      if (last) {
+      if (last && !mini.guest) {
         if (last.data && typeof last.data === 'object') { appData(mini.pid, mini.pkg); ROOT.appdata[mini.pid][mini.pkg] = last.data; }
         for (var op in last.forOthers) if (profileById(op) && op !== mini.pid) { appData(op, mini.pkg); ROOT.appdata[op][mini.pkg] = last.forOthers[op]; }
         savePrefs();
       }
     } catch (e) {}
-    if (mini.start) addTime(mini.pid, mini.pkg, Date.now() - mini.start);
+    if (mini.start && !mini.guest) addTime(mini.pid, mini.pkg, Date.now() - mini.start);
     var from = mini.from;
     mini = null;
     $('mini').hidden = true;
@@ -1440,9 +1439,15 @@
     if (m.type === 'ready') {
       mini.ready = true;
       var pr = profileById(mini.pid);
-      miniPost({ type: 'init', profile: { id: pr.id, name: pr.name, kids: pr.kind === 'kids', color: pr.color, avatar: pr.avatar || '' }, data: appData(mini.pid, mini.pkg),
-        family: ROOT.profiles.filter(function (x) { return x.id !== pr.id; }).map(function (x) { return { id: x.id, name: x.name, color: x.color, avatar: x.avatar || '', kids: x.kind === 'kids', data: appData(x.id, mini.pkg) }; }),
-        shared: sharedData(mini.pkg), env: miniEnv(), intent: mini.intent });
+      // a guest starts every app fresh and never sees or touches the family's data
+      miniPost({ type: 'init', profile: { id: pr.id, name: pr.name, kids: pr.kind === 'kids' || (mini.guest && !!pr.allAges), guest: mini.guest, color: pr.color, avatar: pr.avatar || '' },
+        data: mini.guest ? {} : appData(mini.pid, mini.pkg),
+        family: ROOT.profiles.filter(function (x) { return x.id !== pr.id && !mini.guest && x.kind !== 'guest'; }).map(function (x) { return { id: x.id, name: x.name, color: x.color, avatar: x.avatar || '', kids: x.kind === 'kids', data: appData(x.id, mini.pkg) }; }),
+        shared: mini.guest ? {} : sharedData(mini.pkg), env: miniEnv(), intent: mini.intent });
+    } else if (mini.guest && /^(save|saveFor|saveShared)$/.test(m.type)) {
+      // kept nowhere: the app starts over next time
+    } else if (mini.guest && m.type === 'addEvent') {
+      toast('손님 프로필에서는 일정을 추가할 수 없어요');
     } else if (m.type === 'save' && m.data && typeof m.data === 'object') {
       appData(mini.pid, mini.pkg);
       ROOT.appdata[mini.pid][mini.pkg] = m.data;
@@ -1476,7 +1481,7 @@
     return u[pkg];
   }
   function pruneDays(u) { var old = dayKey(wall(Date.now() - 14 * 86400000)); Object.keys(u.days).forEach(function (k) { if (k < old) delete u.days[k]; }); }
-  function countOpen(pkg) { var u = usageOf(ROOT.current, pkg); u.opens++; u.last = Date.now(); pruneDays(u); savePrefs(); }
+  function countOpen(pkg) { if (isGuest()) return; var u = usageOf(ROOT.current, pkg); u.opens++; u.last = Date.now(); pruneDays(u); savePrefs(); }
   function addTime(pid, pkg, ms) {
     if (!(ms > 0)) return;
     ms = Math.min(ms, 3 * 3600000);   // a TV left on in an app overnight should not count as a whole night
@@ -1491,7 +1496,7 @@
     if (mini && mini.pid === pid && mini.start) t += Date.now() - mini.start;
     return t;
   }
-  function limitOf(pr) { return pr.id === ROOT.masterId ? 0 : (pr.limit || 0); }
+  function limitOf(pr) { return pr.id === ROOT.masterId || pr.kind === 'guest' ? 0 : (pr.limit || 0); }
   function msLeft(pr) {
     var lim = limitOf(pr);
     if (!lim) return Infinity;
@@ -1529,12 +1534,12 @@
   }
   function backFromApp() {
     if (!away) return;
-    addTime(away.pid, away.pkg, Date.now() - away.t);
+    if (!isGuest(profileById(away.pid) || current())) addTime(away.pid, away.pkg, Date.now() - away.t);
     away = null;
   }
 
   function usageRows() {
-    return ROOT.profiles.map(function (pr) {
+    return ROOT.profiles.filter(function (pr) { return !isGuest(pr); }).map(function (pr) {
       var lim = limitOf(pr);
       return { id: pr.id, name: pr.name, dot: pr.color, action: true,
         sub: '오늘 ' + fmtMs(profileMs(pr.id, 1)) + ' · 최근 7일 ' + fmtMs(profileMs(pr.id, 7)),
@@ -1730,9 +1735,16 @@
   //   admin = PIN, profiles, kids settings, app locks, uninstall, system      - master only
   function master() { return profileById(ROOT.masterId) || ROOT.profiles[0]; }
   function isKids(pr) { return (pr || current()).kind === 'kids'; }
+  // 손님 (shared) profile: only the apps the master allows, nothing of its own is kept, and it sees only
+  // the events and memos marked "손님 프로필에 보이기".
+  function isGuest(pr) { return (pr || current()).kind === 'guest'; }
+  function guestProfile() { for (var i = 0; i < ROOT.profiles.length; i++) if (ROOT.profiles[i].kind === 'guest') return ROOT.profiles[i]; return null; }
+  var GUEST_COLOR = '#64748b', GUEST_AVATAR = '🛋️';
+  var GUEST_NOTE = '손님 프로필에서는 볼 수만 있어요';
   function isAdmin() { return ROOT.current === master().id || Date.now() < unlockedUntil; }
   function may(kind) {
     if (isAdmin()) return true;
+    if (isGuest()) return false;
     if (kind === 'look') return !isKids() || current().kidsLook !== false;
     if (kind === 'adult') return !isKids();
     if (kind === 'apps') return true;              // kids too, but only among the apps the master allowed
@@ -1844,21 +1856,31 @@
   function kidsDefaults() {
     return APPS.filter(function (a) { return a.mini || /kids|키즈|junior|주니어/i.test(a.label + ' ' + a.pkg); }).map(function (a) { return a.pkg; });
   }
+  function guestDefaults() {
+    return APPS.filter(function (a) { return (a.mini && !a.screen) || /youtube|유튜브/i.test(a.label + ' ' + a.pkg); }).map(function (a) { return a.pkg; });
+  }
   function createProfile(d) {
+    if (d.kind === 'guest' && guestProfile()) { toast('손님 프로필은 하나만 만들 수 있어요'); return; }
     if (d.kind === 'kids' && !hasPin()) {
       toast('키즈 프로필을 지키려면 PIN이 필요해요. 먼저 PIN을 만들어 주세요');
       openPin({ mode: 'new', onOk: function () { createProfile(d); } });
       return;
     }
-    var prefs = d.start === 'copy' && d.kind !== 'kids' ? clone(P) : withDefaults({});
+    var prefs = d.start === 'copy' && d.kind === 'normal' ? clone(P) : withDefaults({});
     var pr = { id: 'p' + Date.now().toString(36), name: d.name, color: d.color, kind: d.kind, prefs: prefs };
-    if (d.kind === 'kids') { pr.allow = kidsDefaults(); pr.prefs.apps = pr.allow.slice(); pr.kidsLook = true; }
+    if (d.kind === 'guest') {
+      // the plainest home: the basic design, no widgets, the allowed apps only; the city follows the master's
+      pr.color = GUEST_COLOR; pr.avatar = GUEST_AVATAR; pr.allow = guestDefaults(); pr.prefs.apps = pr.allow.slice();
+      pr.prefs.widgets = { clock: false, weather: false, news: false }; pr.prefs.calPreview = false; pr.prefs.memoPreview = false;
+      pr.prefs.weather = master().prefs.weather || null;
+    } else if (d.kind === 'kids') { pr.allow = kidsDefaults(); pr.prefs.apps = pr.allow.slice(); pr.kidsLook = true; }
     else if (!Array.isArray(pr.prefs.apps)) pr.prefs.apps = defaultApps();
     dropEdits(false);   // creating a profile is final; it must not be undone with the page it was made from
     ROOT.profiles.push(pr);
     closePanelQuiet();
     doSwitch(pr.id, true);
-    toast(d.kind === 'kids'
+ toast(d.kind === 'guest' ? '"' + d.name + '" 손님 프로필을 만들었어요. 쓸 수 있는 앱은 마스터 메뉴에서 정해요'
+      : d.kind === 'kids'
       ? '"' + d.name + '" 키즈 프로필을 만들었어요. 허용 앱은 프로필 메뉴에서 PIN으로 바꿀 수 있어요'
       : '"' + d.name + '" 프로필을 만들었어요');
   }
@@ -1936,7 +1958,7 @@
     var rows = LOOK_GROUPS.map(function (g) {
       return { id: g[0], need: g[2], name: g[1], sub: lookSummary(g[0]), action: true, act: function () { openPanel('lookgrp', { grp: g[0], back: { type: 'look', id: g[0] } }); } };
     });
-    if (!may('look')) rows.unshift({ name: '이 프로필은 마스터가 꾸미기를 막아 두었어요', sub: '홈 앱 정리는 할 수 있어요' });
+    if (!may('look')) rows.unshift(isGuest() ? { name: '손님 프로필은 꾸미기를 바꿀 수 없어요', sub: '마스터가 PIN을 넣으면 바꿀 수 있어요' } : { name: '이 프로필은 마스터가 꾸미기를 막아 두었어요', sub: '홈 앱 정리는 할 수 있어요' });
     rows.push({ need: 'look', name: '처음 상태로', sub: '이 프로필의 꾸미기만 되돌려요', danger: true, action: true, val: armed === 'reset' ? '한 번 더 누르면 초기화' : '',
       act: function () {
         twice('reset', function () {
@@ -2060,7 +2082,7 @@
   }
 
   function profileBadges(pr) {
-    return [pr.id === master().id ? '마스터' : '', pr.kind === 'kids' ? '키즈' : '', pr.id !== master().id && pr.lockIn ? 'PIN 필요' : ''].filter(Boolean).join(' · ');
+    return [pr.id === master().id ? '마스터' : '', pr.kind === 'kids' ? '키즈' : '', pr.kind === 'guest' ? '손님 · 공용' : '', pr.id !== master().id && pr.lockIn ? 'PIN 필요' : ''].filter(Boolean).join(' · ');
   }
   // 프로필 설정: only what this profile may change. The master sees everything, including each
   // other profile's management page; a kids profile sees its icon (if allowed) and its allowed apps.
@@ -2077,6 +2099,7 @@
       } });
     rows.push({ need: 'self', name: '색', dot: cur.color, val: '', change: function (d) { cur.color = PROFILE_COLORS[(PROFILE_COLORS.indexOf(cur.color) + d + PROFILE_COLORS.length) % PROFILE_COLORS.length]; render(); renderPanel(); } });
     if (hasPin() && cur.id !== master().id) rows.push({ need: 'self', name: '이 프로필로 바꿀 때 PIN', sub: '다른 프로필에서 넘어올 때 PIN을 물어요', val: onOff(cur.lockIn), change: function () { cur.lockIn = !cur.lockIn; renderPanel(); } });
+    if (isGuest(cur)) rows.push({ name: '손님 프로필이에요', sub: '쓸 수 있는 앱 ' + (cur.allow || []).length + '개는 마스터가 정해요. 앱 기록은 남지 않고, 공개된 일정 · 메모만 볼 수 있어요' });
     if (isKids(cur)) rows.push({ name: '허용 앱 ' + (cur.allow || []).length + '개', sub: '이 중에서 홈 화면을 꾸밀 수 있어요. 허용 앱은 마스터가 정해요' });
     if (isAdmin()) {
       ROOT.profiles.forEach(function (pr) {
@@ -2109,7 +2132,7 @@
       return '<div class="sw-p' + (sw.row === 0 && sw.i === i ? ' cfocus' : '') + (pr.id === ROOT.current ? ' cur' : '') + '">' + avatarHtml(pr, 'mid') +
         '<b>' + esc(pr.name) + '</b><small>' + (pr.id === ROOT.current ? '사용 중' : esc(profileBadges(pr) || '')) + (pr.lockIn || (pr.id === master().id && pr.id !== ROOT.current) && hasPin() ? ' 🔒' : '') + '</small></div>';
     }).join('') + '<div class="sw-p add' + (sw.row === 0 && sw.i === n ? ' cfocus' : '') + '"><span class="av mid plus">＋</span><b>추가</b><small>' + (isAdmin() ? '새 프로필' : '마스터') + '</small></div>';
-    var btns = ['나의 프로필', '프로필 설정'];
+    var btns = isGuest() ? ['프로필 설정'] : ['나의 프로필', '프로필 설정'];
     $('swBtns').innerHTML = btns.map(function (t, i) { return '<span class="me-btn' + (sw.row === 1 && sw.b === i ? ' cfocus' : '') + '">' + t + '</span>'; }).join('');
   }
   function switcherKey(k) {
@@ -2127,8 +2150,8 @@
         return;
       }
     } else {
-      if (k === 'left') sw.b = 0; else if (k === 'right') sw.b = 1; else if (k === 'up') sw.row = 0;
-      else if (k === 'ok' || k === 'longok') { var which = sw.b; closeSwitcher(true); if (which === 0) openMe(); else openPanel('profset'); return; }
+      if (k === 'left') sw.b = 0; else if (k === 'right') sw.b = isGuest() ? 0 : 1; else if (k === 'up') sw.row = 0;
+      else if (k === 'ok' || k === 'longok') { var which = isGuest() ? 1 : sw.b; closeSwitcher(true); if (which === 0) openMe(); else openPanel('profset'); return; }
     }
     renderSwitcher();
   }
@@ -2139,6 +2162,7 @@
     var t = profileById(panel.target);
     if (!t) return [{ name: '이 프로필이 없어요' }];
     var kids = isKids(t);
+    if (isGuest(t)) return guestManageRows(t);
     var rows = [
       { name: '이름', sub: 'OK로 직접 입력', val: t.name, action: true,
         act: function () { askText('프로필 이름', t.name, function (txt) { if (txt !== null && txt.trim()) { t.name = txt.trim().slice(0, 12); savePrefs(); render(); } }); } },
@@ -2165,6 +2189,21 @@
     return rows;
   }
 
+  function guestManageRows(t) {
+    var rows = [
+      { name: '이름', sub: 'OK로 직접 입력', val: t.name, action: true,
+        act: function () { askText('프로필 이름', t.name, function (txt) { if (txt !== null && txt.trim()) { t.name = txt.trim().slice(0, 12); savePrefs(); render(); } }); } },
+      { name: '종류', sub: '공용 프로필 · 기록이 남지 않고, 공개한 일정 · 메모만 봐요', val: '손님' },
+      { id: 'allow', name: '쓸 수 있는 앱', sub: '로그인된 앱(넷플릭스 등)은 그 계정 그대로 쓰게 돼요', val: (t.allow || []).length + '개', action: true,
+        act: function () { openPanel('allow', { target: t.id, back: { type: 'profmanage', id: 'allow', opts: { target: t.id, back: panel.back } } }); } },
+      { name: 'Cove 시네마 관람 등급', sub: '어린 손님이 많으면 전체 관람가만 보여 줘요', val: t.allAges ? '전체 관람가만' : '모든 작품', change: function () { t.allAges = !t.allAges; savePrefs(); renderPanel(); } },
+      { name: '이 프로필로 바꿀 때 PIN', sub: '다른 프로필에서 넘어올 때 PIN을 물어요', val: t.lockIn ? '켜짐' : '꺼짐',
+        change: function () { if (!hasPin()) { needPinFirst(); return; } t.lockIn = !t.lockIn; savePrefs(); renderPanel(); } },
+      { name: '이 프로필 삭제', danger: true, action: true, val: armed === 'delprofile' ? '한 번 더 누르면 삭제' : '',
+        act: function () { twice('delprofile', function () { dropEdits(false); deleteProfileById(t.id); closePanelQuiet(); openPanel('profset'); }); } }
+    ];
+    return rows;
+  }
   function newProfileRows() {
     var d = panel.draft;
     var names = function () {
@@ -2175,16 +2214,21 @@
       { name: '이름', sub: 'OK로 직접 입력, ◀ ▶로 추천 이름', val: d.name, action: true,
         act: function () { askText('프로필 이름', d.name, function (txt) { if (txt !== null && txt.trim()) { d.name = txt.trim().slice(0, 12); renderPanel(); } }); }, change: function (k) { var l = names(); d.name = l[(l.indexOf(d.name) + k + l.length) % l.length]; renderPanel(); } },
       { name: '색', dot: d.color, val: '', change: function (k) { d.color = PROFILE_COLORS[(PROFILE_COLORS.indexOf(d.color) + k + PROFILE_COLORS.length) % PROFILE_COLORS.length]; renderPanel(); } },
-      { name: '종류', sub: d.kind === 'kids' ? '허용한 앱만 보이고, 나가려면 PIN이 필요해요' : '모든 앱을 쓸 수 있어요',
-        val: d.kind === 'kids' ? '키즈' : '일반', change: function () {
-          d.kind = d.kind === 'kids' ? 'normal' : 'kids';
-          var used = ROOT.profiles.map(function (p) { return p.name; });
-          if (d.kind === 'kids' && used.indexOf('아이') < 0) d.name = '아이';
-          else if (d.kind === 'normal' && d.name === '아이') d.name = PROFILE_NAMES.filter(function (n) { return used.indexOf(n) < 0 && n !== '아이'; })[0] || d.name;
+      { name: '종류', sub: d.kind === 'kids' ? '허용한 앱만 보이고, 나가려면 PIN이 필요해요' : d.kind === 'guest' ? '공용 · 정해 준 앱만, 기록 없이, 공개한 일정 · 메모만 봐요' : '모든 앱을 쓸 수 있어요',
+        val: d.kind === 'kids' ? '키즈' : d.kind === 'guest' ? '손님 (공용)' : '일반', change: function (k) {
+          var kinds = guestProfile() ? ['normal', 'kids'] : ['normal', 'kids', 'guest'], was = d.kind;
+          d.kind = kinds[(kinds.indexOf(d.kind) + (k || 1) + kinds.length) % kinds.length];
+          var used = ROOT.profiles.map(function (p) { return p.name; }), free = function (n) { return used.indexOf(n) < 0; };
+          if (d.kind === 'kids' && free('아이')) d.name = '아이';
+          else if (d.kind === 'guest') d.name = free('손님') ? '손님' : '거실';
+          else if (d.kind === 'normal' && (was === 'kids' && d.name === '아이' || was === 'guest')) d.name = PROFILE_NAMES.filter(function (n) { return free(n) && n !== '아이' && n !== '손님'; })[0] || d.name;
+          if (d.kind === 'guest') d.color = GUEST_COLOR;
           renderPanel();
         } }
     ];
-    if (d.kind !== 'kids') {
+    if (d.kind === 'guest') rows.splice(1, 1);   // its colour is fixed
+    if (d.kind === 'guest') rows.push({ name: '시작 상태', sub: '가장 기본 홈에 위젯 없이 시작해요. 아이콘 · 꾸미기는 바꿀 수 없어요', val: '기본 상태' });
+    if (d.kind === 'normal') {
       rows.push({ name: '시작 상태', sub: d.start === 'copy' ? '지금 프로필의 디자인, 배경, 앱 목록을 복사해요' : '처음 설치했을 때와 같은 기본 상태로 시작해요',
         val: d.start === 'copy' ? '지금 설정 복사' : '기본 상태', change: function () { d.start = d.start === 'copy' ? 'default' : 'copy'; renderPanel(); } });
     }
@@ -2346,7 +2390,7 @@
 
   function rowsFor(type) {
     if (panel && panel.confirm && type === panel.type) return confirmRows();
-    var rows = baseRows(type).filter(function (r) { return !r.need || may(r.need); });
+    var rows = baseRows(type).filter(function (r) { return r && (!r.need || may(r.need)); });
     if (edit && panel && type === panel.type && edit.key === editKey(panel)) {
       var dirty = isDirty();
       rows.push({ id: 'save', name: '저장', sub: dirty ? '바꾼 내용을 확정해요' : '바뀐 내용이 없어요', action: true, save: true, act: function () { saveEdit(); } });
@@ -2597,6 +2641,8 @@
     return ROOT.cal;
   }
   function visibleOwner(owner) { return owner === 'family' || owner === ROOT.current; }
+  // what this profile sees: its own and the family's; a guest sees only what was marked for guests
+  function seen(x) { return isGuest() ? !!x.pub : visibleOwner(x.owner); }
   function ownerName(owner) { if (owner === 'family') return '가족'; var p = profileById(owner); return p ? p.name : ''; }
 
   // --- iCal parsing ---
@@ -2693,12 +2739,12 @@
   function occurrences(from, to) {
     var list = [], data = calData();
     data.events.forEach(function (e) {
-      if (!visibleOwner(e.owner)) return;
+      if (!seen(e)) return;
       var s = new Date(e.start);
-      if (s >= from && s <= to) list.push({ title: e.title, start: s, end: e.end ? new Date(e.end) : null, allDay: !!e.allDay, owner: e.owner, id: e.id, color: '#ffffff', src: '내 일정' });
+      if (s >= from && s <= to) list.push({ title: e.title, start: s, end: e.end ? new Date(e.end) : null, allDay: !!e.allDay, owner: e.owner, id: e.id, pub: !!e.pub, color: '#ffffff', src: isGuest() ? '공개 일정' : '내 일정' });
     });
     data.subs.forEach(function (sub, si) {
-      if (!visibleOwner(sub.owner)) return;
+      if (!seen(sub)) return;
       var feed = calFeeds[sub.id];
       if (!feed || !feed.series) return;
       var moved = {};
@@ -2749,10 +2795,11 @@
   function calCmd(json) {
     var c = {};
     try { c = JSON.parse(json); } catch (e) { return; }
+    if (isGuest() && /^(add|del|sub|unsub|memo)$/.test(c.op)) { toast(GUEST_NOTE); return; }
     var data = calData();
-    var owner = c.owner && (c.owner === 'family' || profileById(c.owner)) ? c.owner : 'family';
+    var owner = c.owner && (c.owner === 'family' || (profileById(c.owner) && !isGuest(profileById(c.owner)))) ? c.owner : 'family';
     if (c.op === 'add' && c.title && c.start) {
-      var ev = { id: 'e' + Date.now().toString(36), title: String(c.title).slice(0, 80), start: c.start, end: c.end || null, allDay: !!c.allDay, owner: owner };
+      var ev = { id: 'e' + Date.now().toString(36), title: String(c.title).slice(0, 80), start: c.start, end: c.end || null, allDay: !!c.allDay, owner: owner, pub: !!c.pub };
       data.events.push(ev);
       savePrefs();
       toast('일정을 추가했어요: ' + relDay(new Date(ev.start)) + ' ' + (ev.allDay ? '' : fmtTime(new Date(ev.start)) + ' ') + ev.title);
@@ -2831,7 +2878,7 @@
   function gridStart(day) { var m0 = new Date(day.getFullYear(), day.getMonth(), 1); return addDays(m0, -m0.getDay()); }
 
   function evRow(o, focused) {
-    if (o.add) return '<div class="ev add' + (focused ? ' cfocus' : '') + '"><div class="ev-time">＋</div><div class="ev-main"><b>이 날에 일정 추가</b></div></div>';
+    if (o.add) return '<div class="ev add' + (focused ? ' cfocus' : '') + '"><div class="ev-time">＋</div><div class="ev-main"><b>' + (isGuest() ? '손님 프로필은 공개된 일정만 볼 수 있어요' : '이 날에 일정 추가') + '</b></div></div>';
     return '<div class="ev' + (focused ? ' cfocus' : '') + '" style="--evc:' + esc(o.color) + '"><div class="ev-time">' +
       (o.allDay ? '종일' : fmtTime(o.start)) + '</div><div class="ev-main"><b>' + esc(o.title) + '</b><span>' + esc(o.src) +
       (o.owner !== 'family' ? ' · ' + esc(ownerName(o.owner)) : '') + '</span></div></div>';
@@ -2839,9 +2886,9 @@
   function renderCal() {
     var head = cal.zone === 'head';
     $('calTabs').innerHTML = CAL_HEAD.map(function (t, i) {
-      return '<span class="' + (i < 3 ? 'ctab' : 'cbtn') + (cal.mode === t[0] ? ' cur' : '') + (head && cal.hi === i ? ' cfocus' : '') + '">' + t[1] + '</span>';
+      return '<span class="' + (i < 3 ? 'ctab' : 'cbtn') + (cal.mode === t[0] ? ' cur' : '') + (head && cal.hi === i ? ' cfocus' : '') + '">' + (isGuest() && t[0] === 'add' ? '👀 공개 일정만' : t[1]) + '</span>';
     }).join('');
-    var subs = calData().subs.filter(function (x) { return visibleOwner(x.owner); });
+    var subs = calData().subs.filter(seen);
     var errs = subs.filter(function (x) { return calFeeds[x.id] && !calFeeds[x.id].ok && !calFeeds[x.id].busy; });
     $('calSync').textContent = subs.length ? (errs.length ? '구독 ' + errs.length + '개를 불러오지 못했어요' : '구독 캘린더 ' + subs.length + '개') : '';
     var body = $('calBody'), html = '', bodyFocus = !head;
@@ -2951,17 +2998,25 @@
     TIME_STEPS.forEach(function (x, k) { if (x && t && x.h === t.h && x.m === t.m) i = k; });
     return TIME_STEPS[(i + d + TIME_STEPS.length) % TIME_STEPS.length];
   }
-  function ownerList() { return ['family'].concat(ROOT.profiles.map(function (p) { return p.id; })); }
+  function ownerList() { return ['family'].concat(ROOT.profiles.filter(function (p) { return !isGuest(p); }).map(function (p) { return p.id; })); }
 
+  // "손님 프로필에 보이기" for an event or a memo (only when there is a guest profile)
+  function guestRow(d) {
+    var g = guestProfile();
+    if (!g) return null;
+    return { name: g.name + ' 프로필에 보이기', sub: d.pub ? '손님(공용) 프로필에서도 볼 수 있어요' : '손님(공용) 프로필에는 안 보여요', val: d.pub ? '보임' : '안 보임',
+      change: function () { d.pub = !d.pub; renderPanel(); } };
+  }
   // o = an occurrence (edit / view) or null (new event on the focused day)
   function openEventEditor(o) {
     if (o && !o.id) { openPanel('calev', { draft: { view: o } }); return; }   // subscribed event: details only
+    if (isGuest()) { if (o) openPanel('calev', { draft: { view: { title: o.title, start: o.start, allDay: o.allDay, src: o.owner === 'family' ? '가족 일정' : ownerName(o.owner) + '의 일정' } } }); else toast(GUEST_NOTE); return; }
     gate('self', o ? '일정 수정' : '일정 추가', function () {
       var now = NOW(), day = cal.day || startOfDay(now);
-      var draft = o ? { id: o.id, title: o.title, day: startOfDay(o.start), time: o.allDay ? null : { h: o.start.getHours(), m: o.start.getMinutes() }, owner: o.owner }
+      var draft = o ? { id: o.id, title: o.title, day: startOfDay(o.start), time: o.allDay ? null : { h: o.start.getHours(), m: o.start.getMinutes() }, owner: o.owner, pub: !!o.pub }
         : { title: '', day: day, time: dayKey(day) === dayKey(now) ? { h: Math.min(23, now.getHours() + 1), m: 0 } : { h: 10, m: 0 }, owner: ROOT.current };
       openPanel('calev', { draft: draft });
-      if (!o) askText('일정 제목', '', function (txt) { if (txt !== null && panel && panel.draft === draft) { draft.title = txt.trim(); panel.i = 4; renderPanel(); } });
+      if (!o) askText('일정 제목', '', function (txt) { if (txt !== null && panel && panel.draft === draft) { draft.title = txt.trim(); panel.i = guestProfile() ? 5 : 4; renderPanel(); } });
     });
   }
   function eventRows() {
@@ -2981,16 +3036,17 @@
       { name: '시간', val: timeLabel(d.time), change: function (k) { d.time = stepTime(d.time, k); renderPanel(); } },
       { name: '누구 일정', sub: d.owner === 'family' ? '모든 프로필에 보여요' : ownerName(d.owner) + ' 프로필에서만 보여요',
         val: d.owner === 'family' ? '가족 모두 (공용)' : ownerName(d.owner) + ' (개인)', change: function (k) { var l = ownerList(); d.owner = l[(l.indexOf(d.owner) + k + l.length) % l.length]; renderPanel(); } },
+      guestRow(d),
       { name: d.id ? '저장' : '추가', sub: d.title ? relDay(d.day) + ' ' + (d.time ? timeLabel(d.time) + ' ' : '') + d.title : '먼저 제목을 넣어 주세요', action: true,
         act: function () {
           if (!d.title) { toast('제목을 넣어 주세요'); panel.i = 0; renderPanel(); return; }
           var start = d.time ? dayKey(d.day) + 'T' + pad2(d.time.h) + ':' + pad2(d.time.m) : dayKey(d.day);
           var data = calData();
           if (d.id) {
-            data.events.forEach(function (e) { if (e.id === d.id) { e.title = d.title.slice(0, 80); e.start = start; e.allDay = !d.time; e.owner = d.owner; } });
+            data.events.forEach(function (e) { if (e.id === d.id) { e.title = d.title.slice(0, 80); e.start = start; e.allDay = !d.time; e.owner = d.owner; e.pub = !!d.pub; } });
             savePrefs(); toast('일정을 고쳤어요');
           } else {
-            calCmd(JSON.stringify({ op: 'add', title: d.title, start: start, allDay: !d.time, owner: d.owner }));
+            calCmd(JSON.stringify({ op: 'add', title: d.title, start: start, allDay: !d.time, owner: d.owner, pub: !!d.pub }));
           }
           closePanelQuiet();
           cal.day = d.day; cal.mode = cal.mode || 'day'; cal.zone = 'body';
@@ -3011,6 +3067,10 @@
       var status = f.busy ? '불러오는 중' : f.ok ? (f.series ? f.series.length + '개 일정' : '연결됨') : (f.error ? '오류: ' + f.error : '대기 중');
       return { name: s.name, dot: s.color, sub: ownerName(s.owner) + ' · ' + status, val: armed === 'unsub' + s.id ? '한 번 더 누르면 삭제' : '삭제', danger: true, action: true,
         act: function () { gate('self', '캘린더 삭제', function () { twice('unsub' + s.id, function () { calCmd(JSON.stringify({ op: 'unsub', id: s.id })); renderPanel(); }); }); } };
+    });
+    if (guestProfile()) calData().subs.forEach(function (s) {
+      rows.push({ name: s.name + ' · ' + guestProfile().name + ' 프로필에 보이기', dot: s.color, val: s.pub ? '보임' : '안 보임',
+        change: function () { gate('self', '캘린더 공개 바꾸기', function () { s.pub = !s.pub; savePrefs(); renderPanel(); }); } });
     });
     rows.push({ name: '지금 다시 불러오기', action: true, act: function () { syncCalendars(true); toast('구독 캘린더를 다시 불러와요'); } });
     rows.push({ name: '홈 화면에 다음 일정', sub: '시계 아래에 오늘·내일 일정을 한 줄로', val: P.calPreview !== false ? '표시' : '숨김', change: function () { set({ calPreview: P.calPreview === false }); } });
@@ -3109,7 +3169,7 @@
   }
   function memoVisible(m) {
     var today = dayKey(NOW());
-    return (m.to === 'family' || m.to === ROOT.current) && m.from <= today && (!m.until || m.until >= today);
+    return (isGuest() ? !!m.pub : m.to === 'family' || m.to === ROOT.current) && m.from <= today && (!m.until || m.until >= today);
   }
   function activeMemos() { return memos().filter(memoVisible); }
   // The board also lists what this profile sent (scheduled, for someone else, or ended).
@@ -3125,12 +3185,13 @@
   }
   function addMemo(text, opts) {
     opts = opts || {};
+    if (isGuest()) { toast(GUEST_NOTE); return; }
     text = String(text || '').trim().slice(0, 200);
     if (!text) return;
     var from = opts.from || dayKey(NOW());
     memos().unshift({ id: 'm' + Date.now().toString(36), text: text, color: opts.color || MEMO_COLORS[memos().length % MEMO_COLORS.length], at: Date.now(),
       by: opts.by && profileById(opts.by) ? opts.by : ROOT.current, to: opts.to && (opts.to === 'family' || profileById(opts.to)) ? opts.to : 'family',
-      from: from, until: opts.until || untilFor(from, opts.days) });
+      from: from, until: opts.until || untilFor(from, opts.days), pub: !!opts.pub });
     savePrefs(); saveSnapshot(); showMemoLine();
     if (base === 'memo') renderMemo();
     var m = memos()[0];
@@ -3167,7 +3228,7 @@
   function renderMemo() {
     var list = boardMemos();
     memoSel = Math.max(0, Math.min(list.length, memoSel));
-    $('memoGrid').innerHTML = '<div class="note add' + (memoSel === 0 ? ' cfocus' : '') + '"><b>＋</b><span>메모 붙이기</span></div>' +
+    $('memoGrid').innerHTML = '<div class="note add' + (memoSel === 0 ? ' cfocus' : '') + '"><b>' + (isGuest() ? '👀' : '＋') + '</b><span>' + (isGuest() ? '공개된 메모만 보여요' : '메모 붙이기') + '</span></div>' +
       list.map(function (m, i) {
         var st = memoStatus(m), dim = !memoVisible(m);
         return '<div class="note' + (memoSel === i + 1 ? ' cfocus' : '') + (dim ? ' later' : '') + '" style="--c:' + esc(m.color) + ';--r:' + ((i % 3) - 1) * 0.8 + 'deg"><p>' + esc(m.text) + '</p>' +
@@ -3178,10 +3239,10 @@
       if (fr.bottom > gr.bottom) g.scrollTop += fr.bottom - gr.bottom + 20; else if (fr.top < gr.top) g.scrollTop -= gr.top - fr.top + 20; }
   }
   function memoDraft(m) {
-    if (!m) return { text: '', color: MEMO_COLORS[memos().length % MEMO_COLORS.length], to: 'family', from: startOfDay(NOW()), days: 0, by: ROOT.current };
+    if (!m) return { text: '', color: MEMO_COLORS[memos().length % MEMO_COLORS.length], to: 'family', from: startOfDay(NOW()), days: 0, by: ROOT.current, pub: false };
     var from = new Date(m.from + 'T00:00'), days = 0;
     if (m.until) days = Math.round((new Date(m.until + 'T00:00') - from) / 86400000) + 1;
-    return { id: m.id, text: m.text, color: m.color, to: m.to, from: from, days: days, by: m.by || ROOT.current };
+    return { id: m.id, text: m.text, color: m.color, to: m.to, from: from, days: days, by: m.by || ROOT.current, pub: !!m.pub };
   }
   function memoKey(k) {
     var n = boardMemos().length + 1, cols = 4;
@@ -3191,17 +3252,18 @@
     else if (k === 'up') memoSel = Math.max(0, memoSel - cols);
     else if (k === 'down') memoSel = Math.min(n - 1, memoSel + cols);
     else if (k === 'ok' || k === 'longok') {
+      if (isGuest()) { toast(GUEST_NOTE); return; }
       if (memoSel === 0) {
         var draft = memoDraft(null);
         openPanel('memoedit', { draft: draft });
-        askText('메모', '', function (txt) { if (txt !== null && panel && panel.draft === draft) { draft.text = txt.trim().slice(0, 200); panel.i = 5; renderPanel(); } });
+        askText('메모', '', function (txt) { if (txt !== null && panel && panel.draft === draft) { draft.text = txt.trim().slice(0, 200); panel.i = guestProfile() ? 6 : 5; renderPanel(); } });
       } else openPanel('memoedit', { draft: memoDraft(boardMemos()[memoSel - 1]) });
       return;
     }
     renderMemo();
   }
   function memoRows() {
-    var d = panel.draft, tos = ['family'].concat(ROOT.profiles.map(function (p) { return p.id; }));
+    var d = panel.draft, tos = ['family'].concat(ROOT.profiles.filter(function (p) { return !isGuest(p); }).map(function (p) { return p.id; }));
     var dayNames = MEMO_DAYS;
     var rows = [
       { name: '내용', sub: d.text || 'OK를 누르면 TV 키보드가 열려요', val: d.text ? '고치기' : '쓰기', action: true,
@@ -3210,15 +3272,16 @@
         change: function (k) { d.to = tos[(tos.indexOf(d.to) + k + tos.length) % tos.length]; renderPanel(); } },
       { name: '보이는 날', val: fmtDay(d.from) + ' · ' + relDay(d.from), change: function (k) { var nd = addDays(d.from, k); if (nd >= startOfDay(NOW()) || d.id) d.from = nd; renderPanel(); } },
       { name: '보이는 기간', val: labelOf(dayNames, d.days), change: function (k) { d.days = +cycle(dayNames, d.days, k); renderPanel(); } },
+      guestRow(d),
       { name: '색', dot: d.color, val: '', change: function (k) { d.color = MEMO_COLORS[(MEMO_COLORS.indexOf(d.color) + k + MEMO_COLORS.length) % MEMO_COLORS.length]; renderPanel(); } },
       { name: d.id ? '저장' : '붙이기', sub: d.text ? (current().name + ' → ' + (d.to === 'family' ? '가족' : memoTo(d)) + ' · ' + relDay(d.from) + (d.days ? '부터 ' + labelOf(dayNames, d.days) : '부터')) : '먼저 내용을 써 주세요', action: true,
         act: function () {
           if (!d.text) { toast('메모 내용을 써 주세요'); panel.i = 0; renderPanel(); return; }
           var from = dayKey(d.from);
           if (d.id) {
-            memos().forEach(function (m) { if (m.id === d.id) { m.text = d.text; m.to = d.to; m.from = from; m.until = untilFor(from, d.days); m.color = d.color; } });
+            memos().forEach(function (m) { if (m.id === d.id) { m.text = d.text; m.to = d.to; m.from = from; m.until = untilFor(from, d.days); m.color = d.color; m.pub = !!d.pub; } });
             savePrefs(); saveSnapshot(); showMemoLine(); toast('메모를 고쳤어요');
-          } else addMemo(d.text, { color: d.color, to: d.to, from: from, days: d.days });
+          } else addMemo(d.text, { color: d.color, to: d.to, from: from, days: d.days, pub: d.pub });
           closePanelQuiet();
           if (base === 'memo') renderMemo();
         } }
@@ -3300,6 +3363,7 @@
   }
   var meSel = 0, meItems = [], returnMe = false;
   function openMe(again) {
+    if (isGuest()) { toast('손님 프로필에는 나의 프로필이 없어요'); return; }
     if (!again) meSel = 0;   // a fresh visit starts at the top; coming back keeps the card
     closePanelQuiet();
     if (base === 'drawer') $('drawer').hidden = true;
@@ -3603,7 +3667,7 @@
     if (pinState) { raw.replace(/\D/g, '').split('').forEach(pinPress); return; }
     if (window.CoveKeyboard.isOpen()) { window.CoveKeyboard.insert(raw); return; }   // typed on the phone
     var done = function (msg) { toast('🎙 "' + raw + '" → ' + msg); };
-    if (has(t, ['내프로필', '나의프로필', '프로필정보', '내정보'])) { openMe(); done('나의 프로필'); return; }
+    if (has(t, ['내프로필', '나의프로필', '프로필정보', '내정보'])) { if (isGuest()) { done('손님 프로필에는 나의 프로필이 없어요'); return; } openMe(); done('나의 프로필'); return; }
     if (has(t, ['축구', '야구', '스포츠', '경기일정', '경기결과']) && !has(t, ['뉴스', '기사']) && BYPKG['cove.sports']) {
       var slg = has(t, ['야구']) ? 'baseball' : has(t, ['축구']) ? 'soccer' : '';
       done(slg === 'baseball' ? '코브 베이스볼' : slg ? '코브 리그' : 'Cove 스포츠'); launch('cove.sports', false, { lg: slg, live: has(t, ['라이브', '생중계', '중계']) }); return;
@@ -3660,6 +3724,7 @@
     var calWord = has(t, ['일정', '스케줄', '캘린더', '달력', '약속']);
     var when = parseWhen(raw);
     if (addWord && (when.day || when.time) && !findApp(t)) {
+      if (isGuest()) { done(GUEST_NOTE); return; }
       if (blocked('self', '일정 추가', function () { say(raw); })) return;
       var d0 = when.day || startOfDay(NOW());
       var title = when.rest.replace(/(일정|스케줄|캘린더|달력)(을|를|에)?/g, ' ')
