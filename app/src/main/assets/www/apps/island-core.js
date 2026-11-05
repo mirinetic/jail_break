@@ -14,6 +14,8 @@
 
   // Korean particles that follow the last syllable: 당근을, 사과를 / 고양이가, 곰이
   function jong(w) { var c = String(w).charCodeAt(String(w).length - 1) - 0xAC00; return c >= 0 && c < 11172 && c % 28 !== 0; }
+  function eun(w) { return w + (jong(w) ? '은' : '는'); }
+  function wa(w) { return w + (jong(w) ? '과' : '와'); }
   function eul(w) { return w + (jong(w) ? '을' : '를'); }
   function iga(w) { return w + (jong(w) ? '이' : '가'); }
   function h32(s) { var h = 2166136261; s = String(s); for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h; }
@@ -827,12 +829,127 @@
     return '<span class="ico">' + info.e + '</span>';
   }
 
+  // ---------- voice ----------
+  // Spoken commands that act on the island (work from the home screen and inside the game).
+  // t = the sentence without spaces and punctuation. Returns {msg, changed} or null when not about the island.
+  var NUM = { '한': 1, '하나': 1, '두': 2, '둘': 2, '세': 3, '셋': 3, '네': 4, '넷': 4, '다섯': 5, '여섯': 6, '일곱': 7, '여덟': 8, '아홉': 9, '열': 10 };
+  function numIn(t, def) {
+    var m = /(\d+)(개|칸|그루|번)?/.exec(t);
+    if (m) return Math.min(30, +m[1]);
+    for (var w in NUM) if (t.indexOf(w + '개') >= 0 || t.indexOf(w + '그루') >= 0) return NUM[w];
+    if (/전부|모두|다(심|사|팔)|가득|있는대로/.test(t)) return 99;
+    return def;
+  }
+  function hasAny(t, words) { for (var i = 0; i < words.length; i++) if (t.indexOf(words[i]) >= 0) return true; return false; }
+  function findCrop(t) { var best = null, len = 0; for (var k in CROPS) { var n = CROPS[k].n; if (t.indexOf(n) >= 0 && n.length > len) { best = k; len = n.length; } } return best; }
+  function findTree(t) { for (var k in TREES) { if (t.indexOf(TREES[k].n.replace(/\s/g, '')) >= 0 || t.indexOf(TREES[k].fn) >= 0 && hasAny(t, ['나무', '묘목'])) return k; } return null; }
+  function findDeco(t) { var best = null, len = 0; for (var k in DECOS) { var n = DECOS[k].n.replace(/\s/g, ''); if (DECOS[k].c && t.indexOf(n) >= 0 && n.length > len) { best = k; len = n.length; } } return best; }
+  // empty land for planting, nearest the middle first
+  function freeLand(s) {
+    var out = [], spots = guestSpots(s), taken = {};
+    for (var g in spots) taken[spots[g][0] + ',' + spots[g][1]] = 1;
+    for (var y = 0; y < ROWS; y++) for (var x = 0; x < COLS; x++) {
+      var k = x + ',' + y;
+      if (isLand(x, y, s.lvl, s.seed) && !s.tiles[k] && !s.floor[k] && !taken[k]) out.push([x, y, Math.pow(x - CX, 2) + Math.pow((y - CY) * 1.6, 2)]);
+    }
+    return out.sort(function (a, b) { return a[2] - b[2]; });
+  }
+  function voice(s, t, env, shared, pid) {
+    var n, k, msgs = [], got = 0, x, y, i;
+    // status questions
+    if (hasAny(t, ['어때', '상태', '현황', '요약', '어떻게되', '뭐있'])) {
+      var sm = summary(s, env, shared), names = Object.keys(s.vis).map(function (g) { return GUESTS[g].n; });
+      return { msg: '섬 Lv.' + s.lvl + ' · 조개 ' + s.shells + ' · 수확할 것 ' + sm.ready + (sm.dry ? ' · 목마른 작물 ' + sm.dry : '') + ' · 모래사장 ' + sm.beach + (names.length ? ' · 손님 ' + names.join(', ') : ' · 손님 없음') + (sm.mail ? ' · 우편 ' + sm.mail : '') };
+    }
+    if (hasAny(t, ['조개몇', '조개얼마', '돈얼마', '돈몇'])) return { msg: '조개가 ' + s.shells + '개 있어요' };
+    if (hasAny(t, ['누가', '손님누구', '손님있', '놀러왔'])) {
+      var gs = Object.keys(s.vis);
+      return { msg: gs.length ? '지금 섬에 ' + gs.map(function (g) { return GUESTS[g].e + ' ' + GUESTS[g].n + (s.vis[g].talked ? '' : '(이야기 전)'); }).join(', ') + ' 손님이 있어요' : '지금은 손님이 없어요' };
+    }
+    if (hasAny(t, ['의뢰', '부탁']) && !hasAny(t, ['열어', '보여', '전해', '줘'])) {
+      return { msg: (s.req ? s.req.list.map(function (r) { return r.by + ': ' + itemInfo(r.item).n + ' ' + r.n + '개' + (r.done ? ' ✓' : ' (' + inv(s, r.item) + '/' + r.n + ')'); }).join(' · ') : '오늘의 의뢰가 없어요') };
+    }
+    // planting: picks empty land near the middle
+    if (hasAny(t, ['심어', '심기', '심자', '심을', '심고', '심으'])) {
+      var cp = findCrop(t), tp = findTree(t), seed = cp ? 'seed:' + cp : tp ? 'tree:' + tp : null;
+      if (!seed) { var have = Object.keys(s.inv).filter(function (it) { return /^seed:/.test(it); }); seed = have[0] || null; }
+      if (!seed || inv(s, seed) <= 0) return { msg: seed ? '가방에 ' + iga(itemInfo(seed).n) + ' 없어요. "씨앗 사 줘"라고 말해 보세요' : '가방에 씨앗이 없어요' };
+      var spots2 = freeLand(s);
+      n = Math.min(numIn(t, /^tree:/.test(seed) ? 1 : 99), inv(s, seed), spots2.length);
+      if (n <= 0) return { msg: '빈 땅이 없어요' };
+      for (i = 0; i < n; i++) plant(s, spots2[i][0], spots2[i][1], seed, env);
+      var rain = weatherKind(env) === 'rain';
+      if (!rain && /^seed:/.test(seed) && hasAny(t, ['물'])) waterAll(s, env);
+      return { msg: itemInfo(seed).n.replace(/ 씨앗$/, '') + ' ' + n + '개를 심었어요' + (/^seed:/.test(seed) ? (rain || hasAny(t, ['물']) ? ' · 물도 줬어요' : ' · "섬에 물 줘"라고 하면 물을 줘요') : ''), changed: true };
+    }
+    // watering
+    if (hasAny(t, ['물줘', '물주', '물을줘', '물좀'])) { n = waterAll(s, env); return { msg: n ? '작물 ' + n + '개에 물을 줬어요 💧' : '목마른 작물이 없어요', changed: n > 0 }; }
+    // harvesting everything that is ready
+    if (hasAny(t, ['수확', '거둬', '거두', '따줘', '열매따'])) {
+      var before = s.lvl;
+      for (k in s.tiles) { var q = k.split(','), r0 = harvest(s, +q[0], +q[1], env, shared); if (r0) { got++; msgs.push(r0.msg.replace(/ · 섬이.*$/, '')); } }
+      if (!got) return { msg: '아직 다 자란 것이 없어요' };
+      return { msg: got + '곳을 거뒀어요' + (s.lvl > before ? ' · 섬이 Lv.' + s.lvl + '이 되었어요!' : '') + ' (' + msgs.slice(0, 3).join(', ').replace(/를 거뒀어요|를 땄어요/g, '') + (msgs.length > 3 ? ' 외' : '') + ')', changed: true };
+    }
+    // beach
+    if (hasAny(t, ['주워', '줍기', '주워줘', '모래사장', '조개주'])) {
+      var bs = s.beach.slice();
+      bs.forEach(function (b) { if (collect(s, b.x, b.y)) got++; });
+      return { msg: got ? '모래사장에서 ' + got + '개를 주웠어요 🐚' : '모래사장에 주울 것이 없어요', changed: got > 0 };
+    }
+    // talk to every guest who has not been greeted yet
+    if (hasAny(t, ['이야기', '인사', '대화', '말걸'])) {
+      for (var gid in s.vis) if (!s.vis[gid].talked) { var tr = talk(s, gid, env, pid); if (tr) { got++; msgs.push(GUESTS[gid].n); } }
+      return { msg: got ? msgs.slice(0, -1).concat(wa(msgs[msgs.length - 1])).join(', ') + ' 이야기하고 선물을 받았어요' : '이야기할 손님이 없어요', changed: got > 0 };
+    }
+    // selling all produce (not seeds, furniture or building materials)
+    if (hasAny(t, ['팔아', '팔기', '팔자', '판매'])) {
+      var only = findCrop(t), earned = 0;
+      Object.keys(s.inv).forEach(function (it) {
+        var info = itemInfo(it);
+        if (!info.sell || info.mat || /^(seed|tree|deco):/.test(it)) return;
+        if (only && it !== only) return;
+        earned += info.sell * inv(s, it); got += inv(s, it); add(s, it, -inv(s, it));
+      });
+      s.shells += earned;
+      return { msg: got ? '작물과 열매 ' + got + '개를 팔아 조개 ' + earned + '개를 벌었어요' : '팔 작물이 없어요', changed: got > 0 };
+    }
+    // buying seeds or saplings
+    if (hasAny(t, ['사줘', '사와', '구매', '살래', '사자'])) {
+      var cb = findCrop(t), tb = findTree(t), item = cb ? 'seed:' + cb : tb ? 'tree:' + tb : null;
+      if (!item) return { msg: '어떤 씨앗을 살까요? 예: "섬에서 당근 씨앗 5개 사 줘"' };
+      var d = cb ? CROPS[cb] : TREES[tb];
+      if (d.lv > s.lvl) return { msg: eun(cb ? d.n + ' 씨앗' : d.n) + ' 섬 Lv.' + d.lv + '에 열려요' };
+      if (cb && d.season !== undefined && d.season !== seasonOf(wall(env))) return { msg: d.n + ' 씨앗은 ' + SEASON_N[d.season] + '에만 팔아요' };
+      n = Math.min(numIn(t, 1), Math.floor(s.shells / d.price));
+      if (n <= 0) return { msg: '조개가 모자라요 (' + d.price + '개 필요)' };
+      for (i = 0; i < n; i++) buy(s, item);
+      return { msg: itemInfo(item).n + ' ' + n + '개를 샀어요 (조개 ' + d.price * n + ')', changed: true };
+    }
+    // crafting
+    if (hasAny(t, ['만들어', '만들기', '만들자'])) {
+      var dk = findDeco(t);
+      if (!dk) return { msg: '무엇을 만들까요? 예: "벤치 만들어 줘"' };
+      var dd = DECOS[dk];
+      if (dd.lv > s.lvl) return { msg: eun(dd.n) + ' 섬 Lv.' + dd.lv + '에 열려요' };
+      if (dd.season !== undefined && dd.season !== seasonOf(wall(env))) return { msg: eun(dd.n) + ' ' + SEASON_N[dd.season] + '에만 만들 수 있어요' };
+      var cr = craft(s, dk);
+      return cr ? { msg: cr.msg, changed: true } : { msg: dd.n + ' 재료가 모자라요' };
+    }
+    // deliver what can be delivered
+    if (hasAny(t, ['의뢰', '부탁']) && hasAny(t, ['전해', '해결', '완료', '줘'])) {
+      (s.req ? s.req.list : []).forEach(function (r, ix) { if (deliver(s, ix)) got++; });
+      return { msg: got ? '의뢰 ' + got + '개를 전했어요' : '지금 전할 수 있는 의뢰가 없어요', changed: got > 0 };
+    }
+    return null;
+  }
+
   G.IslandCore = {
     COLS: COLS, ROWS: ROWS, CX: CX, CY: CY, STRUCT: STRUCT, build: build, CROPS: CROPS, TREES: TREES, DECOS: DECOS, GUESTS: GUESTS, MATS: MATS, XP_AT: XP_AT, LIGHTHOUSE: LIGHTHOUSE, WEEK_GOALS: WEEK_GOALS, SEASON_N: SEASON_N,
     fresh: fresh, norm: norm, update: update, summary: summary, speed: speed, cropProg: cropProg, treeState: treeState, left: left,
     isLand: isLand, isBeach: isBeach, landCount: landCount, tileAt: tileAt, guestAt: guestAt, beachAt: beachAt, guestOk: guestOk, countWhere: countWhere,
     harvest: harvest, water: water, waterAll: waterAll, plant: plant, place: place, pickUp: pickUp, collect: collect, talk: talk, craft: craft, buy: buy, sell: sell,
     deliver: deliver, weekDone: weekDone, claimWeek: claimWeek, readMail: readMail, visitWater: visitWater, giveGift: giveGift, contribute: contribute,
-    eul: eul, iga: iga, has: has, inv: inv, itemInfo: itemInfo, iconHtml: iconHtml, draw: draw, layout: layout, wall: wall, phase: phase, seasonOf: seasonOf, weatherKind: weatherKind, dayKey: dayKey, h32: h32
+    voice: voice, freeLand: freeLand, eul: eul, iga: iga, has: has, inv: inv, itemInfo: itemInfo, iconHtml: iconHtml, draw: draw, layout: layout, wall: wall, phase: phase, seasonOf: seasonOf, weatherKind: weatherKind, dayKey: dayKey, h32: h32
   };
 })(window);

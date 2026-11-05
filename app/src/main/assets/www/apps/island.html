@@ -96,9 +96,19 @@
   function env() { return { now: Date.now(), shift: extra.env.shift || 0, weather: extra.env.weather }; }
   function isl() { return view ? view.data : S; }
   function esc(s) { return String(s).replace(/[&<>"']/g, function (ch) { return '&#' + ch.charCodeAt(0) + ';'; }); }
+  // Saves shortly after a change. A visited island is remembered at the moment of the change, so leaving
+  // the visit right away does not lose what was done there.
+  var pendingFor = {};
   function save() {
+    if (view) pendingFor[view.id] = view.data;
     clearTimeout(saveT);
-    saveT = setTimeout(function () { CoveApp.save(S); if (view) CoveApp.saveFor(view.id, view.data); }, 400);
+    saveT = setTimeout(flush, 400);
+  }
+  function flush() {
+    clearTimeout(saveT);
+    CoveApp.save(S);
+    for (var id in pendingFor) CoveApp.saveFor(id, pendingFor[id]);
+    pendingFor = {};
   }
   var toastT = null;
   function toast(msg, big) { var el = $('toast'); el.textContent = msg; el.className = 'on' + (big ? ' big' : ''); clearTimeout(toastT); toastT = setTimeout(function () { el.className = big ? 'big' : ''; }, big ? 3600 : 2600); }
@@ -412,7 +422,7 @@
     renderHud();
   }
   function barAct(id) {
-    if (id === 'home') { save(); view = null; cur = [I.CX, I.CY]; focus = 'grid'; renderHud(); toast('내 섬으로 돌아왔어요'); return; }
+    if (id === 'home') { save(); flush(); view = null; cur = [I.CX, I.CY]; focus = 'grid'; renderHud(); toast('내 섬으로 돌아왔어요'); return; }
     if (id === 'vwater') {
       var key = view.id + ':' + I.dayKey(I.wall(env()));
       S.watered = S.watered || {};
@@ -427,6 +437,32 @@
     if (id === 'plant') { openPanel('plant'); return; }
     openPanel(id);
   }
+
+  // ---------- voice (forwarded by Cove while the game is open) ----------
+  var PANEL_WORDS = [['상점', 'shop'], ['가게', 'shop'], ['건축', 'build'], ['짓기', 'build'], ['꾸미기', 'decor'], ['도감', 'dex'], ['의뢰', 'req'], ['가족', 'family'], ['우편', 'mail'], ['편지', 'mail'], ['가방', 'plant'], ['씨앗목록', 'plant']];
+  CoveApp.onSay(function (raw) {
+    if (!S) return;
+    var t = String(raw).toLowerCase().replace(/[\s.,!?~'"·:;()+&\-]/g, ''), e = env();
+    if (intro) { intro = false; $('intro').hidden = true; S.seenIntro = true; }
+    // visiting: "엄마 섬에 놀러 가", "내 섬으로 가"
+    if (/(내섬|우리섬|집으로|돌아가)/.test(t) && view) { barAct('home'); return; }
+    if (/놀러|방문|구경/.test(t)) {
+      var f = extra.family.filter(function (m) { return t.indexOf(String(m.name).toLowerCase().replace(/\s/g, '')) >= 0; })[0];
+      if (f) { var d = f.data && f.data.v ? I.update(I.norm(f.data, f.id), env(), shared, f.id) : null; if (d) { if (view) save(); visit(f, d); } else toast(f.name + '은(는) 아직 섬을 시작하지 않았어요'.replace('은(는)', /[가-힣]$/.test(f.name) && (f.name.charCodeAt(f.name.length - 1) - 0xAC00) % 28 ? '은' : '는')); return; }
+    }
+    if (view) {
+      if (/물/.test(t)) { barAct('vwater'); return; }
+      if (/선물/.test(t)) { barAct('vgift'); return; }
+    }
+    // opening a menu: "상점 열어", "도감 보여 줘"
+    var verb = /(열어|보여|켜|가자|봐)/.test(t);
+    for (var i = 0; i < PANEL_WORDS.length; i++) {
+      if (t.indexOf(PANEL_WORDS[i][0]) >= 0 && (verb || t === PANEL_WORDS[i][0])) { if (place) place = null; openPanel(PANEL_WORDS[i][1]); return; }
+    }
+    var r = I.voice(S, t, e, shared, me.id);
+    if (r) { toast('🎙 ' + r.msg); if (r.changed) save(); renderHud(); if (panel) renderPanel(); return; }
+    toast('🎙 "' + raw + '" — 섬에서는 이렇게 말해 보세요: 다 수확해, 물 줘, 당근 심어, 상점 열어');
+  });
 
   // ---------- keys ----------
   CoveApp.onKey(function (k) {
@@ -462,6 +498,7 @@
   // every half minute: bring the island up to date (growth, beach finds, guests)
   setInterval(function () { if (!S) return; I.update(S, env(), shared, me.id); renderHud(); if (panel) renderPanel(); }, 30000);
 
+  CoveApp.onClose(function () { if (S) flush(); });
   CoveApp.onInit(function (profile, data, ex) {
     me = profile || {}; extra = ex || extra; shared = (extra.shared && typeof extra.shared === 'object') ? JSON.parse(JSON.stringify(extra.shared)) : {};
     S = I.norm(data && data.v ? data : null, me.id || 'me');

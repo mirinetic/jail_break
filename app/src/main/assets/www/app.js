@@ -921,6 +921,15 @@
   }
   function endMini() {
     if (!mini) return null;
+    // collect what the app had not sent yet (it may close in the middle of a delayed save)
+    try {
+      var last = mini.frame.contentWindow.CoveApp && mini.frame.contentWindow.CoveApp._close();
+      if (last) {
+        if (last.data && typeof last.data === 'object') { appData(mini.pid, mini.pkg); ROOT.appdata[mini.pid][mini.pkg] = last.data; }
+        for (var op in last.forOthers) if (profileById(op) && op !== mini.pid) { appData(op, mini.pkg); ROOT.appdata[op][mini.pkg] = last.forOthers[op]; }
+        savePrefs();
+      }
+    } catch (e) {}
     if (mini.start) addTime(mini.pid, mini.pkg, Date.now() - mini.start);
     var from = mini.from;
     mini = null;
@@ -3023,6 +3032,27 @@
     return { day: day, time: time, rest: t };
   }
 
+  // 창가의 작은 섬 by voice. While the game is open, island sentences go to the game (it holds the island);
+  // otherwise sentences with "섬" act on the saved island: "섬 어때", "섬 다 수확해 줘", "섬에 당근 5개 심어 줘".
+  var ISLAND_WORDS = ['섬', '수확', '물줘', '물주', '심어', '씨앗', '조개', '손님', '모래', '의뢰', '도감', '상점', '건축', '만들어', '팔아', '놀러', '우편', '인사', '이야기', '주워'];
+  function islandVoice(raw, t, done) {
+    if (mini && mini.pkg === 'cove.island' && mini.ready) {
+      if (!has(t, ISLAND_WORDS)) return false;
+      miniPost({ type: 'say', text: raw });
+      return true;
+    }
+    if (!has(t, ['섬']) || has(t, ['열어', '켜줘', '켜', '가자', '들어가', '실행'])) return false;
+    if (!BYPKG['cove.island'] || !window.IslandCore) return false;
+    if (!kidsAllows('cove.island') && !isAdmin()) { done('이 프로필에서는 섬을 쓸 수 없어요'); return true; }
+    var isl = islandOf(ROOT.current);
+    if (!isl) { done('아직 섬이 없어요. "섬 열어"라고 말해서 시작해 보세요'); return true; }
+    var env = { now: Date.now(), shift: tzShift(Date.now()), weather: miniEnv().weather };
+    var r = window.IslandCore.voice(isl, t, env, sharedData('cove.island'), ROOT.current);
+    if (!r) return false;
+    if (r.changed) { appData(ROOT.current, 'cove.island'); ROOT.appdata[ROOT.current]['cove.island'] = isl; savePrefs(); }
+    done('🏝️ ' + r.msg);
+    return true;
+  }
   // Cove 시네마 by voice: "보던 거 이어 보기", "찜한 거 틀어 줘", or a title ("달빛 정원 틀어 줘")
   function cinemaVoice(raw, t, done) {
     var cat = window.CoveCinema, a = BYPKG['cove.cinema'];
@@ -3067,13 +3097,7 @@
     var done = function (msg) { toast('🎙 "' + raw + '" → ' + msg); };
     if (has(t, ['내프로필', '나의프로필', '프로필정보', '내정보'])) { openMe(); done('나의 프로필'); return; }
     if (cinemaVoice(raw, t, done)) return;
-    if (has(t, ['섬']) && has(t, ['물'])) {
-      var isl = islandOf(ROOT.current);
-      if (!isl) { done('아직 섬이 없어요. "섬 열어"라고 말해 보세요'); return; }
-      var wn = window.IslandCore.waterAll(isl, { now: Date.now(), shift: tzShift(Date.now()), weather: miniEnv().weather });
-      appData(ROOT.current, 'cove.island'); ROOT.appdata[ROOT.current]['cove.island'] = isl; savePrefs();
-      done(wn ? '섬의 작물 ' + wn + '개에 물을 줬어요' : '섬에 목마른 작물이 없어요'); return;
-    }
+    if (islandVoice(raw, t, done)) return;
 
     // row rename: "줄 이름을 영화로 바꿔" (the row of the focused app)
     var mc = raw.match(/(?:줄|카테고리)\s*이름(?:을|를)?\s*(.+?)\s*(?:으로|로)\s*(?:바꿔|변경|해)/);
