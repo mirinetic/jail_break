@@ -24,10 +24,12 @@
     '.amb-ev span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
     '.amb-memo{background:var(--c,#ffe58a);color:#1d1a12;border-radius:.9vw;padding:.9vw 1.1vw;font-size:1.25vw;line-height:1.4;transform:rotate(var(--r,0deg));box-shadow:0 .6vw 1.6vw rgba(0,0,0,.35);white-space:pre-wrap;word-break:keep-all}';
 
+  var SHIFT = 0;   // minutes: Cove's chosen time zone (the TV's own zone can be wrong)
+  function nowD() { return new Date(Date.now() + SHIFT * 60000); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
   function relDay(d) {
-    var a = new Date(); a.setHours(0, 0, 0, 0);
+    var a = nowD(); a.setHours(0, 0, 0, 0);
     var b = new Date(d); b.setHours(0, 0, 0, 0);
     var n = Math.round((b - a) / 86400000);
     return n === 0 ? '오늘' : n === 1 ? '내일' : (b.getMonth() + 1) + '/' + b.getDate() + '(' + DOW[b.getDay()] + ')';
@@ -62,7 +64,9 @@
     pic.src = url;
   };
   Ambient.prototype.tick = function () {
-    var d = this.getData() || {}, now = new Date(), root = this.root;
+    var d = this.getData() || {}, root = this.root;
+    SHIFT = d.shift || 0;
+    var now = nowD();
     var q = function (s) { return root.querySelector(s); };
     if (!q('.amb-time')) return;
     var info = q('.amb-info');

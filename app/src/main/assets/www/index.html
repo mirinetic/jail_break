@@ -72,6 +72,14 @@
     <div class="p-hint"><span><kbd>방향키</kbd>이동</span><span><kbd>OK</kbd>열기 · 바꾸기</span><span><kbd>뒤로</kbd>닫기</span></div>
   </section>
 
+  <div id="switcher" hidden>
+    <div class="sw-box"><div class="p-kicker">프로필</div><h2>누가 볼까요?</h2>
+      <div class="sw-list" id="swList"></div>
+      <div class="sw-btns" id="swBtns"></div>
+      <div class="p-hint"><span><kbd>◀ ▶</kbd>고르기</span><span><kbd>OK</kbd>바꾸기</span><span><kbd>▼</kbd>나의 프로필 · 프로필 설정</span><span><kbd>뒤로</kbd>닫기</span></div>
+    </div>
+  </div>
+
   <section id="mini" hidden></section>
 
   <aside id="panel" hidden>
@@ -96,6 +104,7 @@
 
   <div id="toast" role="status"></div>
   <script src="ambient.js"></script>
+  <script src="keyboard.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
