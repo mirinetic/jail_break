@@ -419,12 +419,15 @@
   }
   function showWeather() {
     var el = $('weather'), c = cityOf(P.weather);
-    if (!c || !wx.data || wx.city !== P.weather) { el.hidden = true; return; }
+    if (!c) { el.className = 'weather empty'; el.innerHTML = wxIcon(1, true) + '<span>날씨 · OK로 도시 고르기</span>'; el.hidden = false; layoutWidgets(); return; }
+    if (!wx.data || wx.city !== P.weather) { el.className = 'weather empty'; el.innerHTML = wxIcon(2, true) + '<span>' + esc(c[1]) + ' 날씨 받는 중…</span>'; el.hidden = false; return; }
+    el.className = 'weather';
     var cur = wx.data.current || {}, day = wx.data.daily || {};
     var hi = day.temperature_2m_max && day.temperature_2m_max[0], lo = day.temperature_2m_min && day.temperature_2m_min[0];
     el.innerHTML = wxIcon(cur.weather_code, cur.is_day !== 0) + '<b>' + Math.round(cur.temperature_2m) + '°</b>' +
       '<span>' + esc(c[1]) + ' · ' + wxText(cur.weather_code) + (hi !== undefined ? ' · 최고 ' + Math.round(hi) + '° 최저 ' + Math.round(lo) + '°' : '') + '</span>';
     el.hidden = false;
+    layoutWidgets();
   }
   // Fetches at most every 30 minutes (or when the city changes).
   function refreshWeather(force) {
@@ -434,15 +437,267 @@
     if ((fresh && !force) || wx.busy) { showWeather(); return; }
     wx.busy = true;
     var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + c[2] + '&longitude=' + c[3] +
-      '&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1';
+      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,is_day&hourly=temperature_2m,precipitation_probability,weather_code' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=auto&forecast_days=7';
     fetch(url).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (d) {
       wx = { city: c[0], at: Date.now(), data: d, busy: false };
-      showWeather();
+      showWeather(); renderWxPage();
     }).catch(function () {
       wx.busy = false;
       if (wx.city !== c[0]) { wx.at = Date.now(); wx.city = null; }   // try again in 30 minutes
       showWeather();
     });
+  }
+
+  // ---------- home widgets ----------
+  // Widgets sit in the free part of the home screen: the area above the apps (and below or beside the top
+  // bar), measured from where each design actually draws them. That area is split into slots, 3 across and
+  // up to 3 down; a widget lives in a slot and can be moved between slots, so it never covers an app.
+  var WIDGETS = [['clock', '시계'], ['weather', '날씨']];
+  var WDEF = {
+    minimal: { clock: [0, 1], weather: [1, 1], news: [2, 1] },
+    dock: { clock: [0, 1], weather: [1, 1], news: [2, 1] },
+    theater: { clock: [0, 0], weather: [0, 1], news: [0, 1] },
+    icons: { clock: [0, 0], weather: [0, 1], news: [0, 1] },
+    _: { clock: [0, 0], weather: [1, 0], news: [0, 1] }
+  };
+  var wmove = null;   // {w, orig}
+  function widgetOn(w) { var o = P.widgets || {}; if (w === 'clock' && P.clock === 'off') return false; return o[w] !== false; }
+  function wSlot(w) {
+    var saved = P.wpos && P.wpos[P.layout] && P.wpos[P.layout][w];
+    return saved || (WDEF[P.layout] || WDEF._)[w] || [0, 0];
+  }
+  function freeZone() {
+    var home = $('home'), hr = home.getBoundingClientRect(), cs = getComputedStyle(home);
+    var rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    var z = { L: hr.left + parseFloat(cs.paddingLeft), R: hr.right - parseFloat(cs.paddingRight), T: hr.top + parseFloat(cs.paddingTop), B: hr.bottom - parseFloat(cs.paddingBottom), rem: rem, hr: hr };
+    // the highest thing the apps area draws: tiles, row titles, the Column list, the Theater hero, the row tabs
+    var stop = z.B, box = $('tiles').getBoundingClientRect();
+    Array.prototype.forEach.call(document.querySelectorAll('#tiles .tile, #tiles .cat h3, #tiles .colnav, #tiles .hole, #rtabs:not([hidden]), #hero:not([hidden])'), function (e) {
+      var r = e.getBoundingClientRect(), top = r.top;
+      if (e.closest('#tiles')) { if (r.bottom <= box.top) return; top = Math.max(top, box.top); }   // rows scrolled out of view
+      if (r.height > 0 && top < stop) stop = top;
+    });
+    z.B = stop - rem * 0.8;
+    var q = document.querySelector('.quick').getBoundingClientRect();
+    z.Q = q;
+    return z;
+  }
+  // Designs whose apps start near the top keep a band for the widgets as tall as the clock widget.
+  var BAND_LAYOUTS = ['grid', 'column', 'collage', 'icons', 'theater'];
+  function fitBand() {
+    var home = $('home'), ck = $('clock'), want = '';
+    if (BAND_LAYOUTS.indexOf(P.layout) >= 0 && ck && widgetOn('clock')) {
+      ck.hidden = false;
+      var rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      want = Math.max(ck.offsetHeight + rem * 1.4, rem * 6) + 'px';
+    }
+    if (home.style.getPropertyValue('--band') !== want) { if (want) home.style.setProperty('--band', want); else home.style.removeProperty('--band'); return true; }
+    return false;
+  }
+  function layoutWidgets() {
+    if (!ROOT || !P) return;
+    fitBand();
+    var z = freeZone(), H = Math.max(0, z.B - z.T), rem = z.rem, gap = rem * 0.9;
+    var rows = Math.max(1, Math.min(3, Math.floor(H / (rem * 8.5))));
+    var rowH = H / rows, placed = [];
+    var Q = { x: z.Q.left, y: z.Q.top, w: z.Q.width, h: z.Q.height };
+    var hits = function (a, b) { return a.x < b.x + b.w + gap && b.x < a.x + a.w + gap && a.y < b.y + b.h + gap && b.y < a.y + a.h + gap; };
+    var fits = function (p) { return p.x >= z.L - 1 && p.x + p.w <= z.R + 1 && p.y >= z.T - 1 && p.y + p.h <= z.B + rem * 0.4 && !hits(p, Q) && placed.every(function (o) { return !hits(p, o); }); };
+    // where a widget of size w x h goes in slot (r, c); a slot under the top bar moves below it
+    var slotPos = function (r, c, w, h) {
+      var x = c === 0 ? z.L : c === 1 ? (z.L + z.R) / 2 - w / 2 : z.R - w;
+      var y = z.T + r * rowH + (r > 0 && rows > 1 ? Math.max(0, (rowH - h) / 2) : 0);
+      var p = { x: x, y: y, w: w, h: h };
+      if (hits(p, Q)) p.y = Q.y + Q.h + gap;
+      return p;
+    };
+    WIDGETS.forEach(function (wd) {
+      var el = document.querySelector('.widget[data-w="' + wd[0] + '"]');
+      if (!el) return;
+      el.hidden = !widgetOn(wd[0]);
+      el.classList.remove('nofit');
+      if (el.hidden) return;
+      var w = el.offsetWidth, h = el.offsetHeight, want = wSlot(wd[0]), r0 = Math.min(want[0], rows - 1), c0 = want[1];
+      // candidates: the chosen slot, then right under or beside widgets already placed, then the other slots
+      var cands = [slotPos(r0, c0, w, h)];
+      placed.forEach(function (o) {
+        cands.push({ x: c0 === 2 ? o.x + o.w - w : c0 === 1 ? o.x + o.w / 2 - w / 2 : o.x, y: o.y + o.h + gap, w: w, h: h });
+        cands.push({ x: o.x + o.w + gap * 2, y: o.y, w: w, h: h });
+      });
+      var others = [];
+      for (var r = 0; r < rows; r++) for (var c = 0; c < 3; c++) others.push([r, c, Math.abs(r - r0) * 1.2 + Math.abs(c - c0)]);
+      others.sort(function (a, b2) { return a[2] - b2[2]; }).forEach(function (o) { cands.push(slotPos(o[0], o[1], w, h)); });
+      var pick = null;
+      for (var i = 0; i < cands.length && !pick; i++) if (fits(cands[i])) pick = cands[i];
+      if (!pick) { el.hidden = true; el.classList.add('nofit'); return; }   // never over the apps
+      placed.push(pick);
+      el.style.left = (pick.x - z.hr.left) + 'px';
+      el.style.top = (pick.y - z.hr.top) + 'px';
+      var sr = Math.max(0, Math.min(rows - 1, Math.floor((pick.y + pick.h / 2 - z.T) / rowH))), sc = Math.max(0, Math.min(2, Math.floor((pick.x + pick.w / 2 - z.L) / ((z.R - z.L) / 3))));
+      el.setAttribute('data-slot', sr + ',' + sc);
+    });
+  }
+  function startWidgetMove(w) {
+    closePanelQuiet();
+    var el = document.querySelector('.widget[data-w="' + w + '"]');
+    wmove = { w: w, orig: P.wpos && P.wpos[P.layout] && P.wpos[P.layout][w] ? P.wpos[P.layout][w].slice() : null };
+    var cur = (el.getAttribute('data-slot') || '0,0').split(',');
+    setWpos(w, [+cur[0], +cur[1]]);
+    el.classList.add('wmove'); setFocus(el);
+    toast('방향키로 자리를 옮겨요 · OK 여기에 두기 · 뒤로 취소');
+  }
+  function setWpos(w, rc) { P.wpos = P.wpos || {}; P.wpos[P.layout] = P.wpos[P.layout] || {}; P.wpos[P.layout][w] = rc; }
+  function widgetMoveKey(k) {
+    var el = document.querySelector('.widget[data-w="' + wmove.w + '"]'), cur = wSlot(wmove.w).slice();
+    if (k === 'ok' || k === 'longok' || k === 'back') {
+      if (k === 'back') { if (wmove.orig) setWpos(wmove.w, wmove.orig); else delete P.wpos[P.layout][wmove.w]; }
+      else { var real = (el.getAttribute('data-slot') || '0,0').split(','); setWpos(wmove.w, [+real[0], +real[1]]); }
+      el.classList.remove('wmove'); wmove = null; savePrefs(); layoutWidgets();
+      toast(k === 'back' ? '옮기기를 취소했어요' : '여기에 뒀어요');
+      return;
+    }
+    var z = freeZone(), rows = Math.max(1, Math.min(3, Math.floor((z.B - z.T) / (z.rem * 8.5))));
+    if (k === 'left') cur[1] = Math.max(0, cur[1] - 1); else if (k === 'right') cur[1] = Math.min(2, cur[1] + 1);
+    else if (k === 'up') cur[0] = Math.max(0, cur[0] - 1); else if (k === 'down') cur[0] = Math.min(rows - 1, cur[0] + 1);
+    setWpos(wmove.w, cur);
+    layoutWidgets();
+    var got = (el.getAttribute('data-slot') || '').split(',');
+    if (+got[0] !== cur[0] || +got[1] !== cur[1]) toast('그 자리는 앱이나 다른 위젯에 가려서 가장 가까운 빈자리에 뒀어요');
+  }
+  function widgetRows() {
+    var w = panel.w, name = labelOf(WIDGETS, w);
+    return [
+      { name: name + ' 열기', action: true, act: function () { closePanelQuiet(); openWidget(w); } },
+      { need: 'look', name: '위치 옮기기', sub: '앱을 가리지 않는 빈자리 안에서 옮겨요', action: true, act: function () { startWidgetMove(w); } },
+      { need: 'look', name: '홈에서 숨기기', sub: '꾸미기 → 시계 · 정보에서 다시 켜요', action: true, act: function () { var o = P.widgets || {}; o[w] = false; if (w === 'clock' && P.clock === 'off') P.clock = '24'; set({ widgets: o }); closePanel(); } },
+      { need: 'look', name: '위젯 자리 처음대로', sub: '이 디자인의 기본 배치로 돌아가요', action: true, act: function () { if (P.wpos) delete P.wpos[P.layout]; savePrefs(); layoutWidgets(); closePanel(); toast('기본 배치로 돌렸어요'); } }
+    ];
+  }
+  function openWidget(w) { if (w === 'clock') openClockPage(); else if (w === 'weather') openWxPage(); }
+
+  // ---------- clock page: a desk clock ----------
+  var CSTYLES = [['digital', '디지털'], ['analog', '아날로그'], ['flip', '플립']];
+  var page = null;   // {kind:'clock'|'wx', gear:bool, timer}
+  function pageBg(el) { var u = bgUrl(activeBg()); $(el).style.backgroundImage = u ? 'url("' + u + '")' : 'linear-gradient(135deg,#1e293b,#0f172a)'; }
+  function openClockPage() {
+    closePanelQuiet();
+    if (focusEl) focusEl.classList.remove('focus');
+    base = 'clockpg'; page = { kind: 'clock', gear: false };
+    pageBg('cpBg'); $('clockPage').hidden = false;
+    renderClockPage();
+    page.timer = setInterval(renderClockPage, 1000);
+  }
+  function closePage() {
+    if (page && page.timer) clearInterval(page.timer);
+    $('clockPage').hidden = true; $('wxPage').hidden = true;
+    page = null; base = 'home';
+    restoreFocus('home');
+  }
+  function renderClockPage() {
+    if (!page || page.kind !== 'clock') return;
+    var d = NOW(), h = d.getHours(), m = pad2(d.getMinutes()), sec = pad2(d.getSeconds()), h12 = P.clock === '12';
+    var hh = h12 ? String((h % 12) || 12) : pad2(h), ap = h < 12 ? '오전' : '오후', st = P.cstyle || 'digital', html;
+    if (st === 'analog') {
+      var a = function (v, len, w, col) { var r = v * Math.PI / 180; return '<line x1="50" y1="50" x2="' + (50 + Math.sin(r) * len) + '" y2="' + (50 - Math.cos(r) * len) + '" stroke="' + col + '" stroke-width="' + w + '" stroke-linecap="round"/>'; };
+      var ticks = '';
+      for (var i = 0; i < 60; i++) { var r = i * 6 * Math.PI / 180, big = i % 5 === 0; ticks += '<line x1="' + (50 + Math.sin(r) * (big ? 40 : 43)) + '" y1="' + (50 - Math.cos(r) * (big ? 40 : 43)) + '" x2="' + (50 + Math.sin(r) * 46) + '" y2="' + (50 - Math.cos(r) * 46) + '" stroke="rgba(255,255,255,' + (big ? .85 : .3) + ')" stroke-width="' + (big ? 1.4 : .6) + '"/>'; }
+      html = '<svg class="cp-analog" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="rgba(10,14,24,.45)" stroke="rgba(255,255,255,.18)" stroke-width=".6"/>' + ticks +
+        a((h % 12) * 30 + d.getMinutes() * 0.5, 24, 3, '#fff') + a(d.getMinutes() * 6 + d.getSeconds() * 0.1, 35, 2, '#fff') +
+        (P.csec !== false ? a(d.getSeconds() * 6, 39, .7, '#ff8a80') : '') + '<circle cx="50" cy="50" r="2.2" fill="#fff"/></svg>';
+    } else if (st === 'flip') {
+      var digits = (hh.length < 2 ? ' ' + hh : hh) + m;
+      html = '<div class="cp-flip">' + digits.split('').map(function (ch, i) { return (i === 2 ? '<i>:</i>' : '') + '<b>' + (ch === ' ' ? '' : ch) + '</b>'; }).join('') + (h12 ? '<small>' + ap + '</small>' : '') + '</div>';
+    } else {
+      html = '<div class="cp-digital">' + hh + ':' + m + (P.csec !== false ? '<em>' + sec + '</em>' : '') + (h12 ? '<small>' + ap + '</small>' : '') + '</div>';
+    }
+    var night = P.cnight !== false && (h >= 22 || h < 6);
+    $('cpMain').className = 'cp-main' + (night ? ' night' : '');
+    $('cpMain').innerHTML = html + '<div class="cp-date">' + d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }) + '</div>';
+    var ne = nextEvent(), cw = wx.data && wx.city === P.weather ? (wx.data.current || {}) : null;
+    $('cpUnder').innerHTML = (cw ? '<span>' + wxIcon(cw.weather_code, cw.is_day !== 0) + Math.round(cw.temperature_2m) + '° ' + esc(cityOf(P.weather)[1]) + '</span>' : '') +
+      (ne ? '<span>📅 ' + esc(relDay(ne.first.start)) + (ne.first.allDay ? '' : ' ' + esc(fmtTime(ne.first.start))) + ' ' + esc(ne.first.title) + '</span>' : '');
+    $('cpGear').className = 'cp-gear' + (page.gear ? ' sel' : '');
+  }
+  function clockSetRows() {
+    return [
+      { name: '시계 모양', val: labelOf(CSTYLES, P.cstyle || 'digital'), change: function (d) { set({ cstyle: cycle(CSTYLES, P.cstyle || 'digital', d) }); renderClockPage(); } },
+      { name: '시간 형식', val: P.clock === '12' ? '12시간 (오전/오후)' : '24시간', change: function () { set({ clock: P.clock === '12' ? '24' : '12' }); renderClockPage(); } },
+      { name: '초 표시', val: P.csec !== false ? '표시' : '숨김', change: function () { set({ csec: P.csec === false }); renderClockPage(); } },
+      { name: '밤에는 어둡게', sub: '밤 10시부터 아침 6시까지 은은하게', val: P.cnight !== false ? '켜짐' : '꺼짐', change: function () { set({ cnight: P.cnight === false }); renderClockPage(); } },
+      { need: 'admin', name: '시간대', sub: 'TV 자체 시간대: ' + sysZone(), val: labelOf(TZS, ROOT.tz), change: function (d) { setTimeZone(cycle(TZS, ROOT.tz, d)); renderClockPage(); renderPanel(); } },
+      { name: '홈에 시계 위젯', val: widgetOn('clock') ? '표시' : '숨김', change: function () { var o = P.widgets || {}; o.clock = !widgetOn('clock'); if (o.clock && P.clock === 'off') P.clock = '24'; set({ widgets: o }); } }
+    ];
+  }
+
+  // ---------- weather page ----------
+  function openWxPage() {
+    closePanelQuiet();
+    if (focusEl) focusEl.classList.remove('focus');
+    base = 'wxpg'; page = { kind: 'wx', gear: false };
+    pageBg('wxBg'); $('wxPage').hidden = false;
+    refreshWeather(false);
+    renderWxPage();
+  }
+  function renderWxPage() {
+    if (!page || page.kind !== 'wx') return;
+    var c = cityOf(P.weather), d = wx.data && wx.city === P.weather ? wx.data : null;
+    $('wxGear').className = 'cp-gear' + (page.gear ? ' sel' : '');
+    if (!c) { $('wxBody').innerHTML = '<div class="wx-empty"><b>어느 도시의 날씨를 볼까요?</b>◀ ▶로 도시를 골라요</div>'; return; }
+    if (!d) { $('wxBody').innerHTML = '<div class="wx-empty"><b>' + esc(c[1]) + '</b>날씨를 받아오는 중이에요…</div>'; return; }
+    var cur = d.current || {}, dy = d.daily || {}, hr = d.hourly || {};
+    var now = '<div class="wx-now"><div class="city"><b>' + esc(c[1]) + '</b>◀ ▶</div>' + wxIcon(cur.weather_code, cur.is_day !== 0).replace('<svg', '<svg class="big"') +
+      '<div class="temp">' + Math.round(cur.temperature_2m) + '°</div><div class="desc">' + wxText(cur.weather_code) + '</div>' +
+      (dy.temperature_2m_max ? '<div class="hilo">최고 ' + Math.round(dy.temperature_2m_max[0]) + '° · 최저 ' + Math.round(dy.temperature_2m_min[0]) + '°</div>' : '') +
+      '<div class="wx-facts">' + [['체감', cur.apparent_temperature !== undefined ? Math.round(cur.apparent_temperature) + '°' : '-'], ['습도', cur.relative_humidity_2m !== undefined ? cur.relative_humidity_2m + '%' : '-'],
+        ['바람', cur.wind_speed_10m !== undefined ? Math.round(cur.wind_speed_10m / 3.6 * 10) / 10 + 'm/s' : '-'], ['강수 확률', dy.precipitation_probability_max ? dy.precipitation_probability_max[0] + '%' : '-'],
+        ['해 뜨는 시각', dy.sunrise ? dy.sunrise[0].slice(11, 16) : '-'], ['해 지는 시각', dy.sunset ? dy.sunset[0].slice(11, 16) : '-']].map(function (f) { return '<div>' + f[0] + '<b>' + f[1] + '</b></div>'; }).join('') + '</div></div>';
+    // the next 24 hours: temperature line and chance of rain
+    var hours = '';
+    if (hr.time) {
+      var start = 0, nowKey = (cur.time || '').slice(0, 13);
+      for (var i = 0; i < hr.time.length; i++) if (hr.time[i].slice(0, 13) >= nowKey) { start = i; break; }
+      var T = hr.temperature_2m.slice(start, start + 25), PP = (hr.precipitation_probability || []).slice(start, start + 25), TM = hr.time.slice(start, start + 25);
+      var lo = Math.min.apply(null, T), hi = Math.max.apply(null, T), W = 1000, Hh = 150, n = T.length;
+      var X = function (k) { return 20 + k * (W - 40) / Math.max(1, n - 1); }, Y = function (v) { return 30 + (hi - v) / Math.max(1, hi - lo) * 70; };
+      var line = T.map(function (v, k) { return (k ? 'L' : 'M') + X(k).toFixed(1) + ' ' + Y(v).toFixed(1); }).join(' ');
+      var svg = '<svg viewBox="0 0 ' + W + ' ' + Hh + '">';
+      PP.forEach(function (p, k) { if (p) svg += '<rect x="' + (X(k) - 9) + '" y="' + (Hh - 18 - p * 0.32) + '" width="18" height="' + (p * 0.32) + '" rx="3" fill="rgba(143,193,255,.45)"/>'; });
+      svg += '<path d="' + line + ' L' + X(n - 1) + ' ' + (Hh - 18) + ' L' + X(0) + ' ' + (Hh - 18) + 'Z" fill="rgba(255,215,107,.12)"/><path d="' + line + '" fill="none" stroke="#ffd76b" stroke-width="3" stroke-linejoin="round"/>';
+      for (var k = 0; k < n; k += 3) svg += '<text x="' + X(k) + '" y="' + (Y(T[k]) - 9) + '" fill="#fff" font-size="15" text-anchor="middle">' + Math.round(T[k]) + '°</text><text x="' + X(k) + '" y="' + (Hh - 2) + '" fill="rgba(255,255,255,.6)" font-size="13" text-anchor="middle">' + (k ? +TM[k].slice(11, 13) + '시' : '지금') + '</text>' + (PP[k] ? '<text x="' + X(k) + '" y="' + (Hh - 22 - PP[k] * 0.32) + '" fill="#8fc1ff" font-size="12" text-anchor="middle">' + PP[k] + '%</text>' : '');
+      hours = '<div class="wx-card wx-hours"><h3>앞으로 24시간 · 기온과 비 올 확률</h3>' + svg + '</svg></div>';
+    }
+    var days = '';
+    if (dy.time) {
+      days = '<div class="wx-card"><h3>이번 주</h3><div class="wx-days">' + dy.time.map(function (t, k) {
+        var dt = new Date(t + 'T12:00');
+        return '<div class="wx-day' + (k === 0 ? ' today' : '') + '"><span>' + (k === 0 ? '오늘' : k === 1 ? '내일' : DOW[dt.getDay()] + '요일') + '</span>' + wxIcon(dy.weather_code[k], true) +
+          '<b>' + Math.round(dy.temperature_2m_max[k]) + '° / ' + Math.round(dy.temperature_2m_min[k]) + '°</b>' + (dy.precipitation_probability_max && dy.precipitation_probability_max[k] ? '<small>☂ ' + dy.precipitation_probability_max[k] + '%</small>' : '<small>&nbsp;</small>') + '</div>';
+      }).join('') + '</div></div>';
+    }
+    $('wxBody').innerHTML = now + hours + days;
+  }
+  function stepCity(d) {
+    var ids = CITIES.map(function (c) { return c[0]; }), i = ids.indexOf(P.weather);
+    set({ weather: ids[(i + d + ids.length) % ids.length] });
+    refreshWeather(true); renderWxPage();
+  }
+  function wxSetRows() {
+    return [
+      { name: '도시', val: P.weather && cityOf(P.weather) ? cityOf(P.weather)[1] : '사용 안 함', change: function (d) { var ids = [null].concat(CITIES.map(function (c) { return c[0]; })); set({ weather: ids[(ids.indexOf(P.weather || null) + d + ids.length) % ids.length] }); refreshWeather(true); renderWxPage(); } },
+      { name: '홈에 날씨 위젯', val: widgetOn('weather') ? '표시' : '숨김', change: function () { var o = P.widgets || {}; o.weather = !widgetOn('weather'); set({ widgets: o }); } }
+    ];
+  }
+  function pageKey(k) {
+    if (k === 'back') { closePage(); return; }
+    if (k === 'down') { page.gear = true; } else if (k === 'up') { page.gear = false; }
+    else if (k === 'ok' || k === 'longok') { if (page.gear) openPanel(page.kind === 'clock' ? 'clockset' : 'wxset'); return; }
+    else if (k === 'left' || k === 'right') {
+      var d = k === 'left' ? -1 : 1;
+      if (page.kind === 'clock') { if (!blocked('look', '시계 모양 바꾸기', function () {})) { set({ cstyle: cycle(CSTYLES, P.cstyle || 'digital', d) }); toast('시계 모양 · ' + labelOf(CSTYLES, P.cstyle)); } }
+      else if (!blocked('look', '도시 바꾸기', function () {})) stepCity(d);
+    }
+    if (page.kind === 'clock') renderClockPage(); else renderWxPage();
   }
 
   // ---------- clock ----------
@@ -470,7 +725,7 @@
     home.setAttribute('data-shape', P.shape);
     home.setAttribute('data-size', P.size);
     home.setAttribute('data-labels', P.labels ? 'on' : 'off');
-    home.setAttribute('data-clock', P.clock === 'off' ? 'off' : 'on');
+    home.setAttribute('data-clock', 'on');
     document.documentElement.style.setProperty('--dim', DIM_VALUES[P.dim] || 0.22);
     ['calendar', 'memo'].forEach(function (act) { document.querySelector('.qbtn[data-act="' + act + '"]').hidden = P.topBtns !== true; });
     var pr = current();
@@ -485,6 +740,7 @@
     updateHero();
     if (base === 'drawer') renderDrawer();
     if (panel) renderPanel();
+    layoutWidgets();
   }
 
   function tileHtml(a, opts) {
@@ -506,6 +762,7 @@
   }
 
   function renderTiles() {
+    setTimeout(layoutWidgets, 0);
     var ids = visibleApps();
     var n = ids.length;
     cols = (n <= 8 ? 4 : n <= 10 ? 5 : 6) + (P.size === 's' ? 1 : P.size === 'l' ? -1 : 0) + (P.tiles === 'poster' ? 2 : 0) + (P.shape === 'circle' ? 1 : 0);
@@ -697,7 +954,7 @@
   // the item that was last focused there.
   var areaMem = {};
   function areaOf(el) {
-    var a = el.closest('.quick, #rtabs, .colnav, #colGrid, .strip, #dGrid, #tiles');
+    var a = el.closest('#widgets, .quick, #rtabs, .colnav, #colGrid, .strip, #dGrid, #tiles');
     if (!a) return 'other';
     if (a.classList.contains('strip')) return 'strip' + Array.prototype.indexOf.call(document.querySelectorAll('.strip'), a);
     return a.id || a.className.split(' ')[0];
@@ -1433,7 +1690,7 @@
 
   // 꾸미기 is two levels: groups with a summary of what is set, then the group's own page.
   var LOOK_GROUPS = [
-    ['design', '디자인', 'look'], ['bg', '배경', 'look'], ['tiles', '타일', 'look'], ['home', '홈 앱 · 줄', 'apps'], ['info', '시계 · 정보', 'look']
+    ['design', '디자인', 'look'], ['bg', '배경', 'look'], ['tiles', '타일', 'look'], ['home', '홈 앱 · 줄', 'apps'], ['info', '시계 · 위젯', 'look']
   ];
   function onOff(v) { return v ? '켜짐' : '꺼짐'; }
   function lookSummary(id) {
@@ -1441,7 +1698,7 @@
     if (id === 'bg') return bgName(P.bg) + (P.nightBg ? ' · 밤 ' + bgName(P.nightBg) : '') + ' · 어둡게 ' + DIMS[P.dim];
     if (id === 'tiles') return labelOf(TILES, P.tiles) + ', ' + labelOf(SHAPES, P.shape) + ', ' + labelOf(SIZES, P.size) + (P.labels ? '' : ' · 이름 숨김');
     if (id === 'home') return visibleApps().length + '개 앱' + (P.cats.length > 1 || P.cats[0].name ? ' · ' + P.cats.length + '줄' : '') + (P.recentRow ? ' · 최근 실행 줄' : '');
-    return labelOf(CLOCKS, P.clock) + ' · ' + labelOf(FONTS, P.font) + ' · 날씨 ' + (P.weather && cityOf(P.weather) ? cityOf(P.weather)[1] : '없음');
+    return '위젯 ' + WIDGETS.filter(function (w) { return widgetOn(w[0]); }).map(function (w) { return w[1]; }).join(', ') + ' · ' + labelOf(FONTS, P.font);
   }
   function lookRows() {
     var rows = LOOK_GROUPS.map(function (g) {
@@ -1503,10 +1760,10 @@
       ];
     }
     return [
-      { name: '시계', val: labelOf(CLOCKS, P.clock), change: function (d) { set({ clock: cycle(CLOCKS, P.clock, d) }); } },
+      { name: '시계 위젯', sub: '시계를 누르면 탁상시계 화면 · 형식은 거기서', val: widgetOn('clock') ? '표시' : '숨김', change: function () { var o = P.widgets || {}; o.clock = !widgetOn('clock'); if (o.clock && P.clock === 'off') P.clock = '24'; set({ widgets: o }); } },
+      { name: '날씨 위젯', sub: '날씨를 누르면 자세한 날씨 · 도시는 거기서', val: widgetOn('weather') ? '표시' : '숨김', change: function () { var o = P.widgets || {}; o.weather = !widgetOn('weather'); set({ widgets: o }); } },
+      { name: '위젯 자리 처음대로', sub: '위젯은 길게 OK → 위치 옮기기로 옮겨요', action: true, act: function () { if (P.wpos) delete P.wpos[P.layout]; savePrefs(); layoutWidgets(); toast('이 디자인의 기본 배치로 돌렸어요'); } },
       { name: '글꼴', val: labelOf(FONTS, P.font), change: function (d) { set({ font: cycle(FONTS, P.font, d) }); } },
-      { name: '날씨', sub: '시계 아래에 도시 날씨를 보여줘요', val: P.weather && cityOf(P.weather) ? cityOf(P.weather)[1] : '사용 안 함',
-        change: function (d) { var ids = [null].concat(CITIES.map(function (c) { return c[0]; })); set({ weather: ids[(ids.indexOf(P.weather || null) + d + ids.length) % ids.length] }); } },
       { name: '시계 아래 다음 일정', sub: '오늘·내일 일정을 한 줄로', val: P.calPreview !== false ? '표시' : '숨김', change: function () { set({ calPreview: P.calPreview === false }); } },
       { name: '시계 아래 메모', sub: '최근 메모를 한 줄로', val: P.memoPreview !== false ? '표시' : '숨김', change: function () { set({ memoPreview: P.memoPreview === false }); } },
       { name: '위쪽 일정·메모 버튼', sub: '홈의 일정·메모 타일로도 열 수 있어요', val: P.topBtns === true ? '표시' : '숨김', change: function () { set({ topBtns: P.topBtns !== true }); } }
@@ -1881,6 +2138,9 @@
     if (type === 'allow') return allowRows();
     if (type === 'profmanage') return manageRows();
     if (type === 'usage') return usageRows();
+    if (type === 'widget') return widgetRows();
+    if (type === 'clockset') return clockSetRows();
+    if (type === 'wxset') return wxSetRows();
     if (type === 'usageprof') return usageProfRows();
     return lookRows();
   }
@@ -1888,7 +2148,7 @@
   // ---------- save / cancel ----------
   // Pages that change settings work on a draft: changes show at once as a preview, and 저장 keeps
   // them, 취소 (or leaving and choosing 버리기) puts everything back as it was.
-  var EDIT_TYPES = ['lookgrp', 'setgrp', 'ambient', 'mine', 'profset', 'profmanage', 'usageprof'];
+  var EDIT_TYPES = ['lookgrp', 'setgrp', 'ambient', 'mine', 'profset', 'profmanage', 'usageprof', 'clockset', 'wxset'];
   // A page opened from another settings page gets its own draft on top of the first one: its 저장 /
   // 취소 cover only what was changed there, and cancelling the outer page undoes everything inside it.
   var edits = [];    // [{key, orig}], innermost last
@@ -1931,7 +2191,7 @@
   }
 
   function openPanel(type, opts) {
-    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset', 'calev', 'ambient', 'memoitem', 'memoedit', 'profmanage', 'usage', 'usageprof', 'mine', 'lookgrp', 'setgrp', 'profset'].indexOf(type) < 0) return;
+    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset', 'calev', 'ambient', 'memoitem', 'memoedit', 'profmanage', 'usage', 'usageprof', 'mine', 'lookgrp', 'setgrp', 'profset', 'widget', 'clockset', 'wxset'].indexOf(type) < 0) return;
     var g = (opts || {}).grp, need = type === 'lookgrp' ? (g === 'home' ? 'apps' : 'look')
       : type === 'setgrp' ? (g === 'remote' || g === 'about' ? null : 'admin')
       : (type === 'apps' || type === 'cats' || type === 'cat') ? 'apps'
@@ -1942,7 +2202,7 @@
     if (moving) { moving = null; renderTiles(); }
     opts = opts || {};
     if (edits.length && !opts.back) dropEdits(false);   // a new menu from the top: an old draft was already settled
-    panel = { type: type, i: 0, pkg: opts.pkg, cat: opts.cat, back: opts.back, draft: opts.draft, target: opts.target, grp: opts.grp };
+    panel = { type: type, i: 0, pkg: opts.pkg, cat: opts.cat, back: opts.back, draft: opts.draft, target: opts.target, grp: opts.grp, w: opts.w };
     if (EDIT_TYPES.indexOf(type) >= 0) {
       var key = editKey(panel), at = -1;
       edits.forEach(function (e, i) { if (e.key === key) at = i; });
@@ -1975,6 +2235,8 @@
     if (base === 'cal') { renderCal(); return; }
     if (base === 'memo') { renderMemo(); return; }
     if (base === 'me') { renderMe(); return; }
+    if (base === 'clockpg') { renderClockPage(); return; }
+    if (base === 'wxpg') { renderWxPage(); return; }
     if (backToMe()) return;
     if (base === 'drawer') restoreFocus('drawer'); else restoreFocus('home');
   }
@@ -2008,13 +2270,14 @@
     var rows = rowsFor(panel.type);
     panel.i = Math.max(0, Math.min(rows.length - 1, panel.i));
     var titles = { look: ['Appearance', '꾸미기'], apps: ['Apps', '앱 고르기'], settings: ['Settings', '설정'], profiles: ['Profiles', '프로필'], app: ['App', ''],
-      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'], calev: ['Event', '일정'], ambient: ['Screensaver', '화면 보호기'], memoitem: ['Memo', '메모'], memoedit: ['Memo', '메모'], profmanage: ['Manage profile', ''], usage: ['Usage', '사용 기록 · 시간 제한'], usageprof: ['Usage', ''], mine: ['My profile', '프로필 아이콘 · 이름 · 색'], lookgrp: ['꾸미기', ''], setgrp: ['설정', ''], profset: ['Profile', '프로필 설정'] };
+      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'], calev: ['Event', '일정'], ambient: ['Screensaver', '화면 보호기'], memoitem: ['Memo', '메모'], memoedit: ['Memo', '메모'], profmanage: ['Manage profile', ''], usage: ['Usage', '사용 기록 · 시간 제한'], usageprof: ['Usage', ''], mine: ['My profile', '프로필 아이콘 · 이름 · 색'], lookgrp: ['꾸미기', ''], setgrp: ['설정', ''], profset: ['Profile', '프로필 설정'], widget: ['Widget', ''], clockset: ['Clock', '시계 설정'], wxset: ['Weather', '날씨 설정'] };
     $('pKicker').textContent = titles[panel.type][0];
     $('pTitle').textContent = panel.type === 'app' ? (BYPKG[panel.pkg] ? BYPKG[panel.pkg].label : '')
       : panel.type === 'cat' ? ((catById(panel.cat) || {}).name || '내 앱')
       : panel.type === 'profmanage' ? (profileById(panel.target) || {}).name || ''
       : panel.type === 'usageprof' ? ((profileById(panel.target) || {}).name || '') + ' · 사용 기록'
       : panel.type === 'profset' ? '프로필 설정 · ' + current().name
+      : panel.type === 'widget' ? labelOf(WIDGETS, panel.w) + ' 위젯'
       : panel.type === 'lookgrp' ? (LOOK_GROUPS.filter(function (x) { return x[0] === panel.grp; })[0] || [0, ''])[1]
       : panel.type === 'setgrp' ? (SET_GROUPS.filter(function (x) { return x[0] === panel.grp; })[0] || [0, ''])[1]
       : panel.type === 'allow' ? '허용 앱 · ' + ((profileById(panel.target) || current()).name) : titles[panel.type][1];
@@ -2058,7 +2321,7 @@
       ambient: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '닫기']], memoitem: [['◀ ▶', '색'], ['OK', '선택'], ['뒤로', '닫기']],
       memoedit: [['▲ ▼', '이동'], ['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '취소']], profmanage: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']],
       usage: [['OK', '자세히'], ['뒤로', '돌아가기']], usageprof: [['◀ ▶', '시간 제한'], ['OK', '선택'], ['뒤로', '돌아가기']], mine: [['◀ ▶', '바꾸기'], ['OK', '입력'], ['뒤로', '돌아가기']],
-      lookgrp: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']], setgrp: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']], profset: [['OK', '선택'], ['뒤로', '돌아가기']] };
+      lookgrp: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']], setgrp: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']], profset: [['OK', '선택'], ['뒤로', '돌아가기']], widget: [['OK', '선택'], ['뒤로', '닫기']], clockset: [['◀ ▶', '바꾸기'], ['뒤로', '돌아가기']], wxset: [['◀ ▶', '바꾸기'], ['뒤로', '돌아가기']] };
     $('pHint').innerHTML = (panel.confirm ? [['OK', '선택'], ['뒤로', '계속 고치기']] : hints[panel.type] || hints.settings).map(function (h) { return '<span><kbd>' + h[0] + '</kbd>' + h[1] + '</span>'; }).join('');
   }
 
@@ -2759,6 +3022,8 @@
     if (base === 'memo') { memoKey(k); return; }
     if (base === 'mini') { if (mini) miniKey(k); else base = 'home'; return; }
     if (base === 'me') { meKey(k); return; }
+    if (base === 'clockpg' || base === 'wxpg') { if (page) pageKey(k); else base = 'home'; return; }
+    if (wmove) { widgetMoveKey(k); return; }
     if (moving) {
       if (k === 'ok' || k === 'longok') endMove(true);
       else if (k === 'back') endMove(false);
@@ -2773,10 +3038,13 @@
       else move(k);
       return;
     }
-    if (k === 'menu') { openPanel('look'); return; }
     if (k === 'back') { var first = document.querySelector('#tiles .tile'); if (first) setFocus(first); return; }
+    var wdg = focusEl && focusEl.getAttribute('data-w');
+    if ((k === 'longok' || k === 'menu') && wdg) { openPanel('widget', { w: wdg }); return; }
+    if (k === 'menu') { openPanel('look'); return; }
     if (k === 'longok') { if (pkg) openPanel('app', { pkg: pkg }); return; }
     if (k === 'ok') {
+      if (wdg) { openWidget(wdg); return; }
       if (pkg) { launch(pkg); return; }
       var colId = focusEl && focusEl.getAttribute('data-col');
       if (colId === 'all') { openDrawer(); return; }
@@ -3192,6 +3460,8 @@
     if (has(t, ['밝게', '밝'])) { set({ dim: Math.max(0, P.dim - 1) }); done('배경 밝게'); return; }
 
     // weather: "날씨 부산", "날씨 꺼"
+    if (has(t, ['시계']) && has(t, ['보여', '열어', '켜', '띄워'])) { openClockPage(); done('탁상시계'); return; }
+    if (has(t, ['날씨']) && has(t, ['보여', '열어', '어때', '자세히', '주간', '이번주', '내일'])) { if (!P.weather) set({ weather: 'seoul' }); openWxPage(); done('날씨'); return; }
     if (has(t, ['날씨'])) {
       if (has(t, ['꺼', '숨', '없'])) { set({ weather: null }); done('날씨 숨김'); return; }
       var city = null;
@@ -3267,6 +3537,8 @@
       returnMe = false;
       dropEdits(true);   // Home leaves without saving
       if (sw) closeSwitcher(true);
+      if (page) { if (page.timer) clearInterval(page.timer); page = null; $('clockPage').hidden = true; $('wxPage').hidden = true; base = 'home'; }
+      if (wmove) { document.querySelector('.widget.wmove') && document.querySelector('.widget.wmove').classList.remove('wmove'); if (wmove.orig) setWpos(wmove.w, wmove.orig); wmove = null; }
       if (base === 'me') { base = 'home'; $('me').hidden = true; }
       closePanelQuiet();
       moving = null;
@@ -3339,6 +3611,7 @@
     });
   }
 
+  window.addEventListener('resize', function () { layoutWidgets(); });
   // ---------- start ----------
   loadPrefs();
   loadApps();

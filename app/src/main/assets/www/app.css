@@ -39,7 +39,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* ---------- home ---------- */
 #home { position: fixed; inset: 0; padding: 3.4rem 4.6rem 4.4rem; display: flex; flex-direction: column; }
-.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 2rem; }
+.top { display: flex; align-items: flex-start; justify-content: flex-end; gap: 2rem; }
 .clock { text-shadow: 0 .1rem 1.2rem rgba(0,0,0,.35); }
 .time { font-size: 6.2rem; line-height: 1; font-weight: 300; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .time small { font-size: .38em; font-weight: 400; margin-left: .35em; letter-spacing: 0; opacity: .8; }
@@ -125,7 +125,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* ---------- layout: minimal ---------- */
 [data-layout="minimal"] .top { position: absolute; top: 3.4rem; right: 4.6rem; }
-[data-layout="minimal"] .clock { position: fixed; left: 0; right: 0; top: 21vh; text-align: center; }
+[data-layout="minimal"] .clock { text-align: center; }
 [data-layout="minimal"] .time { font-size: 13rem; font-weight: 200; }
 [data-layout="minimal"] .date { font-size: 1.9rem; margin-top: 1.4rem; }
 [data-layout="minimal"] .tiles { display: flex; gap: 1.6rem; overflow: hidden; padding: 2.4rem 3rem;
@@ -138,7 +138,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 [data-layout="minimal"] .label { text-align: center; font-size: 1.05rem; }
 
 .empty { margin: auto; font-size: 1.6rem; color: var(--ink-dim); background: rgba(0,0,0,.35); padding: 1.2rem 2rem; border-radius: 1rem; }
-[data-clock="off"] .clock { visibility: hidden; }
+
 
 /* ---------- category rows ---------- */
 .tiles.sections { display: flex; flex-direction: column; gap: 1.4rem; overflow: hidden; flex: 1 1 auto; min-height: 0; margin-top: 0; padding-top: 2.4rem;
@@ -268,7 +268,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 /* ---------- design: Dock ---------- */
 /* The dock never clips: icons fit the width (--dk, set from the app count), the focused icon really grows
    (width, not a scale), so its neighbours move aside, and its name shows above it. */
-[data-layout="dock"] .clock { position: fixed; left: 0; right: 0; top: 20vh; text-align: center; }
+[data-layout="dock"] .clock { text-align: center; }
 [data-layout="dock"] .time { font-size: 11rem; font-weight: 200; }
 [data-layout="dock"] .date { font-size: 1.8rem; margin-top: 1.2rem; }
 [data-layout="dock"] .weather { justify-content: center; font-size: 1.6rem; margin-top: 1.2rem; }
@@ -577,3 +577,62 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .mr-pair .mr-trophy div { font-size: .8rem; }
 .mr-pair .mr-trophy b { width: 2.8rem; }
 .mr-pair .mr-poster.empty { grid-column: span 2; min-height: 4rem; }
+
+/* ---------- home widgets ---------- */
+#widgets { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.widget { position: absolute; left: 0; top: 0; padding: .7rem 1rem; margin: -.7rem -1rem; border-radius: 1.4rem; transition: background .15s, transform .15s; }
+.widget[hidden] { display: none !important; }
+.widget.focus { background: rgba(10,14,24,.35); outline: .22rem solid rgba(255,255,255,.9); outline-offset: .2rem; }
+.widget.wmove { outline: .22rem dashed #fff; outline-offset: .2rem; background: rgba(10,14,24,.35); }
+.wwx .weather { margin-top: 0; text-shadow: 0 .1rem 1rem rgba(0,0,0,.35); }
+.wwx .weather.empty { color: var(--ink-dim); font-size: 1.2rem; }
+/* the header keeps room for the widget band in designs whose apps start near the top */
+.top { min-height: var(--band, 0px); }
+[data-layout="grid"], [data-layout="column"], [data-layout="collage"] { --band: 12rem; }
+[data-layout="icons"], [data-layout="theater"] { --band: 7.6rem; }
+
+/* ---------- clock and weather pages ---------- */
+.wpage { position: fixed; inset: 0; z-index: 8; background: #05070d; overflow: hidden; animation: fade .25s ease; }
+.cp-bg { position: absolute; inset: -4%; background-size: cover; background-position: center; filter: blur(28px) brightness(.45) saturate(1.2); }
+.cp-main { position: absolute; left: 0; right: 0; top: 44%; transform: translateY(-50%); display: grid; justify-items: center; gap: 1.6rem; text-shadow: 0 .4rem 3rem rgba(0,0,0,.45); transition: opacity .6s, filter .6s; }
+.cp-main.night { opacity: .55; filter: sepia(.6) saturate(1.6) hue-rotate(-18deg); }
+.cp-digital { font-size: 19rem; font-weight: 200; line-height: 1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.cp-digital small { font-size: .26em; font-weight: 300; margin-left: .3em; opacity: .75; }
+.cp-digital em { font-style: normal; font-size: .3em; opacity: .55; margin-left: .25em; }
+.cp-date { font-size: 2.2rem; color: var(--ink-dim); }
+.cp-analog { width: 34rem; height: 34rem; }
+.cp-flip { display: flex; gap: 1.2rem; align-items: center; }
+.cp-flip b { position: relative; display: grid; place-items: center; width: 11rem; height: 15rem; border-radius: 1.4rem; font-size: 12rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #262c3c 0 50%, #1d2230 50% 100%); box-shadow: 0 1.4rem 3rem rgba(0,0,0,.5), inset 0 .1rem 0 rgba(255,255,255,.08); }
+.cp-flip b::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: .2rem; background: rgba(0,0,0,.55); }
+.cp-flip i { font-style: normal; font-size: 8rem; opacity: .6; margin: 0 .2rem; }
+.cp-flip small { font-size: 2.2rem; opacity: .7; align-self: flex-end; margin-bottom: 1rem; }
+.cp-under { position: absolute; left: 0; right: 0; bottom: 9rem; display: flex; justify-content: center; gap: 2.4rem; font-size: 1.5rem; color: var(--ink-dim); }
+.cp-under span { display: flex; align-items: center; gap: .6rem; }
+.cp-under svg { width: 2.2rem; height: 2.2rem; }
+.cp-gear { position: absolute; right: 3.2rem; bottom: 2.6rem; padding: .7rem 1.3rem; border-radius: 2rem; font-size: 1.1rem; color: var(--ink-dim); background: rgba(255,255,255,.06); opacity: .55; transition: all .2s; }
+.cp-gear.sel { opacity: 1; background: #fff; color: #11141b; }
+.cp-hint { position: absolute; left: 3.2rem; bottom: 2.6rem; opacity: .6; }
+
+.wx-wrap { position: absolute; inset: 3.4rem 4.6rem 6rem; display: grid; grid-template-columns: 30rem minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 2.2rem 3rem; }
+.wx-now { grid-row: span 2; display: flex; flex-direction: column; gap: .8rem; }
+.wx-now .city { font-size: 1.6rem; color: var(--ink-dim); display: flex; align-items: center; gap: .8rem; }
+.wx-now .city b { color: var(--ink); font-size: 2rem; }
+.wx-now svg.big { width: 10rem; height: 10rem; }
+.wx-now .temp { font-size: 9rem; font-weight: 200; line-height: 1; }
+.wx-now .desc { font-size: 2rem; }
+.wx-now .hilo { font-size: 1.4rem; color: var(--ink-dim); }
+.wx-facts { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+.wx-facts div { padding: .9rem 1.1rem; border-radius: 1rem; background: rgba(255,255,255,.07); font-size: 1rem; color: var(--ink-dim); }
+.wx-facts b { display: block; font-size: 1.4rem; color: var(--ink); margin-top: .2rem; font-weight: 500; }
+.wx-card { border-radius: 1.4rem; padding: 1.3rem 1.5rem; background: rgba(255,255,255,.07); min-height: 0; }
+.wx-card h3 { margin: 0 0 .8rem; font-size: 1.1rem; font-weight: 600; color: var(--ink-dim); }
+.wx-hours svg { width: 100%; height: auto; max-height: 16rem; display: block; }
+.wx-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .8rem; }
+.wx-day { display: grid; justify-items: center; gap: .4rem; padding: .9rem .4rem; border-radius: 1rem; background: rgba(255,255,255,.05); font-size: 1.05rem; }
+.wx-day.today { background: rgba(255,255,255,.14); }
+.wx-day svg { width: 3.2rem; height: 3.2rem; }
+.wx-day b { font-size: 1.25rem; font-weight: 500; }
+.wx-day small { color: #8fc1ff; font-size: .95rem; }
+.wx-empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 1rem; font-size: 1.6rem; color: var(--ink-dim); }
+.wx-empty b { color: var(--ink); font-size: 2.2rem; }

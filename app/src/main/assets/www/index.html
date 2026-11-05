@@ -11,8 +11,12 @@
   <div id="dim"></div>
 
   <main id="home" data-layout="grid" data-tiles="glass" data-labels="on">
+    <!-- Home widgets: placed by app.js in the free space of each design, never over the apps -->
+    <div id="widgets">
+      <div class="widget wclock clock focusable" data-w="clock" id="clock"><div class="time" id="time"></div><div class="date" id="date"></div><div class="nextevt" id="nextEvt" hidden></div><div class="nextevt memo" id="memoLine" hidden></div></div>
+      <div class="widget wwx focusable" data-w="weather" id="wWeather"><div class="weather" id="weather"></div></div>
+    </div>
     <header class="top">
-      <div class="clock" id="clock"><div class="time" id="time"></div><div class="date" id="date"></div><div class="weather" id="weather" hidden></div><div class="nextevt" id="nextEvt" hidden></div><div class="nextevt memo" id="memoLine" hidden></div></div>
       <nav class="quick">
         <button class="qbtn focusable profile" data-act="profiles" aria-label="프로필">
           <span class="pdot" id="pDot"></span><span id="pName">나</span>
@@ -79,6 +83,21 @@
       <div class="p-hint"><span><kbd>◀ ▶</kbd>고르기</span><span><kbd>OK</kbd>바꾸기</span><span><kbd>▼</kbd>나의 프로필 · 프로필 설정</span><span><kbd>뒤로</kbd>닫기</span></div>
     </div>
   </div>
+
+  <section id="clockPage" class="wpage" hidden>
+    <div class="cp-bg" id="cpBg"></div>
+    <div class="cp-main" id="cpMain"></div>
+    <div class="cp-under" id="cpUnder"></div>
+    <div class="cp-gear" id="cpGear">⚙ 시계 설정</div>
+    <div class="p-hint cp-hint"><span><kbd>◀ ▶</kbd>시계 모양</span><span><kbd>▼</kbd>설정</span><span><kbd>뒤로</kbd>닫기</span></div>
+  </section>
+
+  <section id="wxPage" class="wpage" hidden>
+    <div class="cp-bg" id="wxBg"></div>
+    <div class="wx-wrap" id="wxBody"></div>
+    <div class="cp-gear" id="wxGear">⚙ 날씨 설정</div>
+    <div class="p-hint cp-hint"><span><kbd>◀ ▶</kbd>도시 바꾸기</span><span><kbd>▼</kbd>설정</span><span><kbd>뒤로</kbd>닫기</span></div>
+  </section>
 
   <section id="mini" hidden></section>
 
