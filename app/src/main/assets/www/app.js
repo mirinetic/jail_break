@@ -1744,7 +1744,7 @@
   function isAdmin() { return ROOT.current === master().id || Date.now() < unlockedUntil; }
   function may(kind) {
     if (isAdmin()) return true;
-    if (isGuest()) return false;
+    if (isGuest()) return kind === 'apps' || (kind === 'look' && current().guestLook !== false);   // home look and apps (within the allowed ones), if the master lets it
     if (kind === 'look') return !isKids() || current().kidsLook !== false;
     if (kind === 'adult') return !isKids();
     if (kind === 'apps') return true;              // kids too, but only among the apps the master allowed
@@ -1958,7 +1958,7 @@
     var rows = LOOK_GROUPS.map(function (g) {
       return { id: g[0], need: g[2], name: g[1], sub: lookSummary(g[0]), action: true, act: function () { openPanel('lookgrp', { grp: g[0], back: { type: 'look', id: g[0] } }); } };
     });
-    if (!may('look')) rows.unshift(isGuest() ? { name: '손님 프로필은 꾸미기를 바꿀 수 없어요', sub: '마스터가 PIN을 넣으면 바꿀 수 있어요' } : { name: '이 프로필은 마스터가 꾸미기를 막아 두었어요', sub: '홈 앱 정리는 할 수 있어요' });
+    if (!may('look')) rows.unshift(isGuest() ? { name: '마스터가 손님 프로필의 꾸미기를 막아 두었어요', sub: '홈 앱 정리는 할 수 있어요' } : { name: '이 프로필은 마스터가 꾸미기를 막아 두었어요', sub: '홈 앱 정리는 할 수 있어요' });
     rows.push({ need: 'look', name: '처음 상태로', sub: '이 프로필의 꾸미기만 되돌려요', danger: true, action: true, val: armed === 'reset' ? '한 번 더 누르면 초기화' : '',
       act: function () {
         twice('reset', function () {
@@ -2088,7 +2088,7 @@
   // other profile's management page; a kids profile sees its icon (if allowed) and its allowed apps.
   function profileRows() {
     var cur = current(), rows = [];
-    rows.push({ need: 'look', name: '아이콘', sub: '◀ ▶로 골라요', val: cur.avatar || '이름 첫 글자',
+    if (!isGuest(cur)) rows.push({ need: 'look', name: '아이콘', sub: '◀ ▶로 골라요', val: cur.avatar || '이름 첫 글자',
       change: function (d) { cur.avatar = AVATARS[(AVATARS.indexOf(cur.avatar || '') + d + AVATARS.length) % AVATARS.length]; render(); renderPanel(); } });
     rows.push({ need: 'self', name: '이름', sub: 'OK로 직접 입력, ◀ ▶로 추천 이름', val: cur.name, action: true,
       act: function () { askText('프로필 이름', cur.name, function (txt) { if (txt !== null && txt.trim()) { cur.name = txt.trim().slice(0, 12); render(); renderPanel(); } }); },
@@ -2099,7 +2099,7 @@
       } });
     rows.push({ need: 'self', name: '색', dot: cur.color, val: '', change: function (d) { cur.color = PROFILE_COLORS[(PROFILE_COLORS.indexOf(cur.color) + d + PROFILE_COLORS.length) % PROFILE_COLORS.length]; render(); renderPanel(); } });
     if (hasPin() && cur.id !== master().id) rows.push({ need: 'self', name: '이 프로필로 바꿀 때 PIN', sub: '다른 프로필에서 넘어올 때 PIN을 물어요', val: onOff(cur.lockIn), change: function () { cur.lockIn = !cur.lockIn; renderPanel(); } });
-    if (isGuest(cur)) rows.push({ name: '손님 프로필이에요', sub: '쓸 수 있는 앱 ' + (cur.allow || []).length + '개는 마스터가 정해요. 앱 기록은 남지 않고, 공개된 일정 · 메모만 볼 수 있어요' });
+    if (isGuest(cur)) rows.push({ name: '손님 프로필이에요', sub: '쓸 수 있는 앱 ' + (cur.allow || []).length + '개는 마스터가 정해요. 앱 기록은 남지 않고, 공개된 일정 · 메모만 볼 수 있어요. 꾸미기는 할 수 있어요' });
     if (isKids(cur)) rows.push({ name: '허용 앱 ' + (cur.allow || []).length + '개', sub: '이 중에서 홈 화면을 꾸밀 수 있어요. 허용 앱은 마스터가 정해요' });
     if (isAdmin()) {
       ROOT.profiles.forEach(function (pr) {
@@ -2196,6 +2196,7 @@
       { name: '종류', sub: '공용 프로필 · 기록이 남지 않고, 공개한 일정 · 메모만 봐요', val: '손님' },
       { id: 'allow', name: '쓸 수 있는 앱', sub: '로그인된 앱(넷플릭스 등)은 그 계정 그대로 쓰게 돼요', val: (t.allow || []).length + '개', action: true,
         act: function () { openPanel('allow', { target: t.id, back: { type: 'profmanage', id: 'allow', opts: { target: t.id, back: panel.back } } }); } },
+      { name: '손님이 꾸미기 바꾸기', sub: '디자인, 배경, 타일, 시계 · 위젯, 홈 앱 정리(쓸 수 있는 앱 안에서)', val: t.guestLook !== false ? '허용' : '막음', change: function () { t.guestLook = t.guestLook === false; savePrefs(); renderPanel(); } },
       { name: 'Cove 시네마 관람 등급', sub: '어린 손님이 많으면 전체 관람가만 보여 줘요', val: t.allAges ? '전체 관람가만' : '모든 작품', change: function () { t.allAges = !t.allAges; savePrefs(); renderPanel(); } },
       { name: '이 프로필로 바꿀 때 PIN', sub: '다른 프로필에서 넘어올 때 PIN을 물어요', val: t.lockIn ? '켜짐' : '꺼짐',
         change: function () { if (!hasPin()) { needPinFirst(); return; } t.lockIn = !t.lockIn; savePrefs(); renderPanel(); } },
@@ -2227,7 +2228,7 @@
         } }
     ];
     if (d.kind === 'guest') rows.splice(1, 1);   // its colour is fixed
-    if (d.kind === 'guest') rows.push({ name: '시작 상태', sub: '가장 기본 홈에 위젯 없이 시작해요. 아이콘 · 꾸미기는 바꿀 수 없어요', val: '기본 상태' });
+    if (d.kind === 'guest') rows.push({ name: '시작 상태', sub: '가장 기본 홈에 위젯 없이 시작해요. 꾸미기는 손님도 바꿀 수 있어요 (아이콘 · 색은 고정)', val: '기본 상태' });
     if (d.kind === 'normal') {
       rows.push({ name: '시작 상태', sub: d.start === 'copy' ? '지금 프로필의 디자인, 배경, 앱 목록을 복사해요' : '처음 설치했을 때와 같은 기본 상태로 시작해요',
         val: d.start === 'copy' ? '지금 설정 복사' : '기본 상태', change: function () { d.start = d.start === 'copy' ? 'default' : 'copy'; renderPanel(); } });
@@ -2567,7 +2568,7 @@
       : panel.type === 'ambient' ? '<div class="help"><div><b>TV 화면 보호기 목록에 Cove가 없나요?</b> 일부 Google TV는 이 메뉴를 숨겨 둬요. PC나 폰에서 ADB로 한 번 설정하면 돼요:</div><code>adb shell settings put secure screensaver_components com.mirinetic.cove/.CoveDream</code></div>'
       : panel.type === 'calset' ? '<div class="help">구독 캘린더 추가와 일정 추가는 폰 리모컨의 <b>일정</b>에서 해요. Google 캘린더와 아이폰 캘린더 주소를 넣는 방법도 거기 있어요.</div>'
       : panel.type === 'allow' ? '<div class="help">체크한 앱만 "' + esc((profileById(panel.target) || current()).name) + '" 프로필의 홈과 모든 앱에 보이고 열려요. 아이는 이 앱들 안에서 꾸미기 → 앱 고르기로 자유롭게 정리할 수 있어요.</div>'
-      : panel.type === 'apps' && isKids() ? '<div class="help">마스터가 허용한 앱 ' + (current().allow || []).length + '개 중에서 고를 수 있어요.</div>'
+      : panel.type === 'apps' && (isKids() || isGuest()) ? '<div class="help">마스터가 허용한 앱 ' + (current().allow || []).length + '개 중에서 고를 수 있어요.</div>'
       : panel.type === 'cats' && P.layout === 'minimal' ? '<div class="help">Minimal 디자인은 줄 없이 로고 한 줄로 보여요. 줄은 Glass와 Icons에서 나타나요.</div>' : '';
 
     $('pRows').innerHTML = rows.map(function (r, i) {
