@@ -90,7 +90,7 @@
   var I = window.IslandCore, $ = function (id) { return document.getElementById(id); };
   var me = {}, S = null, extra = { family: [], shared: {}, env: { shift: 0, weather: null } }, shared = {};
   var view = null;         // null = my island, else a family member being visited {id, name, data}
-  var cur = [6, 4], focus = 'grid', barSel = 0, place = null, panel = null, intro = false;
+  var cur = [I.CX, I.CY], focus = 'grid', barSel = 0, place = null, panel = null, intro = false;
   var c = $('c'), ctx = c.getContext('2d'), saveT = null, t0 = performance.now();
 
   function env() { return { now: Date.now(), shift: extra.env.shift || 0, weather: extra.env.weather }; }
@@ -105,7 +105,7 @@
   function done(r) { if (!r) return false; toast(r.msg, r.lvlUp); save(); renderHud(); if (panel) renderPanel(); return true; }
 
   // ---------- tool bar ----------
-  var BAR_MINE = [['plant', '🌱', '심기'], ['craft', '🔨', '만들기'], ['decor', '🎨', '꾸미기'], ['shop', '🛒', '상점'], ['req', '📜', '의뢰'], ['dex', '📖', '도감'], ['family', '👨‍👩‍👧', '가족'], ['mail', '✉️', '우편']];
+  var BAR_MINE = [['plant', '🌱', '심기'], ['build', '🏗️', '건축'], ['craft', '🔨', '만들기'], ['decor', '🎨', '꾸미기'], ['shop', '🛒', '상점'], ['req', '📜', '의뢰'], ['dex', '📖', '도감'], ['family', '👨‍👩‍👧', '가족'], ['mail', '✉️', '우편']];
   var BAR_VISIT = [['vwater', '💧', '물 주기'], ['vgift', '🎁', '선물하기'], ['home', '🏠', '내 섬으로']];
   function bar() { return view ? BAR_VISIT : BAR_MINE; }
   function renderBar() {
@@ -143,7 +143,11 @@
     var s = isl(), e = env(), x = cur[0], y = cur[1], k = x + ',' + y, t = s.tiles[k], sp = I.speed(s, e, shared);
     var g = I.guestAt(s, x, y), b = I.beachAt(s, x, y), land = I.isLand(x, y, s.lvl, s.seed);
     if (place) {
-      if (place.kind === 'remove') return t ? { name: nameOf(t), ok: t.t === 'deco' ? '가방에 넣기' : '치우기' } : { name: '치울 것을 고르세요', ok: '' };
+      if (place.kind === 'remove') return t ? { name: nameOf(t), ok: t.t === 'deco' ? '가방에 넣기' : t.t === 'wall' ? '허물기' : '치우기' } : s.floor[k] ? { name: I.STRUCT[s.floor[k]].n, ok: '걷기' } : { name: '치울 것을 고르세요', ok: '' };
+      if (place.kind === 'build') {
+        var bs = I.STRUCT[place.id], same = bs.layer === 'floor' ? s.floor[k] === place.id : t && t.t === 'wall' && t.id === place.id;
+        return { name: bs.n + ' · ' + canBuild(place.id) + '칸 더 지을 수 있어요', ok: !land ? '' : same ? (bs.layer === 'floor' ? '걷기' : '허물기') : '짓기' };
+      }
       return { name: place.label + ' 놓기', ok: land && !t && !g ? '여기에 놓기' : '' };
     }
     if (g) { var gg = I.GUESTS[g]; return { name: gg.e + ' ' + gg.n, ok: view ? '' : s.vis[g].talked ? '인사하기' : '이야기하고 선물 받기' }; }
@@ -161,11 +165,18 @@
       return { name: tr.e + ' ' + tr.n + ' · 열매까지 ' + I.left((1 - st.prog) * tr.f * 60000 / sp), ok: '' };
     }
     if (t && t.t === 'deco') { var d = I.DECOS[t.id]; return { name: (d.e || '') + ' ' + d.n, ok: t.id === 'mailbox' && !view ? '우편 보기' : '' }; }
+    if (land && s.floor[k]) return { name: I.STRUCT[s.floor[k]].n, ok: '' };
+    if (t && t.t === 'wall') return { name: I.STRUCT[t.id].n, ok: '' };
     if (land) return { name: '빈 땅', ok: view ? '' : '심기' };
     if (I.isBeach(x, y, s.lvl, s.seed)) return { name: '모래사장 · 가끔 무언가 떠밀려 와요', ok: '' };
     return { name: '바다', ok: '' };
   }
-  function nameOf(t) { return t.t === 'deco' ? I.DECOS[t.id].n : t.t === 'tree' ? I.TREES[t.id].n : I.CROPS[t.id].n; }
+  function nameOf(t) { return t.t === 'wall' ? I.STRUCT[t.id].n : t.t === 'deco' ? I.DECOS[t.id].n : t.t === 'tree' ? I.TREES[t.id].n : I.CROPS[t.id].n; }
+  function canBuild(id) {
+    var c = I.STRUCT[id].c, n = Infinity;
+    for (var k in c) n = Math.min(n, Math.floor((k === 'shells' ? S.shells : I.inv(S, k)) / c[k]));
+    return n === Infinity ? 0 : n;
+  }
   function renderHint() {
     var h = $('hint');
     if (focus !== 'grid' || panel || intro) { h.hidden = true; return; }
@@ -195,6 +206,13 @@
     var s = isl(), e = env(), x = cur[0], y = cur[1], k = x + ',' + y, t = s.tiles[k];
     if (place) {
       if (place.kind === 'remove') { if (t && !view) { if (t.t !== 'deco' && place.armed !== k) { place.armed = k; toast('한 번 더 누르면 ' + I.eul(nameOf(t)) + ' 치워요'); return; } place.armed = null; done(I.pickUp(S, x, y)); } return; }
+      if (place.kind === 'build') {
+        var br = I.build(S, x, y, place.id);
+        if (!br) { toast('섬 땅 위에만 지을 수 있어요'); return; }
+        if (br.fail) { toast(br.msg); return; }
+        if (!br.quiet) toast(br.msg);
+        save(); renderHud(); return;
+      }
       if (I.guestAt(s, x, y)) { toast('손님이 서 있어요. 다른 곳에 놓아 주세요'); return; }
       var r = place.kind === 'deco' ? I.place(S, x, y, place.id) : I.plant(S, x, y, place.id, e);
       if (!r) { toast(t ? '이미 무언가 있어요' : '여기에는 놓을 수 없어요'); return; }
@@ -231,15 +249,25 @@
           act: function () { if (p.o.here) { closePanel(); done(I.plant(S, cur[0], cur[1], it, e)); } else { place = { kind: 'seed', id: it, label: info.n }; closePanel(); } } });
       });
       if (!rows.length) rows.push({ icon: '🛒', name: '씨앗이 없어요', sub: '상점에서 조개로 살 수 있어요', act: function () { openPanel('shop'); } });
+    } else if (p.type === 'build') {
+      [['floor', '바닥 · 길', function (st) { return st.layer === 'floor'; }], ['wall', '담 · 울타리', function (st) { return st.layer === 'wall' && !st.gate; }], ['gate', '문', function (st) { return st.gate; }]].forEach(function (g) {
+        rows.push({ head: 1, name: g[1] });
+        Object.keys(I.STRUCT).forEach(function (id) {
+          var st = I.STRUCT[id];
+          if (!g[2](st)) return;
+          var locked = st.lv > S.lvl, n = canBuild(id);
+          rows.push({ icon: I.iconHtml(id), html: 1, name: st.n, sub: locked ? 'Lv.' + st.lv + '에 열려요' : '한 칸에 ' + costHtml(st.c), subHtml: !locked, val: locked ? '' : n + '칸', dim: locked || !n,
+            act: function () { if (locked) return; if (!n) { toast('재료가 모자라요'); return; } place = { kind: 'build', id: id, label: st.n }; closePanel(); toast(st.n + ': 칸마다 OK로 지어요. 붙여 지으면 이어져요 · 뒤로 그만'); } });
+        });
+      });
     } else if (p.type === 'craft') {
       for (k in I.DECOS) {
         var d = I.DECOS[k];
         if (!d.c || d.lv > S.lvl + 1) continue;
-        var out = d.season !== undefined && d.season !== season(), locked = d.lv > S.lvl;
-        (function (k, d) {
+        (function (k, d, out, locked) {
           rows.push({ icon: I.iconHtml('deco:' + k), html: 1, name: d.n + (I.inv(S, 'deco:' + k) ? ' (가방에 ' + I.inv(S, 'deco:' + k) + ')' : ''), sub: locked ? 'Lv.' + d.lv + '에 열려요' : out ? I.SEASON_N[d.season] + '에만 만들 수 있어요' : costHtml(d.c), subHtml: !locked && !out,
             dim: locked || out || !I.has(S, d.c), act: function () { if (locked || out) return; if (!done(I.craft(S, k))) toast('재료가 모자라요'); } });
-        })(k, d);
+        })(k, d, d.season !== undefined && d.season !== season(), d.lv > S.lvl);
       }
     } else if (p.type === 'decor') {
       rows.push({ icon: '🧹', name: '치우기', sub: '놓은 가구는 가방으로, 작물과 나무는 치워요', act: function () { place = { kind: 'remove', label: '치우기' }; closePanel(); } });
@@ -290,6 +318,7 @@
         Object.keys(I.TREES).forEach(function (id) { var tr = I.TREES[id], got = S.dex.items[tr.fruit]; rows.push({ icon: got ? tr.e : '❔', name: got ? tr.fn : '???', sub: tr.n, dim: !got }); });
         ['wood', 'stone', 'pearl'].forEach(function (id) { var got = S.dex.items[id]; rows.push({ icon: got ? I.iconHtml(id) : '❔', html: got, name: got ? I.MATS[id].n : '???', sub: '모래사장에서 주워요', dim: !got }); });
       } else if (tab === 'decos') {
+        Object.keys(I.STRUCT).forEach(function (id) { var got = S.dex.decos[id]; var st = I.STRUCT[id]; rows.push({ icon: got ? I.iconHtml(id) : '❔', html: got, name: got ? st.n : '???', sub: '건축 · Lv.' + st.lv, dim: !got }); });
         Object.keys(I.DECOS).forEach(function (id) { var got = S.dex.decos[id] || I.countWhere(S, 'deco', id) || I.inv(S, 'deco:' + id); var d = I.DECOS[id]; rows.push({ icon: got ? I.iconHtml('deco:' + id) : '❔', html: got, name: got ? d.n : '???', sub: d.c ? 'Lv.' + d.lv + (d.season !== undefined ? ' · ' + I.SEASON_N[d.season] : '') : id === 'trophy' ? '이번 주 목표 보상' : '가족 등대 완성 보상', dim: !got }); });
       } else {
         Object.keys(I.GUESTS).forEach(function (id) { var g = I.GUESTS[id], n = S.dex.guests[id]; rows.push({ icon: n ? g.e : '❔', name: n ? g.n + ' ' + new Array(Math.min(5, n) + 1).join('♥') : '??? (Lv.' + g.lv + ')', sub: g.txt, dim: !n, val: S.vis[id] ? '섬에 있어요' : '' }); });
@@ -328,7 +357,7 @@
     }
     return rows;
   }
-  var TITLES = { plant: ['심기', '씨앗이나 묘목을 고르세요'], craft: ['만들기', '재료를 모아 가구를 만들어요'], decor: ['꾸미기', '가방의 가구를 섬에 놓아요'], shop: ['상점', ''], req: ['의뢰', '매일 새로운 부탁이 와요'],
+  var TITLES = { build: ['건축', '길과 담을 한 칸씩 지어요. 이웃한 칸끼리 이어지고, 같은 칸에서 OK를 다시 누르면 허물고 재료를 돌려받아요'], plant: ['심기', '씨앗이나 묘목을 고르세요'], craft: ['만들기', '재료를 모아 가구를 만들어요'], decor: ['꾸미기', '가방의 가구를 섬에 놓아요'], shop: ['상점', ''], req: ['의뢰', '매일 새로운 부탁이 와요'],
     dex: ['도감', ''], family: ['가족', '가족의 섬에 놀러 가고, 함께 등대를 지어요'], mail: ['우편', ''], gift: ['선물하기', '하나씩 두고 와요'] };
   var TABS = { shop: ['사기', '팔기'], dex: ['작물 · 열매', '가구', '손님'] };
   function renderPanel() {
@@ -368,14 +397,14 @@
   // ---------- visiting family ----------
   function visit(f, d) {
     view = { id: f.id, name: f.name, color: f.color, avatar: f.avatar, data: d };
-    cur = [6, 4]; barSel = 0; closePanel(); focus = 'grid';
+    cur = [I.CX, I.CY]; barSel = 0; closePanel(); focus = 'grid';
     S.visits = S.visits || {};
     var today = I.dayKey(I.wall(env()));
     if (S.visits[f.id] !== today) { S.visits[f.id] = today; S.shells += 10; toast(f.name + '의 섬에 왔어요! 방문 보상 🐚10'); save(); }
     renderHud();
   }
   function barAct(id) {
-    if (id === 'home') { save(); view = null; cur = [6, 4]; focus = 'grid'; renderHud(); toast('내 섬으로 돌아왔어요'); return; }
+    if (id === 'home') { save(); view = null; cur = [I.CX, I.CY]; focus = 'grid'; renderHud(); toast('내 섬으로 돌아왔어요'); return; }
     if (id === 'vwater') {
       var key = view.id + ':' + I.dayKey(I.wall(env()));
       S.watered = S.watered || {};
@@ -419,7 +448,7 @@
     last = ts;
     var dpr = Math.min(2, window.devicePixelRatio || 1), W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
     if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
-    var placeGhost = place && place.kind !== 'remove' ? (place.kind === 'deco' ? { t: 'deco', id: place.id } : /^tree:/.test(place.id) ? { t: 'tree', id: place.id.slice(5), p: Date.now(), f: 0 } : { t: 'crop', id: place.id.slice(5), p: Date.now(), w: Date.now() }) : null;
+    var placeGhost = place && place.kind === 'build' ? { t: 'build', id: place.id } : place && place.kind !== 'remove' ? (place.kind === 'deco' ? { t: 'deco', id: place.id } : /^tree:/.test(place.id) ? { t: 'tree', id: place.id.slice(5), p: Date.now(), f: 0 } : { t: 'crop', id: place.id.slice(5), p: Date.now(), w: Date.now() }) : null;
     I.draw(ctx, W, H, isl(), env(), shared, { t: (ts - t0) / 1000, cursor: focus === 'grid' && !panel && !intro ? cur : null, ghost: placeGhost, view: 'game' });
   }
   // every half minute: bring the island up to date (growth, beach finds, guests)
