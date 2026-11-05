@@ -855,11 +855,15 @@
     var list = activeMemos();
     return ['메모', list.length ? '메모 ' + list.length + '개' : '새 메모가 없어요', list.length ? cut(list[0].text.split('\n')[0], 13) : ''];
   }
-  // Tile pictures: a gradient with a soft light from the top left, a drop-shadowed symbol, and on the
-  // banner the name with a short line of what it is (or what it shows right now).
+  // Tile pictures: a gradient with a soft light from the top left and a drop-shadowed symbol. Banners carry
+  // only the name, like the banners of other TV apps; live state (date, counts) stays inside the icon.
+  function nameSize(label) {
+    var em = 0;
+    String(label).split('').forEach(function (ch) { em += /[가-힣]/.test(ch) ? 1 : ch === ' ' ? 0.3 : 0.62; });
+    return Math.round(Math.min(56, 310 / Math.max(em, 1)));
+  }
   function miniSvg(m, w, h) {
     var live = m.screen || m.live, sq = w === h, sym = live ? liveSym(m) : m.sym;
-    var t = live ? liveText(m) : [m.label, m.tag, ''];
     var s = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
       '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + m.c1 + '"/><stop offset="1" stop-color="' + m.c2 + '"/></linearGradient>' +
       '<radialGradient id="lt" cx=".2" cy=".1" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".32"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient>' +
@@ -867,10 +871,8 @@
       '<rect width="' + w + '" height="' + h + '" rx="' + (sq ? 42 : 0) + '" fill="url(#g)"/><rect width="' + w + '" height="' + h + '" rx="' + (sq ? 42 : 0) + '" fill="url(#lt)"/>' +
       (sq ? sym
         : '<circle cx="590" cy="40" r="150" fill="#fff" opacity=".06"/><circle cx="640" cy="330" r="120" fill="#fff" opacity=".05"/>' +
-          '<g transform="translate(26 50) scale(1.35)">' + sym + '</g>' +
-          '<text x="312" y="' + (t[2] ? 150 : 172) + '" ' + FONT + ' font-weight="800" font-size="50" fill="#fff">' + xesc(t[0]) + '</text>' +
-          '<text x="314" y="' + (t[2] ? 204 : 222) + '" ' + FONT + ' font-weight="600" font-size="28" fill="#fff" opacity=".9">' + xesc(t[1]) + '</text>' +
-          (t[2] ? '<text x="314" y="248" ' + FONT + ' font-size="26" fill="#fff" opacity=".82">' + xesc(t[2]) + '</text>' : '')) + '</svg>';
+          '<g transform="translate(22 48) scale(1.38)">' + sym + '</g>' +
+          '<text x="300" y="' + (180 + nameSize(m.label) * 0.36) + '" ' + FONT + ' font-weight="800" font-size="' + nameSize(m.label) + '" letter-spacing="-1" fill="#fff">' + xesc(m.label) + '</text>') + '</svg>';
     return 'data:image/svg+xml,' + encodeURIComponent(s);
   }
   // Redraws the calendar and memo tiles when what they show has changed.
