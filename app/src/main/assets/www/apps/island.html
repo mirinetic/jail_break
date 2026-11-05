@@ -40,7 +40,7 @@
   #pTabs span { padding: .35rem .9rem; border-radius: 1rem; font-size: .95rem; background: rgba(255,255,255,.08); }
   #pTabs span.on { background: #fff; color: #10203d; font-weight: 700; }
   #pNote { font-size: .95rem; line-height: 1.45; opacity: .8; margin: 0; }
-  #pRows { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: .45rem; padding: .2rem; }
+  #pRows { position: relative; flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: .45rem; padding: .2rem; }
   .row { display: flex; align-items: center; gap: .8rem; padding: .65rem .8rem; border-radius: 1rem; background: rgba(255,255,255,.05); font-size: 1.1rem; flex: none; }
   .row .ico { font-size: 1.5rem; }
   .row div { flex: 1; min-width: 0; }
@@ -376,8 +376,16 @@
         '<div>' + esc(r.name) + (r.sub ? '<small>' + (r.subHtml ? r.sub : esc(r.sub)) + '</small>' : '') + (r.bar !== undefined ? '<div class="bar2"><i style="width:' + Math.round(r.bar * 100) + '%"></i></div>' : '') + '</div>' +
         (r.val ? '<span class="v">' + esc(r.val) + '</span>' : '') + '</div>';
     }).join('');
+    // keep the chosen row in view, with a little of the rows around it (and its heading, if it is the first under one)
     var box = $('pRows'), s = box.querySelector('.sel');
-    if (s) { if (s.offsetTop + s.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = s.offsetTop + s.offsetHeight - box.clientHeight; else if (s.offsetTop < box.scrollTop) box.scrollTop = s.offsetTop - 8; }
+    if (s) {
+      var prev = s.previousElementSibling, next = s.nextElementSibling;
+      var top = (prev && prev.classList.contains('head') ? prev : s).offsetTop - (prev && !prev.classList.contains('head') ? prev.offsetHeight * 0.5 : 4);
+      var bottom = s.offsetTop + s.offsetHeight + (next ? next.offsetHeight * 0.5 : 4);
+      if (p.i === 0) box.scrollTop = 0;
+      else if (top < box.scrollTop) box.scrollTop = Math.max(0, top);
+      else if (bottom > box.scrollTop + box.clientHeight) box.scrollTop = bottom - box.clientHeight;
+    }
     $('pHint').innerHTML = (TABS[p.type] ? '<span><kbd>◀ ▶</kbd>탭</span>' : '') + '<span><kbd>OK</kbd>선택</span><span><kbd>뒤로</kbd>닫기</span>';
     p.rows = sel;
   }
