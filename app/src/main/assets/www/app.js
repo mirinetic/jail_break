@@ -2915,13 +2915,42 @@
       window.IslandCore.draw(cv.getContext('2d'), W, H, isl, { now: Date.now(), shift: tzShift(Date.now()), weather: miniEnv().weather }, sharedData('cove.island'), { t: 0, view: 'thumb' });
     }
   }
+  // Arrow keys in 나의 프로필 follow the layout: three columns, each a stack of rows (some rows hold two
+  // widgets side by side). Up/down stay in the column; left/right move along the row, then to the
+  // neighbouring column at the same height.
+  var ME_COLS = [[[0, 1], [2]], [[3], [4]], [[5], [8], [6, 7]]];
   function meKey(k) {
     if (k === 'back') { closeMe(); return; }
     if (k === 'ok' || k === 'longok') { var it = meItems[meSel]; if (it) fromMe(it.act); return; }
-    var els = Array.prototype.slice.call(document.querySelectorAll('#meGrid [data-mi]'));
-    var cur = els[meSel], next = cur && nearest(els, cur, k);
-    if (next) { meSel = +next.getAttribute('data-mi'); renderMe(); }
+    var box = function (i) { var e = document.querySelector('#meGrid [data-mi="' + i + '"]'); return e ? e.getBoundingClientRect() : null; };
+    var c, r, j;
+    ME_COLS.forEach(function (col, ci) { col.forEach(function (row, ri) { var x = row.indexOf(meSel); if (x >= 0) { c = ci; r = ri; j = x; } }); });
+    if (c === undefined) { meSel = 0; renderMe(); return; }
+    var me = box(meSel), cx = me.left + me.width / 2, cy = me.top + me.height / 2, next = null;
+    // the item below/above that lines up best; when it is close to a tie, the left one (reading order)
+    var nearestX = function (row) {
+      var d = row.map(function (i) { var b = box(i); return Math.abs(b.left + b.width / 2 - cx); }), best = 0;
+      for (var q = 1; q < row.length; q++) if (d[q] < d[best] - Math.max(box(row[q]).width, me.width) * 0.25) best = q;
+      return row[best];
+    };
+    if (k === 'up' || k === 'down') {
+      var row = ME_COLS[c][r + (k === 'up' ? -1 : 1)];
+      if (row) next = nearestX(row);
+    } else {
+      var here = ME_COLS[c][r], step = k === 'left' ? -1 : 1;
+      if (here[j + step] !== undefined) next = here[j + step];
+      else if (ME_COLS[c + step]) {
+        var best = null, bd = Infinity;
+        ME_COLS[c + step].forEach(function (rw) {
+          var b = box(rw[0]), d = cy < b.top ? b.top - cy : cy > b.bottom ? cy - b.bottom : 0;   // 0 when the row spans this height
+          if (d < bd) { bd = d; best = rw; }
+        });
+        if (best) next = step > 0 ? best[0] : best[best.length - 1];
+      }
+    }
+    if (next !== null && next !== undefined) { meSel = next; renderMe(); }
   }
+
 
 
   // ---------- voice / typed commands from the phone ----------
@@ -3202,6 +3231,8 @@
     textResult: textResult,
     calCmd: calCmd,
     // Test hook: focus the n-th element matching a selector (used by the layout checks)
+    // Test hook: from widget i of 나의 프로필, press key k; returns where the focus lands
+    _meNav: function (i, k) { if (base !== 'me') openMe(); meSel = i; renderMe(); meKey(k); return base === 'me' ? meSel : null; },
     _focus: function (sel, n) { var e = document.querySelectorAll(sel)[n || 0]; if (e) setFocus(e); return !!e; },
     toast: toast,
     home: function () {
