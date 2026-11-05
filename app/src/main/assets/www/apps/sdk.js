@@ -1,7 +1,8 @@
 /* Cove mini-app toolkit. A mini app is a page that runs inside Cove (no TV permission needed):
    Cove sends it the remote keys and the current profile, keeps its data per profile, and counts its use.
      CoveApp.onInit(function (profile, data, extra) {})   profile = {id, name, kids}
-                                   extra = {family:[{id, name, color, avatar, kids, data}], shared, env:{shift, weather}}
+                                   extra = {family:[{id, name, color, avatar, kids, data}], shared, env:{shift, weather}, intent}
+                                   intent = what the home screen asked for when opening the app (e.g. {play, resume})
      CoveApp.onKey(function (key) {})              'up' 'down' 'left' 'right' 'ok' 'back' 'menu'
      CoveApp.save(data)                            stored for this profile
      CoveApp.saveFor(profileId, data)              another family member's data for this app (visits, gifts)
@@ -18,7 +19,7 @@
     var m = e.data || {};
     if (m.type === 'init') {
       st.profile = m.profile || {}; st.data = m.data || {};
-      st.extra = { family: m.family || [], shared: m.shared || {}, env: m.env || { shift: 0, weather: null } };
+      st.extra = { family: m.family || [], shared: m.shared || {}, env: m.env || { shift: 0, weather: null }, intent: m.intent || null };
       initFns.forEach(function (f) { f(st.profile, st.data, st.extra); });
     } else if (m.type === 'key') keyFns.forEach(function (f) { f(m.key); });
     else if (m.type === 'env') { st.extra.env = m.env; envFns.forEach(function (f) { f(m.env); }); }

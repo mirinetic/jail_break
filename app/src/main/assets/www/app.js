@@ -748,23 +748,24 @@
   }
 
   // ---------- actions ----------
-  function launch(pkg, force) {
+  // intent: what a mini app should do right away (Cove 시네마: {play, resume})
+  function launch(pkg, force, intent) {
     if (!force && !kidsAllows(pkg) && !isAdmin()) {
       var lbl = BYPKG[pkg] ? BYPKG[pkg].label : pkg;
-      if (hasPin()) openPin({ mode: 'check', title: '"' + lbl + '"은(는) 허용되지 않은 앱이에요', onOk: function () { launch(pkg, true); } });
+      if (hasPin()) openPin({ mode: 'check', title: '"' + lbl + '"은(는) 허용되지 않은 앱이에요', onOk: function () { launch(pkg, true, intent); } });
       else toast('"' + lbl + '"은(는) 이 프로필에서 열 수 없어요');
       return;
     }
     if (!force && P.locked.indexOf(pkg) >= 0 && hasPin() && !unlocked()) {
-      openPin({ mode: 'check', title: '"' + (BYPKG[pkg] ? BYPKG[pkg].label : pkg) + '" 열기', onOk: function () { launch(pkg); } });
+      openPin({ mode: 'check', title: '"' + (BYPKG[pkg] ? BYPKG[pkg].label : pkg) + '" 열기', onOk: function () { launch(pkg, false, intent); } });
       return;
     }
     var a = BYPKG[pkg];
     if (a && a.screen) { countOpen(pkg); if (a.screen === 'cal') openCal('month'); else openMemo(); return; }   // not limited by time
-    if (msLeft(current()) <= 0) { timeUp(function () { launch(pkg, true); }); return; }
+    if (msLeft(current()) <= 0) { timeUp(function () { launch(pkg, true, intent); }); return; }
     P.recent = [pkg].concat(P.recent.filter(function (x) { return x !== pkg; })).slice(0, 12);
     savePrefs();
-    if (a && a.mini) { openMini(pkg); return; }
+    if (a && a.mini) { openMini(pkg, intent); return; }
     if (N) {
       if (!N.launch(pkg)) { toast('앱을 열 수 없어요'); return; }
       countOpen(pkg);
@@ -903,7 +904,8 @@
     return { shift: tzShift(Date.now()), weather: cur ? { code: cur.weather_code, isDay: cur.is_day, temp: cur.temperature_2m } : null, city: cityOf(P.weather) ? cityOf(P.weather)[1] : '' };
   }
   function appData(pid, pkg) { ROOT.appdata = ROOT.appdata || {}; var d = ROOT.appdata[pid] = ROOT.appdata[pid] || {}; return d[pkg] || {}; }
-  function openMini(pkg) {
+  function openMini(pkg, intent) {
+    if (mini) endMini();   // another mini app was open: count its time before switching
     leaveMe(true);
     var a = BYPKG[pkg];
     var from = base === 'drawer' ? 'drawer' : 'home';
@@ -914,7 +916,7 @@
     var box = $('mini');
     box.innerHTML = '<iframe src="' + a.page + '" tabindex="-1" title="' + esc(a.label) + '"></iframe>';
     box.hidden = false;
-    mini = { pkg: pkg, pid: ROOT.current, start: Date.now(), from: from, frame: box.querySelector('iframe'), ready: false };
+    mini = { pkg: pkg, pid: ROOT.current, start: Date.now(), from: from, frame: box.querySelector('iframe'), ready: false, intent: intent || null };
     countOpen(pkg);
   }
   function endMini() {
@@ -945,7 +947,7 @@
       var pr = profileById(mini.pid);
       miniPost({ type: 'init', profile: { id: pr.id, name: pr.name, kids: pr.kind === 'kids', color: pr.color, avatar: pr.avatar || '' }, data: appData(mini.pid, mini.pkg),
         family: ROOT.profiles.filter(function (x) { return x.id !== pr.id; }).map(function (x) { return { id: x.id, name: x.name, color: x.color, avatar: x.avatar || '', kids: x.kind === 'kids', data: appData(x.id, mini.pkg) }; }),
-        shared: sharedData(mini.pkg), env: miniEnv() });
+        shared: sharedData(mini.pkg), env: miniEnv(), intent: mini.intent });
     } else if (m.type === 'save' && m.data && typeof m.data === 'object') {
       appData(mini.pid, mini.pkg);
       ROOT.appdata[mini.pid][mini.pkg] = m.data;
@@ -2992,6 +2994,40 @@
     return { day: day, time: time, rest: t };
   }
 
+  // Cove 시네마 by voice: "보던 거 이어 보기", "찜한 거 틀어 줘", or a title ("달빛 정원 틀어 줘")
+  function cinemaVoice(raw, t, done) {
+    var cat = window.CoveCinema, a = BYPKG['cove.cinema'];
+    if (!cat || !a) return false;
+    var d = appData(ROOT.current, 'cove.cinema'), kids = isKids();
+    var ok = function (it) { return !kids || it.rate === 0; };
+    var byId = function (id) { for (var i = 0; i < cat.length; i++) if (cat[i].id === id) return cat[i]; return null; };
+    var playVerb = has(t, ['틀어', '재생', '보여', '볼래', '보자', '봐', '켜']);
+    var item = null, resume = false, what = '';
+    if (has(t, ['이어보', '이어서', '보던', '계속보', '마저'])) {
+      var h = (d.hist || []).filter(function (x) { return !x.done && byId(x.id) && ok(byId(x.id)); }).sort(function (x, y) { return y.t - x.t; })[0];
+      if (!h) { done('이어 볼 작품이 없어요'); return true; }
+      item = byId(h.id); resume = true; what = '이어 보기 · ' + item.title + ' (' + Math.floor(h.pos / 60) + '분부터)';
+    } else if (has(t, ['찜'])) {
+      var favs = (d.fav || []).map(byId).filter(function (x) { return x && ok(x); });
+      if (!favs.length) { done('찜한 작품이 없어요'); return true; }
+      item = favs[0]; resume = true; what = '찜한 작품 ' + favs.length + '편 중 "' + item.title + '"';
+    } else {
+      // a title, or a distinctive part of one ("모모", "은하 끝 편의점")
+      var best = null, len = 0;
+      cat.forEach(function (c) {
+        var n = norm(c.title);
+        if (t.indexOf(n) >= 0 && n.length > len) { best = c; len = n.length; }
+        else String(c.title).split(/\s+/).forEach(function (w) { w = norm(w); if (w.length >= 2 && playVerb && t.indexOf(w) >= 0 && w.length > len && !/^(마지막|하루|서울)$/.test(w)) { best = c; len = w.length; } });
+      });
+      if (!best) return false;
+      if (!playVerb && len < 4) return false;
+      item = best; resume = true; what = '"' + item.title + '"';
+    }
+    if (!ok(item)) { var jc = item.title.charCodeAt(item.title.length - 1) - 0xAC00; done('"' + item.title + '"' + (jc >= 0 && jc % 28 ? '은' : '는') + ' 키즈 프로필에서 볼 수 없는 작품이에요'); return true; }
+    done('Cove 시네마 · ' + what);
+    launch('cove.cinema', false, { play: item.id, resume: resume });
+    return true;
+  }
   function say(text) {
     wake();
     var raw = String(text || '').trim();
@@ -3001,6 +3037,7 @@
     if (window.CoveKeyboard.isOpen()) { window.CoveKeyboard.insert(raw); return; }   // typed on the phone
     var done = function (msg) { toast('🎙 "' + raw + '" → ' + msg); };
     if (has(t, ['내프로필', '나의프로필', '프로필정보', '내정보'])) { openMe(); done('나의 프로필'); return; }
+    if (cinemaVoice(raw, t, done)) return;
     if (has(t, ['섬']) && has(t, ['물'])) {
       var isl = islandOf(ROOT.current);
       if (!isl) { done('아직 섬이 없어요. "섬 열어"라고 말해 보세요'); return; }

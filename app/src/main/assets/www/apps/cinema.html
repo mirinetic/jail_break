@@ -98,33 +98,12 @@
   </section>
 
 <script src="sdk.js"></script>
+<script src="cinema-catalog.js"></script>
 <script>
 (function () {
   'use strict';
-  // A made-up catalogue: every title, picture and line here is invented for Cove.
-  // rating: 0 = 전체, 12 = 12세, 15 = 15세. The kids profile sees only 전체 titles.
-  var T = [
-    ['moon',  '달빛 정원', 0, '판타지', 96, ['#1e1b4b', '#6d28d9', '#fde68a'], 'moon', '보름달이 뜨는 밤마다 할머니 정원의 꽃들이 이야기를 시작한다.'],
-    ['lib',   '바다 아래 도서관', 0, '모험', 104, ['#082f49', '#0e7490', '#a5f3fc'], 'waves', '잠수함을 탄 남매가 바다 밑에 가라앉은 도서관의 마지막 책을 찾아 나선다.'],
-    ['momo',  '고양이 탐정 모모', 0, '키즈', 72, ['#7c2d12', '#ea580c', '#fef3c7'], 'cat', '동네 생선 가게의 정어리가 사라졌다. 모모의 수염이 떨리기 시작한다.'],
-    ['star',  '별을 줍는 소년', 0, '판타지', 88, ['#0f172a', '#1d4ed8', '#fef9c3'], 'stars', '밤마다 떨어진 별을 주워 하늘로 돌려보내는 소년의 비밀 아르바이트.'],
-    ['cloud', '구름 우체국', 0, '키즈', 64, ['#0c4a6e', '#38bdf8', '#ffffff'], 'cloud', '구름 위 우체국에서 일하는 펭귄 집배원 포포의 바쁜 하루.'],
-    ['orch',  '숲속 오케스트라', 0, '키즈', 70, ['#14532d', '#16a34a', '#fde047'], 'forest', '숲의 동물들이 첫 음악회를 열기까지 남은 시간은 단 사흘.'],
-    ['train', '마지막 기차의 손님', 12, '미스터리', 112, ['#111827', '#7f1d1d', '#fca5a5'], 'train', '종착역에 도착한 마지막 기차, 승객 명단에 없는 한 사람이 내렸다.'],
-    ['dawn',  '서울, 새벽 4시', 15, '드라마', 118, ['#0b1120', '#334155', '#fbbf24'], 'city', '같은 새벽을 사는 네 사람의 하룻밤이 한 편의점에서 겹친다.'],
-    ['map',   '붉은 사막의 지도', 12, '모험', 109, ['#7c2d12', '#c2410c', '#fde68a'], 'desert', '아버지가 남긴 반쪽 지도를 들고 사막을 건너는 딸의 여정.'],
-    ['mio',   '로봇 수리점 미오', 0, '키즈', 78, ['#134e4a', '#14b8a6', '#fef08a'], 'robot', '고장 난 로봇은 무엇이든 고치는 작은 수리점, 오늘의 손님은 우주 탐사선이다.'],
-    ['jeju',  '제주 바람 레시피', 0, '다큐', 52, ['#164e63', '#0891b2', '#fed7aa'], 'sun', '제주 해녀 할머니들의 부엌에서 배우는 바다의 맛 사계절.'],
-    ['bear',  '북극곰의 겨울', 0, '다큐', 58, ['#0f172a', '#475569', '#f8fafc'], 'snow', '얼음이 녹기 시작한 북극에서 어미곰과 새끼곰의 첫 겨울을 따라간다.'],
-    ['mart',  '은하 끝 편의점', 12, 'SF', 98, ['#1e1b4b', '#be185d', '#a5b4fc'], 'planet', '우주 고속도로 마지막 휴게소, 24시간 문을 여는 편의점의 기묘한 손님들.'],
-    ['quiet', '조용한 이웃', 15, '스릴러', 107, ['#0a0a0a', '#3f3f46', '#e11d48'], 'window', '이사 온 첫날부터 옆집에서는 아무 소리도 들리지 않았다.'],
-    ['king',  '하루만 왕', 12, '코미디', 94, ['#713f12', '#ca8a04', '#fef3c7'], 'crown', '평범한 회사원이 하루 동안 작은 섬나라의 왕이 되어 버렸다.'],
-    ['wave',  '파도를 그리는 사람', 12, '드라마', 101, ['#172554', '#2563eb', '#e0f2fe'], 'waves', '바다를 떠나지 못하는 화가와 바다를 처음 본 소녀의 여름.'],
-    ['dino',  '공룡 박물관의 밤', 0, '키즈', 80, ['#1c1917', '#57534e', '#86efac'], 'bones', '박물관 문이 닫히면 공룡 뼈들이 하나둘 일어나 숨바꼭질을 한다.'],
-    ['clock', '시간 수선공', 12, 'SF', 115, ['#1f2937', '#9a3412', '#fcd34d'], 'clock', '고장 난 시계를 고치면 그 시계 주인의 하루가 되돌아간다.'],
-    ['fog',   '안개 호수', 15, '미스터리', 110, ['#111827', '#4b5563', '#c7d2fe'], 'mountain', '안개가 걷히는 날에만 보이는 호숫가 마을, 그곳에서 사라진 동생.'],
-    ['chef',  '꼬마 요리사 대회', 0, '키즈', 60, ['#831843', '#f43f5e', '#fde68a'], 'sun', '열 살 요리사 여덟 명이 마을 축제 최고의 디저트에 도전한다.']
-  ].map(function (x) { return { id: x[0], title: x[1], rate: x[2], genre: x[3], mins: x[4], pal: x[5], motif: x[6], desc: x[7], year: 2019 + (x[0].charCodeAt(0) + x[0].length) % 7 }; });
+  // The catalogue lives in cinema-catalog.js (the home screen uses it for voice).
+  var T = window.CoveCinema;
   var BYID = {}; T.forEach(function (t) { BYID[t.id] = t; });
 
   // ---------- poster art (drawn here, no image files) ----------
@@ -363,13 +342,21 @@
     save();
   }
 
-  CoveApp.onInit(function (profile, d) {
+  CoveApp.onInit(function (profile, d, ex) {
     who = profile || who;
     data = d && typeof d === 'object' ? d : {};
     if (!Array.isArray(data.hist)) data.hist = [];
     if (!Array.isArray(data.fav)) data.fav = [];
     $('who').textContent = (who.name || '') + (who.kids ? ' · 키즈' : '');
     renderBrowse(false);
+    // opened by voice from the home screen: "이어 보기", "찜한 거", or a title
+    var it = (ex && ex.intent) || null, t = it && BYID[it.play];
+    if (t) {
+      if (!allowed(t)) { var c = t.title.charCodeAt(t.title.length - 1) - 0xAC00; CoveApp.toast('"' + t.title + '"' + (c >= 0 && c % 28 ? '은' : '는') + ' 키즈 프로필에서 볼 수 없는 작품이에요'); return; }
+      var h = hist(t.id);
+      openDetail(t);
+      startPlay(it.resume && h && !h.done ? h.pos : 0);
+    }
   });
   CoveApp.onKey(function (k) {
     if (view === 'player') playerKey(k);
