@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>창가의 작은 섬</title>
+<style>
+  html { font-size: calc(100vw / 96); background: #0b1d3a; }
+  body { margin: 0; height: 100vh; overflow: hidden; color: #fff; cursor: none; background: #0b1d3a;
+    font-family: "Roboto", "Noto Sans CJK KR", "Noto Sans KR", sans-serif; -webkit-font-smoothing: antialiased; }
+  [hidden] { display: none !important; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .glass { background: rgba(14,22,44,.62); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: .08rem solid rgba(255,255,255,.12); box-shadow: 0 .8rem 2rem rgba(0,0,0,.25); }
+  .ico { display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; font-size: 1em; line-height: 1; vertical-align: middle; }
+  svg.ico { width: 1.6em; height: 1.6em; }
+
+  #hud { position: absolute; left: 2.2rem; top: 1.8rem; display: flex; gap: 1rem; align-items: center; padding: .8rem 1.4rem .8rem .9rem; border-radius: 2.4rem; }
+  #hud .av { width: 3.2rem; height: 3.2rem; border-radius: 50%; display: grid; place-items: center; font-size: 1.7rem; font-weight: 700; box-shadow: inset 0 0 0 .15rem rgba(255,255,255,.4); }
+  #hud b { font-size: 1.35rem; display: block; }
+  #hud .xp { width: 11rem; height: .45rem; border-radius: .3rem; background: rgba(255,255,255,.18); margin-top: .35rem; overflow: hidden; }
+  #hud .xp i { display: block; height: 100%; background: linear-gradient(90deg, #7ee0b0, #4fc3f7); }
+  #hud small { font-size: .85rem; opacity: .8; }
+  #shells { font-size: 1.35rem; font-weight: 700; padding-left: 1rem; border-left: .08rem solid rgba(255,255,255,.2); display: flex; align-items: center; gap: .3rem; }
+  #world { position: absolute; right: 2.2rem; top: 1.8rem; padding: .8rem 1.3rem; border-radius: 2.4rem; font-size: 1.1rem; display: flex; gap: 1.1rem; align-items: center; }
+  #visitTag { position: absolute; left: 50%; top: 1.8rem; transform: translateX(-50%); padding: .7rem 1.6rem; border-radius: 2rem; font-size: 1.2rem; font-weight: 600; background: rgba(244,114,182,.85); }
+
+  #hint { position: absolute; left: 50%; bottom: 8.6rem; transform: translateX(-50%); padding: .7rem 1.4rem; border-radius: 1.4rem; font-size: 1.2rem; white-space: nowrap; display: flex; gap: .8rem; align-items: center; }
+  #hint kbd { font: inherit; font-weight: 700; font-size: .95rem; padding: .1rem .55rem; border-radius: .4rem; background: rgba(255,255,255,.2); }
+  #bar { position: absolute; left: 50%; bottom: 1.6rem; transform: translateX(-50%); display: flex; gap: .4rem; padding: .55rem; border-radius: 2rem; }
+  #bar span { min-width: 6.4rem; padding: .55rem .5rem .45rem; border-radius: 1.4rem; display: grid; justify-items: center; gap: .15rem; font-size: .92rem; opacity: .82; position: relative; }
+  #bar span em { font-style: normal; font-size: 1.6rem; line-height: 1.2; }
+  #bar span.sel { background: #fff; color: #10203d; opacity: 1; transform: scale(1.06); }
+  #bar.dim span.sel { background: rgba(255,255,255,.18); color: #fff; transform: none; }
+  #bar span b { position: absolute; top: .1rem; right: .5rem; min-width: 1.3rem; height: 1.3rem; border-radius: .7rem; background: #ef4444; color: #fff; font-size: .8rem; display: grid; place-items: center; padding: 0 .3rem; }
+
+  #panel { position: absolute; right: 2.2rem; top: 6.8rem; bottom: 8.4rem; width: 34rem; border-radius: 1.6rem; background: rgba(12,20,40,.9); padding: 1.4rem 1.4rem 1rem; display: flex; flex-direction: column; gap: .8rem; }
+  #panel h2 { margin: 0; font-size: 1.6rem; display: flex; align-items: baseline; gap: .8rem; }
+  #panel h2 small { font-size: 1rem; font-weight: 400; opacity: .7; }
+  #pTabs { display: flex; gap: .5rem; }
+  #pTabs span { padding: .35rem .9rem; border-radius: 1rem; font-size: .95rem; background: rgba(255,255,255,.08); }
+  #pTabs span.on { background: #fff; color: #10203d; font-weight: 700; }
+  #pNote { font-size: .95rem; line-height: 1.45; opacity: .8; margin: 0; }
+  #pRows { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: .45rem; padding: .2rem; }
+  .row { display: flex; align-items: center; gap: .8rem; padding: .65rem .8rem; border-radius: 1rem; background: rgba(255,255,255,.05); font-size: 1.1rem; flex: none; }
+  .row .ico { font-size: 1.5rem; }
+  .row div { flex: 1; min-width: 0; }
+  .row div small { display: block; font-size: .85rem; opacity: .72; margin-top: .15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .v { font-size: .95rem; opacity: .9; white-space: nowrap; }
+  .row.sel { background: #fff; color: #10203d; }
+  .row.dim { opacity: .45; }
+  .row.sel.dim { opacity: .75; }
+  .row.head { background: none; font-size: .95rem; opacity: .7; padding: .4rem .4rem 0; }
+  .bar2 { height: .35rem; border-radius: .2rem; background: rgba(127,127,127,.3); margin-top: .35rem; overflow: hidden; }
+  .bar2 i { display: block; height: 100%; background: #34d399; }
+  .ok { color: #16a34a; } .no { color: #ef4444; }
+  .row:not(.sel) .ok { color: #7ee0b0; } .row:not(.sel) .no { color: #fca5a5; }
+  #pHint { font-size: .9rem; opacity: .7; display: flex; gap: 1.2rem; }
+  #pHint kbd, #hint kbd { font: inherit; font-weight: 700; padding: .05rem .45rem; border-radius: .35rem; background: rgba(255,255,255,.2); margin-right: .3rem; }
+
+  #toast { position: absolute; left: 50%; top: 7rem; transform: translate(-50%, -1rem); opacity: 0; padding: .9rem 1.6rem; border-radius: 1.6rem; font-size: 1.2rem; max-width: 70vw; text-align: center;
+    background: rgba(16,24,48,.9); transition: opacity .25s, transform .25s; }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); }
+  #toast.big { background: linear-gradient(135deg, #f59e0b, #ec4899); font-weight: 700; font-size: 1.45rem; }
+  #intro { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(5,12,30,.55); }
+  #intro .box { width: 46rem; padding: 2.4rem 2.6rem; border-radius: 2rem; text-align: center; }
+  #intro h1 { margin: 0 0 .6rem; font-size: 2.6rem; }
+  #intro p { font-size: 1.2rem; line-height: 1.7; opacity: .9; margin: .4rem 0; }
+  #intro .go { display: inline-block; margin-top: 1.4rem; padding: .8rem 2rem; border-radius: 2rem; background: #fff; color: #10203d; font-weight: 700; font-size: 1.2rem; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hud" class="glass"><span class="av" id="hAv"></span><div><b id="hName"></b><small id="hLvl"></small><div class="xp"><i id="hXp"></i></div></div><span id="shells">🐚 <span id="hShells">0</span></span></div>
+  <div id="world" class="glass"></div>
+  <div id="visitTag" hidden></div>
+  <div id="hint" class="glass"></div>
+  <div id="bar" class="glass"></div>
+  <aside id="panel" class="glass" hidden><h2 id="pTitle"></h2><div id="pTabs"></div><p id="pNote"></p><div id="pRows"></div><div id="pHint"></div></aside>
+  <div id="intro" hidden><div class="box glass"><h1>🏝️ 창가의 작은 섬</h1>
+    <p>방향키로 섬을 둘러보고, <b>OK</b> 한 번이면 심고 · 물 주고 · 거두고 · 손님과 이야기해요.</p>
+    <p>맨 아래까지 내려가면 <b>도구줄</b>이 나와요: 만들기, 꾸미기, 상점, 의뢰, 도감, 가족.</p>
+    <p>작물은 진짜 시간으로 자라요. 오래 비워도 시들지 않으니 편할 때 들러 주세요.</p><span class="go">OK 시작하기</span></div></div>
+  <div id="toast"></div>
+
+<script src="sdk.js"></script>
+<script src="island-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  var I = window.IslandCore, $ = function (id) { return document.getElementById(id); };
+  var me = {}, S = null, extra = { family: [], shared: {}, env: { shift: 0, weather: null } }, shared = {};
+  var view = null;         // null = my island, else a family member being visited {id, name, data}
+  var cur = [6, 4], focus = 'grid', barSel = 0, place = null, panel = null, intro = false;
+  var c = $('c'), ctx = c.getContext('2d'), saveT = null, t0 = performance.now();
+
+  function env() { return { now: Date.now(), shift: extra.env.shift || 0, weather: extra.env.weather }; }
+  function isl() { return view ? view.data : S; }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (ch) { return '&#' + ch.charCodeAt(0) + ';'; }); }
+  function save() {
+    clearTimeout(saveT);
+    saveT = setTimeout(function () { CoveApp.save(S); if (view) CoveApp.saveFor(view.id, view.data); }, 400);
+  }
+  var toastT = null;
+  function toast(msg, big) { var el = $('toast'); el.textContent = msg; el.className = 'on' + (big ? ' big' : ''); clearTimeout(toastT); toastT = setTimeout(function () { el.className = big ? 'big' : ''; }, big ? 3600 : 2600); }
+  function done(r) { if (!r) return false; toast(r.msg, r.lvlUp); save(); renderHud(); if (panel) renderPanel(); return true; }
+
+  // ---------- tool bar ----------
+  var BAR_MINE = [['plant', '🌱', '심기'], ['craft', '🔨', '만들기'], ['decor', '🎨', '꾸미기'], ['shop', '🛒', '상점'], ['req', '📜', '의뢰'], ['dex', '📖', '도감'], ['family', '👨‍👩‍👧', '가족'], ['mail', '✉️', '우편']];
+  var BAR_VISIT = [['vwater', '💧', '물 주기'], ['vgift', '🎁', '선물하기'], ['home', '🏠', '내 섬으로']];
+  function bar() { return view ? BAR_VISIT : BAR_MINE; }
+  function renderBar() {
+    var b = bar(), sm = I.summary(S, env(), shared);
+    barSel = Math.min(barSel, b.length - 1);
+    $('bar').className = 'glass' + (focus === 'bar' ? '' : ' dim');
+    $('bar').innerHTML = b.map(function (x, i) {
+      var badge = !view && x[0] === 'mail' ? S.mail.length : !view && x[0] === 'req' ? reqBadge() : 0;
+      return '<span class="' + (i === barSel && (focus === 'bar' || panel) ? 'sel' : '') + '"><em>' + x[1] + '</em>' + x[2] + (badge ? '<b>' + badge + '</b>' : '') + '</span>';
+    }).join('');
+  }
+  function reqBadge() { var n = 0; if (S.req) S.req.list.forEach(function (r) { if (!r.done && I.inv(S, r.item) >= r.n) n++; }); if (I.weekDone(S) && !S.wk.claimed) n++; return n; }
+
+  // ---------- HUD ----------
+  function renderHud() {
+    var who = view ? view : me, st = isl();
+    $('hAv').style.background = who.color || '#4fc3f7';
+    $('hAv').textContent = who.avatar || (who.name || '나').charAt(0);
+    $('hName').textContent = (who.name || '나') + '의 섬';
+    var nxt = I.XP_AT[st.lvl] || I.XP_AT[9], prev = I.XP_AT[st.lvl - 1] || 0;
+    $('hLvl').textContent = 'Lv.' + st.lvl + (st.lvl < 10 ? ' · 다음 레벨까지 ' + (nxt - st.xp) + ' XP' : ' · 최고 레벨');
+    $('hXp').style.width = (st.lvl >= 10 ? 100 : Math.round(100 * (st.xp - prev) / (nxt - prev))) + '%';
+    $('hShells').textContent = view ? S.shells : st.shells;
+    var e = env(), d = I.wall(e), ph = I.phase(d), wk = I.weatherKind(e);
+    var wIcon = { clear: ph === 'night' ? '🌙' : '☀️', cloud: '⛅', rain: '🌧️', snow: '❄️' }[wk];
+    $('world').innerHTML = '<span>' + ['❄️', '🌸', '🌻', '🍁'][I.seasonOf(d)] + ' ' + I.SEASON_N[I.seasonOf(d)] + '</span><span>' + wIcon + (extra.env.weather ? ' ' + Math.round(extra.env.weather.temp) + '°' : '') +
+      (wk === 'rain' ? ' 비 · 물이 저절로' : wk === 'clear' && ph === 'day' ? ' 맑음 · 빨리 자라요' : '') + '</span><span>' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + '</span>';
+    $('visitTag').hidden = !view;
+    if (view) $('visitTag').textContent = view.name + '의 섬에 놀러 왔어요';
+    renderBar(); renderHint();
+  }
+
+  // ---------- what OK does where the cursor is ----------
+  function spotInfo() {
+    var s = isl(), e = env(), x = cur[0], y = cur[1], k = x + ',' + y, t = s.tiles[k], sp = I.speed(s, e, shared);
+    var g = I.guestAt(s, x, y), b = I.beachAt(s, x, y), land = I.isLand(x, y, s.lvl, s.seed);
+    if (place) {
+      if (place.kind === 'remove') return t ? { name: nameOf(t), ok: t.t === 'deco' ? '가방에 넣기' : '치우기' } : { name: '치울 것을 고르세요', ok: '' };
+      return { name: place.label + ' 놓기', ok: land && !t && !g ? '여기에 놓기' : '' };
+    }
+    if (g) { var gg = I.GUESTS[g]; return { name: gg.e + ' ' + gg.n, ok: view ? '' : s.vis[g].talked ? '인사하기' : '이야기하고 선물 받기' }; }
+    if (b) return { name: { shell: '🐚 조개', stone: '돌', wood: '떠밀려 온 나무토막', pearl: '✨ 반짝이는 무언가' }[b.k], ok: view ? '' : '줍기' };
+    if (t && t.t === 'crop') {
+      var cc = I.CROPS[t.id], p = I.cropProg(t, e, sp);
+      if (!t.w && t.w !== 0) return { name: cc.e + ' ' + cc.n + ' · 목말라요', ok: view ? '' : '물 주기' };
+      if (p >= 1) return { name: cc.e + ' ' + cc.n + ' · 다 자랐어요', ok: view ? '' : '수확' };
+      return { name: cc.e + ' ' + cc.n + ' · ' + I.left((1 - p) * cc.g * 60000 / sp) + ' 남았어요', ok: '' };
+    }
+    if (t && t.t === 'tree') {
+      var tr = I.TREES[t.id], st = I.treeState(t, e, sp);
+      if (!st.grown) return { name: '🌱 ' + tr.n + ' · ' + I.left((1 - st.prog) * tr.g * 60000 / sp) + ' 뒤에 다 자라요', ok: '' };
+      if (st.fruit) return { name: tr.e + ' ' + tr.n + ' · 열매가 열렸어요', ok: view ? '' : '따기' };
+      return { name: tr.e + ' ' + tr.n + ' · 열매까지 ' + I.left((1 - st.prog) * tr.f * 60000 / sp), ok: '' };
+    }
+    if (t && t.t === 'deco') { var d = I.DECOS[t.id]; return { name: (d.e || '') + ' ' + d.n, ok: t.id === 'mailbox' && !view ? '우편 보기' : '' }; }
+    if (land) return { name: '빈 땅', ok: view ? '' : '심기' };
+    if (I.isBeach(x, y, s.lvl, s.seed)) return { name: '모래사장 · 가끔 무언가 떠밀려 와요', ok: '' };
+    return { name: '바다', ok: '' };
+  }
+  function nameOf(t) { return t.t === 'deco' ? I.DECOS[t.id].n : t.t === 'tree' ? I.TREES[t.id].n : I.CROPS[t.id].n; }
+  function renderHint() {
+    var h = $('hint');
+    if (focus !== 'grid' || panel || intro) { h.hidden = true; return; }
+    var i = spotInfo();
+    h.hidden = false;
+    h.innerHTML = '<span>' + esc(i.name) + '</span>' + (i.ok ? '<span><kbd>OK</kbd>' + esc(i.ok) + '</span>' : '') + (place ? '<span><kbd>뒤로</kbd>그만</span>' : '<span><kbd>▼</kbd>도구줄</span>');
+  }
+
+  // ---------- moving the cursor ----------
+  function walkable(x, y) { var s = isl(); return I.isLand(x, y, s.lvl, s.seed) || I.isBeach(x, y, s.lvl, s.seed); }
+  function moveCur(k) {
+    var dx = k === 'left' ? -1 : k === 'right' ? 1 : 0, dy = k === 'up' ? -1 : k === 'down' ? 1 : 0;
+    // step in that direction; if the square there is sea, look a little to the side for the nearest walkable one
+    for (var step = 1; step < 13; step++) {
+      var nx = cur[0] + dx * step, ny = cur[1] + dy * step;
+      if (nx < 0 || ny < 0 || nx >= I.COLS || ny >= I.ROWS) break;
+      for (var side = 0; side <= 2; side++) {
+        var cands = side ? [[nx + dy * side, ny + dx * side], [nx - dy * side, ny - dx * side]] : [[nx, ny]];
+        for (var j = 0; j < cands.length; j++) if (walkable(cands[j][0], cands[j][1])) { cur = cands[j]; renderHint(); return true; }
+      }
+    }
+    return false;
+  }
+
+  // ---------- OK on the island ----------
+  function okGrid() {
+    var s = isl(), e = env(), x = cur[0], y = cur[1], k = x + ',' + y, t = s.tiles[k];
+    if (place) {
+      if (place.kind === 'remove') { if (t && !view) { if (t.t !== 'deco' && place.armed !== k) { place.armed = k; toast('한 번 더 누르면 ' + I.eul(nameOf(t)) + ' 치워요'); return; } place.armed = null; done(I.pickUp(S, x, y)); } return; }
+      if (I.guestAt(s, x, y)) { toast('손님이 서 있어요. 다른 곳에 놓아 주세요'); return; }
+      var r = place.kind === 'deco' ? I.place(S, x, y, place.id) : I.plant(S, x, y, place.id, e);
+      if (!r) { toast(t ? '이미 무언가 있어요' : '여기에는 놓을 수 없어요'); return; }
+      done(r);
+      if (I.inv(S, place.kind === 'deco' ? 'deco:' + place.id : place.id) <= 0) { place = null; toast('다 놓았어요'); }
+      return;
+    }
+    if (view) return;
+    var g = I.guestAt(S, x, y);
+    if (g) { done(I.talk(S, g, e, me.id)); return; }
+    if (I.beachAt(S, x, y)) { done(I.collect(S, x, y)); return; }
+    if (t && t.t === 'crop' && !t.w && t.w !== 0) { done(I.water(S, x, y, e)); return; }
+    if (t && (t.t === 'crop' || t.t === 'tree')) { if (!done(I.harvest(S, x, y, e, shared))) toast(spotInfo().name); return; }
+    if (t && t.t === 'deco' && t.id === 'mailbox') { openPanel('mail'); return; }
+    if (!t && I.isLand(x, y, S.lvl, S.seed)) { openPanel('plant', { here: true }); return; }
+  }
+
+  // ---------- panels ----------
+  function openPanel(type, o) { panel = { type: type, i: 0, tab: 0, o: o || {} }; focus = 'panel'; renderPanel(); renderHud(); }
+  function closePanel() { panel = null; focus = 'grid'; $('panel').hidden = true; renderHud(); }
+  function costHtml(c) {
+    return Object.keys(c).map(function (k) {
+      var have = k === 'shells' ? S.shells : I.inv(S, k), ok = have >= c[k];
+      return '<span class="' + (ok ? 'ok' : 'no') + '">' + (k === 'shells' ? '🐚' : I.itemInfo(k).n) + ' ' + have + '/' + c[k] + '</span>';
+    }).join(' · ');
+  }
+  function season() { return I.seasonOf(I.wall(env())); }
+  function rowsFor(p) {
+    var rows = [], e = env(), k;
+    if (p.type === 'plant') {
+      Object.keys(S.inv).filter(function (x) { return /^(seed|tree):/.test(x); }).forEach(function (it) {
+        var info = I.itemInfo(it), m = it.split(':'), d = m[0] === 'seed' ? I.CROPS[m[1]] : I.TREES[m[1]];
+        rows.push({ icon: info.e, name: info.n, sub: m[0] === 'seed' ? '물 주고 ' + I.left(d.g * 60000) + ' 뒤 수확 · 개당 ' + d.sell + '🐚' : I.left(d.g * 60000) + ' 뒤 다 자라고 ' + I.left(d.f * 60000) + '마다 열매', val: I.inv(S, it) + '개',
+          act: function () { if (p.o.here) { closePanel(); done(I.plant(S, cur[0], cur[1], it, e)); } else { place = { kind: 'seed', id: it, label: info.n }; closePanel(); } } });
+      });
+      if (!rows.length) rows.push({ icon: '🛒', name: '씨앗이 없어요', sub: '상점에서 조개로 살 수 있어요', act: function () { openPanel('shop'); } });
+    } else if (p.type === 'craft') {
+      for (k in I.DECOS) {
+        var d = I.DECOS[k];
+        if (!d.c || d.lv > S.lvl + 1) continue;
+        var out = d.season !== undefined && d.season !== season(), locked = d.lv > S.lvl;
+        (function (k, d) {
+          rows.push({ icon: I.iconHtml('deco:' + k), html: 1, name: d.n + (I.inv(S, 'deco:' + k) ? ' (가방에 ' + I.inv(S, 'deco:' + k) + ')' : ''), sub: locked ? 'Lv.' + d.lv + '에 열려요' : out ? I.SEASON_N[d.season] + '에만 만들 수 있어요' : costHtml(d.c), subHtml: !locked && !out,
+            dim: locked || out || !I.has(S, d.c), act: function () { if (locked || out) return; if (!done(I.craft(S, k))) toast('재료가 모자라요'); } });
+        })(k, d);
+      }
+    } else if (p.type === 'decor') {
+      rows.push({ icon: '🧹', name: '치우기', sub: '놓은 가구는 가방으로, 작물과 나무는 치워요', act: function () { place = { kind: 'remove', label: '치우기' }; closePanel(); } });
+      Object.keys(S.inv).filter(function (x) { return /^deco:/.test(x); }).forEach(function (it) {
+        var id = it.slice(5);
+        rows.push({ icon: I.iconHtml(it), html: 1, name: I.DECOS[id].n, val: I.inv(S, it) + '개', act: function () { place = { kind: 'deco', id: id, label: I.DECOS[id].n }; closePanel(); } });
+      });
+      if (rows.length === 1) rows.push({ icon: '🔨', name: '가방에 가구가 없어요', sub: '만들기에서 재료로 만들어요', act: function () { openPanel('craft'); } });
+    } else if (p.type === 'shop') {
+      if (p.tab === 0) {
+        Object.keys(I.CROPS).forEach(function (id) {
+          var cd = I.CROPS[id], out = cd.season !== undefined && cd.season !== season();
+          if (cd.lv > S.lvl + 1) return;
+          rows.push({ icon: cd.e, name: cd.n + ' 씨앗', sub: cd.lv > S.lvl ? 'Lv.' + cd.lv + '에 열려요' : out ? I.SEASON_N[cd.season] + ' 한정' : I.left(cd.g * 60000) + ' · ' + cd.y[0] + '~' + cd.y[1] + '개 · 개당 ' + cd.sell + '🐚',
+            val: cd.price + '🐚', dim: cd.lv > S.lvl || out || S.shells < cd.price, act: function () { if (cd.lv > S.lvl || out) return; if (!done(I.buy(S, 'seed:' + id))) toast('조개가 모자라요'); } });
+        });
+        Object.keys(I.TREES).forEach(function (id) {
+          var tr = I.TREES[id];
+          if (tr.lv > S.lvl + 1) return;
+          rows.push({ icon: '🌱', name: tr.n + ' 묘목', sub: tr.lv > S.lvl ? 'Lv.' + tr.lv + '에 열려요' : tr.e + ' ' + tr.fn + ' · ' + I.left(tr.f * 60000) + '마다', val: tr.price + '🐚', dim: tr.lv > S.lvl || S.shells < tr.price,
+            act: function () { if (tr.lv > S.lvl) return; if (!done(I.buy(S, 'tree:' + id))) toast('조개가 모자라요'); } });
+        });
+      } else {
+        Object.keys(S.inv).forEach(function (it) {
+          var info = I.itemInfo(it);
+          if (!info.sell || /^(seed|tree|deco):/.test(it)) return;
+          rows.push({ icon: I.iconHtml(it), html: 1, name: info.n, sub: '개당 ' + info.sell + '🐚', val: I.inv(S, it) + '개 · ' + info.sell * I.inv(S, it) + '🐚', act: function () { done(I.sell(S, it, true)); } });
+        });
+        if (!rows.length) rows.push({ icon: '🧺', name: '팔 것이 없어요', sub: '작물과 열매를 거두면 여기서 팔 수 있어요' });
+      }
+    } else if (p.type === 'req') {
+      rows.push({ head: 1, name: '오늘의 의뢰' });
+      (S.req ? S.req.list : []).forEach(function (r, i) {
+        var info = I.itemInfo(r.item), have = I.inv(S, r.item);
+        rows.push({ icon: info.e, name: r.by + ': ' + info.n + ' ' + r.n + '개', sub: r.done ? '전했어요 ✓' : '가진 것 ' + have + '/' + r.n + ' · 보상 🐚' + r.shells + ' · ' + r.xp + ' XP', dim: r.done || have < r.n, val: r.done ? '완료' : have >= r.n ? 'OK 전하기' : '',
+          act: function () { if (!r.done) { if (!done(I.deliver(S, i))) toast(I.iga(info.n) + ' 모자라요'); } } });
+      });
+      rows.push({ head: 1, name: '이번 주 목표 · 다 채우면 🐚300 + 🏆' });
+      I.WEEK_GOALS.forEach(function (g) {
+        var v = S.wk ? S.wk[g[0]] : 0;
+        rows.push({ icon: v >= g[1] ? '✅' : '⬜', name: g[2] + ' ' + Math.min(v, g[1]) + ' / ' + g[1], bar: Math.min(1, v / g[1]), dim: v >= g[1] });
+      });
+      if (I.weekDone(S) && !S.wk.claimed) rows.push({ icon: '🏆', name: '이번 주 보상 받기', act: function () { done(I.claimWeek(S)); } });
+    } else if (p.type === 'dex') {
+      var tab = ['items', 'decos', 'guests'][p.tab];
+      if (tab === 'items') {
+        Object.keys(I.CROPS).forEach(function (id) { var got = S.dex.items[id]; rows.push({ icon: got ? I.CROPS[id].e : '❔', name: got ? I.CROPS[id].n : '???', sub: got ? '개당 ' + I.CROPS[id].sell + '🐚' : 'Lv.' + I.CROPS[id].lv + (I.CROPS[id].season !== undefined ? ' · ' + I.SEASON_N[I.CROPS[id].season] : ''), dim: !got }); });
+        Object.keys(I.TREES).forEach(function (id) { var tr = I.TREES[id], got = S.dex.items[tr.fruit]; rows.push({ icon: got ? tr.e : '❔', name: got ? tr.fn : '???', sub: tr.n, dim: !got }); });
+        ['wood', 'stone', 'pearl'].forEach(function (id) { var got = S.dex.items[id]; rows.push({ icon: got ? I.iconHtml(id) : '❔', html: got, name: got ? I.MATS[id].n : '???', sub: '모래사장에서 주워요', dim: !got }); });
+      } else if (tab === 'decos') {
+        Object.keys(I.DECOS).forEach(function (id) { var got = S.dex.decos[id] || I.countWhere(S, 'deco', id) || I.inv(S, 'deco:' + id); var d = I.DECOS[id]; rows.push({ icon: got ? I.iconHtml('deco:' + id) : '❔', html: got, name: got ? d.n : '???', sub: d.c ? 'Lv.' + d.lv + (d.season !== undefined ? ' · ' + I.SEASON_N[d.season] : '') : id === 'trophy' ? '이번 주 목표 보상' : '가족 등대 완성 보상', dim: !got }); });
+      } else {
+        Object.keys(I.GUESTS).forEach(function (id) { var g = I.GUESTS[id], n = S.dex.guests[id]; rows.push({ icon: n ? g.e : '❔', name: n ? g.n + ' ' + new Array(Math.min(5, n) + 1).join('♥') : '??? (Lv.' + g.lv + ')', sub: g.txt, dim: !n, val: S.vis[id] ? '섬에 있어요' : '' }); });
+      }
+    } else if (p.type === 'family') {
+      if (!extra.family.length) rows.push({ icon: '👪', name: '다른 가족 프로필이 없어요', sub: 'Cove에 프로필을 더 만들면 서로의 섬에 놀러 갈 수 있어요' });
+      extra.family.forEach(function (f) {
+        var d = f.data && f.data.v ? I.update(I.norm(f.data, f.id), env(), shared, f.id) : null;
+        var sm = d ? I.summary(d, env(), shared) : null, visited = S.visits && S.visits[f.id] === I.dayKey(I.wall(env()));
+        rows.push({ icon: '<span class="ico" style="border-radius:50%;background:' + esc(f.color) + '">' + esc(f.avatar || f.name.charAt(0)) + '</span>', html: 1, name: f.name + '의 섬', sub: d ? 'Lv.' + d.lvl + ' · 손님 ' + sm.guests + ' · ' + (sm.dry ? '목마른 작물 ' + sm.dry + '개' : '물은 충분해요') : '아직 섬을 시작하지 않았어요',
+          val: visited ? '오늘 다녀옴' : '놀러 가기', dim: !d, act: function () { if (d) visit(f, d); } });
+      });
+      var L = shared.light || { stage: 0, prog: {} };
+      rows.push({ head: 1, name: '🗼 가족 등대 · ' + (L.stage >= I.LIGHTHOUSE.length ? '완성! 모두의 작물이 10% 빨리 자라요' : (L.stage + 1) + '단계 "' + I.LIGHTHOUSE[L.stage].n + '"') });
+      if (L.stage < I.LIGHTHOUSE.length) {
+        var need = I.LIGHTHOUSE[L.stage].c;
+        Object.keys(need).forEach(function (it) {
+          var got = L.prog[it] || 0, have = it === 'shells' ? S.shells : I.inv(S, it);
+          rows.push({ icon: it === 'shells' ? '🐚' : I.iconHtml(it), html: it !== 'shells', name: (it === 'shells' ? '조개' : I.itemInfo(it).n) + ' ' + got + ' / ' + need[it], bar: got / need[it], sub: '내가 가진 것 ' + have + ' · OK로 보태기',
+            dim: got >= need[it] || have <= 0, act: function () { var sh = JSON.parse(JSON.stringify(shared)); var r = I.contribute(S, sh, it); if (r) { shared = sh; CoveApp.saveShared(shared); done(r); } else toast(got >= need[it] ? '이건 다 모였어요' : '가진 것이 없어요'); } });
+        });
+      }
+    } else if (p.type === 'mail') {
+      S.mail.forEach(function (m, i) { rows.push({ icon: m.gift ? '🎁' : '✉️', name: m.from, sub: m.text, act: function () { done(I.readMail(S, i)); } }); });
+      if (!rows.length) rows.push({ icon: '📭', name: '우편함이 비어 있어요', sub: '가족이 놀러 오거나 선물을 두고 가면 여기로 와요' });
+    } else if (p.type === 'gift') {
+      Object.keys(S.inv).forEach(function (it) {
+        if (/^deco:/.test(it)) return;
+        var info = I.itemInfo(it);
+        rows.push({ icon: I.iconHtml(it), html: 1, name: info.n, val: I.inv(S, it) + '개', act: function () {
+          var r = I.giveGift(S, view.data, it, me.name || '가족', env());
+          if (r) { done(r); }
+        } });
+      });
+      if (!rows.length) rows.push({ icon: '🎁', name: '줄 수 있는 것이 없어요' });
+    }
+    return rows;
+  }
+  var TITLES = { plant: ['심기', '씨앗이나 묘목을 고르세요'], craft: ['만들기', '재료를 모아 가구를 만들어요'], decor: ['꾸미기', '가방의 가구를 섬에 놓아요'], shop: ['상점', ''], req: ['의뢰', '매일 새로운 부탁이 와요'],
+    dex: ['도감', ''], family: ['가족', '가족의 섬에 놀러 가고, 함께 등대를 지어요'], mail: ['우편', ''], gift: ['선물하기', '하나씩 두고 와요'] };
+  var TABS = { shop: ['사기', '팔기'], dex: ['작물 · 열매', '가구', '손님'] };
+  function renderPanel() {
+    var p = panel, rows = rowsFor(p), sel = rows.filter(function (r) { return !r.head; });
+    p.i = Math.max(0, Math.min(sel.length - 1, p.i));
+    $('panel').hidden = false;
+    var tt = TITLES[p.type];
+    $('pTitle').innerHTML = esc(tt[0]) + (p.type === 'dex' ? '<small>' + dexCount() + '</small>' : '');
+    $('pTabs').innerHTML = (TABS[p.type] || []).map(function (x, i) { return '<span class="' + (i === p.tab ? 'on' : '') + '">' + x + '</span>'; }).join('');
+    $('pNote').textContent = p.type === 'plant' && !p.o.here ? '고른 뒤 섬에서 OK로 하나씩 심어요' : tt[1];
+    var n = 0, selEl = null;
+    $('pRows').innerHTML = rows.map(function (r) {
+      if (r.head) return '<div class="row head">' + esc(r.name) + '</div>';
+      var i = n++;
+      return '<div class="row' + (i === p.i ? ' sel' : '') + (r.dim ? ' dim' : '') + '">' + (r.html ? r.icon : '<span class="ico">' + r.icon + '</span>') +
+        '<div>' + esc(r.name) + (r.sub ? '<small>' + (r.subHtml ? r.sub : esc(r.sub)) + '</small>' : '') + (r.bar !== undefined ? '<div class="bar2"><i style="width:' + Math.round(r.bar * 100) + '%"></i></div>' : '') + '</div>' +
+        (r.val ? '<span class="v">' + esc(r.val) + '</span>' : '') + '</div>';
+    }).join('');
+    var box = $('pRows'), s = box.querySelector('.sel');
+    if (s) { if (s.offsetTop + s.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = s.offsetTop + s.offsetHeight - box.clientHeight; else if (s.offsetTop < box.scrollTop) box.scrollTop = s.offsetTop - 8; }
+    $('pHint').innerHTML = (TABS[p.type] ? '<span><kbd>◀ ▶</kbd>탭</span>' : '') + '<span><kbd>OK</kbd>선택</span><span><kbd>뒤로</kbd>닫기</span>';
+    p.rows = sel;
+  }
+  function dexCount() {
+    var a = Object.keys(S.dex.items).length, b = Object.keys(S.dex.decos).length, g = Object.keys(S.dex.guests).length;
+    return '작물 ' + a + ' · 가구 ' + b + ' · 손님 ' + g + '/' + Object.keys(I.GUESTS).length;
+  }
+  function panelKey(k) {
+    var p = panel;
+    if (k === 'back') { if (view && p.type === 'gift') { closePanel(); return; } closePanel(); focus = 'bar'; renderHud(); return; }
+    if (k === 'up') p.i--; else if (k === 'down') p.i++;
+    else if ((k === 'left' || k === 'right') && TABS[p.type]) { p.tab = (p.tab + (k === 'left' ? -1 : 1) + TABS[p.type].length) % TABS[p.type].length; p.i = 0; }
+    else if (k === 'ok') { var r = p.rows[p.i]; if (r && r.act) r.act(); if (!panel) return; }
+    renderPanel();
+  }
+
+  // ---------- visiting family ----------
+  function visit(f, d) {
+    view = { id: f.id, name: f.name, color: f.color, avatar: f.avatar, data: d };
+    cur = [6, 4]; barSel = 0; closePanel(); focus = 'grid';
+    S.visits = S.visits || {};
+    var today = I.dayKey(I.wall(env()));
+    if (S.visits[f.id] !== today) { S.visits[f.id] = today; S.shells += 10; toast(f.name + '의 섬에 왔어요! 방문 보상 🐚10'); save(); }
+    renderHud();
+  }
+  function barAct(id) {
+    if (id === 'home') { save(); view = null; cur = [6, 4]; focus = 'grid'; renderHud(); toast('내 섬으로 돌아왔어요'); return; }
+    if (id === 'vwater') {
+      var key = view.id + ':' + I.dayKey(I.wall(env()));
+      S.watered = S.watered || {};
+      if (S.watered[key]) { toast('오늘은 이미 물을 줬어요'); return; }
+      var n = I.visitWater(view.data, env(), me.name || '가족');
+      var today = I.dayKey(I.wall(env())), keep = {};
+      Object.keys(S.watered).forEach(function (w) { if (w.slice(-today.length) === today) keep[w] = 1; });
+      S.watered = keep; S.watered[key] = 1;
+      toast(n ? '💧 작물 ' + n + '개에 물을 줬어요. ' + view.name + '에게 알려 줄게요' : '목마른 작물이 없어요'); save(); return;
+    }
+    if (id === 'vgift') { openPanel('gift'); return; }
+    if (id === 'plant') { openPanel('plant'); return; }
+    openPanel(id);
+  }
+
+  // ---------- keys ----------
+  CoveApp.onKey(function (k) {
+    if (!S) return;
+    if (intro) { if (k === 'ok') { intro = false; $('intro').hidden = true; S.seenIntro = true; save(); renderHud(); } else if (k === 'back') CoveApp.exit(); return; }
+    if (panel) { panelKey(k); return; }
+    if (focus === 'bar') {
+      var b = bar();
+      if (k === 'left') barSel = (barSel - 1 + b.length) % b.length;
+      else if (k === 'right') barSel = (barSel + 1) % b.length;
+      else if (k === 'up') focus = 'grid';
+      else if (k === 'ok') { barAct(b[barSel][0]); return; }
+      else if (k === 'back') { if (view) { barAct('home'); return; } CoveApp.exit(); return; }
+      renderHud(); return;
+    }
+    // grid
+    if (k === 'back') { if (place) { place = null; renderHint(); return; } if (view) { barAct('home'); return; } CoveApp.exit(); return; }
+    if (k === 'ok') { okGrid(); renderHud(); return; }
+    if (!moveCur(k) && k === 'down') { focus = 'bar'; renderHud(); }
+  });
+
+  // ---------- drawing loop (about 24 frames a second) ----------
+  var last = 0;
+  function frame(ts) {
+    requestAnimationFrame(frame);
+    if (!S || ts - last < 40) return;
+    last = ts;
+    var dpr = Math.min(2, window.devicePixelRatio || 1), W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    var placeGhost = place && place.kind !== 'remove' ? (place.kind === 'deco' ? { t: 'deco', id: place.id } : /^tree:/.test(place.id) ? { t: 'tree', id: place.id.slice(5), p: Date.now(), f: 0 } : { t: 'crop', id: place.id.slice(5), p: Date.now(), w: Date.now() }) : null;
+    I.draw(ctx, W, H, isl(), env(), shared, { t: (ts - t0) / 1000, cursor: focus === 'grid' && !panel && !intro ? cur : null, ghost: placeGhost, view: 'game' });
+  }
+  // every half minute: bring the island up to date (growth, beach finds, guests)
+  setInterval(function () { if (!S) return; I.update(S, env(), shared, me.id); renderHud(); if (panel) renderPanel(); }, 30000);
+
+  CoveApp.onInit(function (profile, data, ex) {
+    me = profile || {}; extra = ex || extra; shared = (extra.shared && typeof extra.shared === 'object') ? JSON.parse(JSON.stringify(extra.shared)) : {};
+    S = I.norm(data && data.v ? data : null, me.id || 'me');
+    I.update(S, env(), shared, me.id);
+    var sm = I.summary(S, env(), shared);
+    if (!S.seenIntro) { intro = true; $('intro').hidden = false; }
+    else if (sm.todo) toast('다녀오셨어요! 수확 ' + sm.ready + ' · 모래사장 ' + sm.beach + ' · 손님 ' + sm.guests + (sm.mail ? ' · 우편 ' + sm.mail : ''));
+    save();
+    renderHud();
+    requestAnimationFrame(frame);
+  });
+})();
+</script>
+</body>
+</html>

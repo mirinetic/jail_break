@@ -792,6 +792,8 @@
         '<path d="M120 122c-14-10-22-17-22-27a11 11 0 0 1 22-3 11 11 0 0 1 22 3c0 10-8 17-22 27z" fill="url(#hr)"/></g>' +
         '<path d="M44 34l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill="#fff"/><path d="M160 150l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#fff" opacity=".85"/>' }
   ];
+  // 창가의 작은 섬: a game that grows in real time; its tile shows what is waiting on the island.
+  MINI.push({ pkg: 'cove.island', label: '창가의 작은 섬', page: 'apps/island.html', c1: '#0369a1', c2: '#22d3ee', live: 'island', words: ['작은섬', '섬열어', '섬켜', '섬가자', '섬보여'] });
   // Calendar and memo are Cove's own screens, shown as app tiles too. Their pictures are drawn live:
   // today's date and the next event, the newest memo and how many there are.
   MINI.push({ pkg: 'cove.calendar', label: '일정', screen: 'cal', c1: '#1e3a8a', c2: '#0ea5e9' },
@@ -799,7 +801,28 @@
   function xesc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]; }); }
   function cut(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
   var FONT = 'font-family="Noto Sans KR, Roboto, sans-serif"';
+  function islandOf(pid) {
+    var C = window.IslandCore, d = appData(pid, 'cove.island');
+    if (!C || !d || !d.v) return null;
+    var s = C.norm(JSON.parse(JSON.stringify(d)), pid);
+    C.update(s, { now: Date.now(), shift: tzShift(Date.now()), weather: miniEnv().weather }, sharedData('cove.island'), pid);
+    return s;
+  }
+  function islandSummary(pid) {
+    var s = islandOf(pid);
+    return s ? window.IslandCore.summary(s, { now: Date.now(), shift: tzShift(Date.now()), weather: miniEnv().weather }, sharedData('cove.island')) : null;
+  }
   function liveSym(m) {
+    if (m.live === 'island') {
+      var sm = islandSummary(ROOT.current), n = sm ? sm.todo : 0;
+      return '<defs><linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7dd3fc"/><stop offset="1" stop-color="#0284c7"/></linearGradient></defs>' +
+        '<circle cx="140" cy="54" r="16" fill="#fde68a"/>' +
+        '<g filter="url(#sh)"><ellipse cx="96" cy="128" rx="70" ry="26" fill="url(#sea)"/><ellipse cx="96" cy="118" rx="56" ry="18" fill="#fde7b0"/><ellipse cx="96" cy="112" rx="44" ry="13" fill="#6cc04f"/></g>' +
+        '<path d="M88 112c4-22 2-40-4-54" stroke="#8d6e4f" stroke-width="7" fill="none" stroke-linecap="round"/>' +
+        '<g fill="#2e9d57"><ellipse cx="66" cy="58" rx="24" ry="8" transform="rotate(-20 66 58)"/><ellipse cx="102" cy="52" rx="24" ry="8" transform="rotate(18 102 52)"/><ellipse cx="80" cy="44" rx="20" ry="7" transform="rotate(-70 80 44)"/><ellipse cx="96" cy="64" rx="18" ry="7" transform="rotate(40 96 64)"/></g>' +
+        '<circle cx="118" cy="104" r="7" fill="#ef4444"/><circle cx="64" cy="106" r="6" fill="#f59e0b"/>' +
+        (n ? '<g filter="url(#sh)"><circle cx="150" cy="44" r="22" fill="#ef4444"/></g><text x="150" y="52" ' + FONT + ' font-weight="800" font-size="' + (n > 9 ? 20 : 24) + '" fill="#fff" text-anchor="middle">' + (n > 99 ? '99' : n) + '</text>' : '');
+    }
     var now = NOW();
     if (m.screen === 'cal') {
       return '<defs><linearGradient id="hd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f87171"/><stop offset="1" stop-color="#dc2626"/></linearGradient></defs>' +
@@ -817,6 +840,11 @@
   }
   function liveText(m) {
     var now = NOW();
+    if (m.live === 'island') {
+      var sm = islandSummary(ROOT.current);
+      if (!sm) return ['창가의 작은 섬', '나만의 섬을 시작해요', '진짜 시간으로 자라는 섬'];
+      return ['내 섬 Lv.' + sm.lvl, sm.todo ? '할 일 ' + sm.todo + '개가 기다려요' : '모두 자라는 중이에요', '수확 ' + sm.ready + ' · 손님 ' + sm.guests + (sm.mail ? ' · 우편 ' + sm.mail : '')];
+    }
     if (m.screen === 'cal') {
       var ne = nextEvent();
       return [(now.getMonth() + 1) + '월 ' + now.getDate() + '일',
@@ -829,8 +857,8 @@
   // Tile pictures: a gradient with a soft light from the top left, a drop-shadowed symbol, and on the
   // banner the name with a short line of what it is (or what it shows right now).
   function miniSvg(m, w, h) {
-    var sq = w === h, sym = m.screen ? liveSym(m) : m.sym;
-    var t = m.screen ? liveText(m) : [m.label, m.tag, ''];
+    var live = m.screen || m.live, sq = w === h, sym = live ? liveSym(m) : m.sym;
+    var t = live ? liveText(m) : [m.label, m.tag, ''];
     var s = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
       '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + m.c1 + '"/><stop offset="1" stop-color="' + m.c2 + '"/></linearGradient>' +
       '<radialGradient id="lt" cx=".2" cy=".1" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".32"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient>' +
@@ -849,7 +877,7 @@
     var changed = false;
     MINI.forEach(function (m) {
       var a = BYPKG[m.pkg];
-      if (!m.screen || !a) return;
+      if (!(m.screen || m.live) || !a) return;
       var ic = miniSvg(m, 192, 192), bn = miniSvg(m, 640, 360);
       if (ic !== a.icon || bn !== a.bannerUrl) { a.icon = ic; a.bannerUrl = bn; changed = true; }
     });
@@ -867,6 +895,13 @@
 
   var mini = null;   // the open mini app {pkg, pid, start, from, frame, ready}
   var away = null;   // a TV app opened from Cove {pkg, pid, t}: its time is the time until Cove comes back
+  // Data the whole family shares for one mini app (the island's lighthouse)
+  function sharedData(pkg) { return ((ROOT.appdata || {}).family || {})[pkg] || {}; }
+  // What a mini app may know about the world: Cove's time zone and the weather on the home screen
+  function miniEnv() {
+    var cur = wx.data && wx.city === P.weather ? (wx.data.current || {}) : null;
+    return { shift: tzShift(Date.now()), weather: cur ? { code: cur.weather_code, isDay: cur.is_day, temp: cur.temperature_2m } : null, city: cityOf(P.weather) ? cityOf(P.weather)[1] : '' };
+  }
   function appData(pid, pkg) { ROOT.appdata = ROOT.appdata || {}; var d = ROOT.appdata[pid] = ROOT.appdata[pid] || {}; return d[pkg] || {}; }
   function openMini(pkg) {
     leaveMe(true);
@@ -908,10 +943,21 @@
     if (m.type === 'ready') {
       mini.ready = true;
       var pr = profileById(mini.pid);
-      miniPost({ type: 'init', profile: { id: pr.id, name: pr.name, kids: pr.kind === 'kids' }, data: appData(mini.pid, mini.pkg) });
+      miniPost({ type: 'init', profile: { id: pr.id, name: pr.name, kids: pr.kind === 'kids', color: pr.color, avatar: pr.avatar || '' }, data: appData(mini.pid, mini.pkg),
+        family: ROOT.profiles.filter(function (x) { return x.id !== pr.id; }).map(function (x) { return { id: x.id, name: x.name, color: x.color, avatar: x.avatar || '', kids: x.kind === 'kids', data: appData(x.id, mini.pkg) }; }),
+        shared: sharedData(mini.pkg), env: miniEnv() });
     } else if (m.type === 'save' && m.data && typeof m.data === 'object') {
       appData(mini.pid, mini.pkg);
       ROOT.appdata[mini.pid][mini.pkg] = m.data;
+      savePrefs();
+    } else if (m.type === 'saveFor' && m.data && typeof m.data === 'object' && profileById(m.pid) && m.pid !== mini.pid) {
+      appData(m.pid, mini.pkg);
+      ROOT.appdata[m.pid][mini.pkg] = m.data;
+      savePrefs();
+    } else if (m.type === 'saveShared' && m.data && typeof m.data === 'object') {
+      ROOT.appdata = ROOT.appdata || {};
+      ROOT.appdata.family = ROOT.appdata.family || {};
+      ROOT.appdata.family[mini.pkg] = m.data;
       savePrefs();
     } else if (m.type === 'exit') closeMini();
     else if (m.type === 'toast') toast(String(m.text || '').slice(0, 120));
@@ -1031,6 +1077,8 @@
     cin.slice(0, 5).forEach(function (h) {
       rows.push({ name: '🎬 ' + h.title, sub: h.done ? '끝까지 봤어요' : fmtMs(h.pos * 1000) + ' / ' + fmtMs(h.dur * 1000) + '까지 봤어요', val: whenText(h.t) });
     });
+    var ism = islandSummary(pr.id);
+    if (ism) rows.push({ name: '🏝️ 창가의 작은 섬 Lv.' + ism.lvl, sub: '조개 ' + ism.shells + ' · 손님 ' + ism.guests + ' · 할 일 ' + ism.todo + '개' });
     var best = appData(pr.id, 'cove.cards').best || {};
     Object.keys(best).sort().forEach(function (lv) {
       var b = best[lv];
@@ -2459,7 +2507,7 @@
   }
 
   // ---------- screensaver / idle screen ----------
-  var AMB_PHOTOS = [['all', '배경 사진 모두'], ['mine', '내 사진만'], ['current', '지금 배경']];
+  var AMB_PHOTOS = [['all', '배경 사진 모두'], ['mine', '내 사진만'], ['current', '지금 배경'], ['island', '내 섬 (창가의 작은 섬)']];
   var AMB_INTERVALS = [[10, '10초'], [15, '15초'], [20, '20초'], [30, '30초'], [45, '45초'], [60, '1분'], [120, '2분'], [300, '5분'], [600, '10분']];
   var AMB_IDLE = [[0, '끄기'], [1, '1분'], [2, '2분'], [3, '3분'], [5, '5분'], [10, '10분'], [15, '15분'], [20, '20분'], [30, '30분'], [60, '1시간']];
   var ambient = null, lastInput = Date.now();
@@ -2484,7 +2532,8 @@
     var now = NOW();
     var agenda = occurrences(startOfDay(now), addDays(startOfDay(now), 8)).map(function (o) { return { start: o.start.toISOString(), allDay: o.allDay, title: o.title, color: o.color }; });
     return { clock: P.clock === 'off' ? '24' : P.clock, images: ambImages(), interval: a.interval, info: a.info, side: a.side,
-      weather: w, agenda: agenda.slice(0, 20), memos: activeMemos().map(function (m) { return { text: m.text, color: m.color }; }), at: Date.now(), shift: tzShift(Date.now()) };
+      weather: w, agenda: agenda.slice(0, 20), memos: activeMemos().map(function (m) { return { text: m.text, color: m.color }; }), at: Date.now(), shift: tzShift(Date.now()),
+      island: a.photos === 'island' ? { state: islandOf(ROOT.current), shared: sharedData('cove.island'), weather: miniEnv().weather } : null };
   }
   var snapTimer = null;
   function saveSnapshot() {
@@ -2830,10 +2879,10 @@
         : '<div class="mr-note empty"><p>나에게 온 메모가 없어요</p></div>') + '</div>' });
 
     // cinema
-    var cin = appData(pr.id, 'cove.cinema'), hist = (cin.hist || []).slice(0, 3);
+    var cin = appData(pr.id, 'cove.cinema'), hist = (cin.hist || []).slice(0, 2);
     w.push({ cls: 'mr-w mr-cin', act: function () { launch('cove.cinema'); }, html: '<h3>Cove 시네마 <small>찜 ' + (cin.fav || []).length + '편</small></h3><div class="mr-posters">' +
       (hist.length ? hist.map(function (h) { var c = hue(h.title);
-        return '<div class="mr-poster" style="background:linear-gradient(160deg,hsl(' + c + ',60%,38%),hsl(' + ((c + 50) % 360) + ',70%,18%))"><b>' + esc(cut(h.title, 9)) + '</b><i><em style="width:' + (h.done ? 100 : Math.round(100 * h.pos / h.dur)) + '%"></em></i><small>' + (h.done ? '다 봤어요' : '이어 보기') + '</small></div>'; }).join('')
+        return '<div class="mr-poster" style="background:linear-gradient(160deg,hsl(' + c + ',60%,38%),hsl(' + ((c + 50) % 360) + ',70%,18%))"><b>' + esc(cut(h.title, 7)) + '</b><i><em style="width:' + (h.done ? 100 : Math.round(100 * h.pos / h.dur)) + '%"></em></i><small>' + (h.done ? '다 봤어요' : '이어 보기') + '</small></div>'; }).join('')
         : '<div class="mr-poster empty"><b>아직 본 작품이 없어요</b></div>') + '</div>' });
 
     // card game
@@ -2843,6 +2892,12 @@
       '<div>' + [['3x4', '쉬움'], ['4x4', '보통'], ['4x5', '어려움']].map(function (l) { var x = best[l[0]];
         return '<span class="' + (x ? '' : 'dim') + '"><b>' + l[1] + '</b>' + (x ? x.moves + '번 · ' + fmtSecs(x.secs) : '기록 없음') + '</span>'; }).join('') + '</div></div>' });
 
+    // 창가의 작은 섬: a live miniature of the island
+    var ism = islandSummary(pr.id);
+    w.push({ cls: 'mr-w mr-island', act: function () { launch('cove.island'); }, html: '<h3>창가의 작은 섬 <small>' + (ism ? 'Lv.' + ism.lvl + ' · 손님 ' + ism.guests + ' · 🐚' + ism.shells : '아직 시작하지 않았어요') + '</small></h3>' +
+      (ism ? '<canvas class="mr-isl" id="mrIsl"></canvas><div class="mr-islinfo">' + (ism.todo ? '할 일 ' + ism.todo + '개 · 수확 ' + ism.ready + ' · 모래사장 ' + ism.beach + (ism.mail ? ' · 우편 ' + ism.mail : '') : '모두 자라는 중이에요') + '</div>'
+        : '<div class="mr-poster empty"><b>OK를 눌러 나만의 섬을 시작해요</b></div>') });
+
     meItems = w;
     meSel = Math.max(0, Math.min(w.length - 1, meSel));
     var bgImg = P.bg && (P.bg.type === 'preset' || P.bg.type === 'photo') ? 'url(&quot;' + bgUrl(P.bg) + '&quot;)' : 'none';
@@ -2851,7 +2906,12 @@
     $('meGrid').innerHTML = '<div class="mr-bg" style="--pc:' + esc(pr.color) + ';background-image:linear-gradient(120deg,' + hexA(pr.color, .38) + ',rgba(8,10,16,.9) 50%,rgba(8,10,16,.94)),' + bgImg + '"></div>' +
       '<div class="mr-col left">' + hero + '<div class="mr-btns">' + html(0) + html(1) + '</div>' + html(2) + '</div>' +
       '<div class="mr-col mid">' + html(3) + html(4) + '</div>' +
-      '<div class="mr-col right">' + html(5) + html(6) + html(7) + '</div>';
+      '<div class="mr-col right">' + html(5) + html(8) + '<div class="mr-pair">' + html(6) + html(7) + '</div></div>';
+    var cv = $('mrIsl'), isl = cv && islandOf(pr.id);
+    if (cv && isl) {
+      var W = cv.clientWidth * 2, H = cv.clientHeight * 2; cv.width = W; cv.height = H;
+      window.IslandCore.draw(cv.getContext('2d'), W, H, isl, { now: Date.now(), shift: tzShift(Date.now()), weather: miniEnv().weather }, sharedData('cove.island'), { t: 0, view: 'thumb' });
+    }
   }
   function meKey(k) {
     if (k === 'back') { closeMe(); return; }
@@ -2941,6 +3001,13 @@
     if (window.CoveKeyboard.isOpen()) { window.CoveKeyboard.insert(raw); return; }   // typed on the phone
     var done = function (msg) { toast('🎙 "' + raw + '" → ' + msg); };
     if (has(t, ['내프로필', '나의프로필', '프로필정보', '내정보'])) { openMe(); done('나의 프로필'); return; }
+    if (has(t, ['섬']) && has(t, ['물'])) {
+      var isl = islandOf(ROOT.current);
+      if (!isl) { done('아직 섬이 없어요. "섬 열어"라고 말해 보세요'); return; }
+      var wn = window.IslandCore.waterAll(isl, { now: Date.now(), shift: tzShift(Date.now()), weather: miniEnv().weather });
+      appData(ROOT.current, 'cove.island'); ROOT.appdata[ROOT.current]['cove.island'] = isl; savePrefs();
+      done(wn ? '섬의 작물 ' + wn + '개에 물을 줬어요' : '섬에 목마른 작물이 없어요'); return;
+    }
 
     // row rename: "줄 이름을 영화로 바꿔" (the row of the focused app)
     var mc = raw.match(/(?:줄|카테고리)\s*이름(?:을|를)?\s*(.+?)\s*(?:으로|로)\s*(?:바꿔|변경|해)/);

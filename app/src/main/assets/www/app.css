@@ -565,3 +565,15 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .mr-cin { flex: 1; display: flex; flex-direction: column; }
 .mr-posters { flex: 1; min-height: 0; }
 .mr-poster { height: auto; min-height: 9.6rem; }
+.mr-island { flex: 1; display: flex; flex-direction: column; }
+.mr-isl { flex: 1; min-height: 0; width: 100%; border-radius: .9rem; background: #1574a8; }
+.mr-islinfo { margin-top: .6rem; font-size: .95rem; color: var(--ink-dim); }
+.mr-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.mr-pair .mr-w { padding: 1rem 1.1rem; }
+.mr-pair .mr-posters { grid-template-columns: 1fr 1fr; gap: .5rem; }
+.mr-pair .mr-poster { min-height: 6.4rem; padding: .5rem; }
+.mr-pair .mr-poster b { font-size: .82rem; }
+.mr-pair .mr-trophy svg { width: 2.8rem; height: 2.8rem; }
+.mr-pair .mr-trophy div { font-size: .8rem; }
+.mr-pair .mr-trophy b { width: 2.8rem; }
+.mr-pair .mr-poster.empty { grid-column: span 2; min-height: 4rem; }

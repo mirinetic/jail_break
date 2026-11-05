@@ -49,6 +49,22 @@
     this.tick();
     this.timers.push(setInterval(function () { self.next(); }, Math.max(10, d.interval || 30) * 1000));
     this.timers.push(setInterval(function () { self.tick(); }, 15000));
+    // "내 섬": the profile's island from 창가의 작은 섬, gently moving, instead of photos
+    if (d.island && d.island.state && window.IslandCore) {
+      var cv = document.createElement('canvas'); cv.className = 'amb-isl';
+      cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+      this.root.querySelector('.amb').insertBefore(cv, this.root.querySelector('.amb-shade'));
+      var t0 = Date.now(), cx = cv.getContext('2d');
+      var drawIsland = function () {
+        var dd = self.getData() || {}, isl = dd.island;
+        if (!isl || !isl.state) return;
+        var W = cv.clientWidth, H = cv.clientHeight;
+        if (cv.width !== W) { cv.width = W; cv.height = H; }
+        window.IslandCore.draw(cx, W, H, isl.state, { now: Date.now(), shift: dd.shift || 0, weather: isl.weather }, isl.shared || {}, { t: (Date.now() - t0) / 1000, view: 'ambient' });
+      };
+      drawIsland();
+      this.timers.push(setInterval(drawIsland, 80));
+    }
   };
   Ambient.prototype.stop = function () { this.timers.forEach(clearInterval); this.timers = []; this.root.innerHTML = ''; };
   Ambient.prototype.next = function () {
