@@ -713,3 +713,5 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .wnews.compact .wn-item small { flex: none; font-size: .9rem; }
 .wnews.compact .wn-bar { margin-top: .3rem; }
 [data-layout="minimal"] .wnews.compact, [data-layout="dock"] .wnews.compact { width: 26rem; }
+.mr-pair .mr-trophy span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mr-pair .mr-trophy b { width: 2.3rem; }

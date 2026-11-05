@@ -8,6 +8,7 @@
      CoveApp.saveFor(profileId, data)              another family member's data for this app (visits, gifts)
      CoveApp.saveShared(data)                      data the whole family shares for this app
      CoveApp.onSay(function (text) {})            voice/typed text from the phone while the app is open
+     CoveApp.addEvent({title, start})             add to this profile's calendar
      CoveApp.exit()                                back to the Cove home screen
    Opened on its own in a browser, it uses the keyboard and a preview profile (?kids=1 for a kids one). */
 (function () {
@@ -53,6 +54,8 @@
       if (inHost) send({ type: 'saveShared', data: d });
       else try { localStorage.setItem(storeKey + ':shared', JSON.stringify(d)); } catch (e) {}
     },
+    // add an event to the Cove calendar of this profile: {title, start:'YYYY-MM-DDTHH:MM', minutes}
+    addEvent: function (ev) { if (inHost) send({ type: 'addEvent', event: ev }); },
     exit: function () { if (inHost) send({ type: 'exit' }); },
     toast: function (t) { send({ type: 'toast', text: t }); }
   };

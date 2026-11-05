@@ -590,7 +590,7 @@
     return [
       { name: name + ' 열기', action: true, act: function () { closePanelQuiet(); openWidget(w); } },
       { need: 'look', name: '위치 옮기기', sub: '앱을 가리지 않는 빈자리 안에서 옮겨요', action: true, act: function () { startWidgetMove(w); } },
-      { need: 'look', name: '홈에서 숨기기', sub: '꾸미기 → 시계 · 정보에서 다시 켜요', action: true, act: function () { var o = P.widgets || {}; o[w] = false; if (w === 'clock' && P.clock === 'off') P.clock = '24'; set({ widgets: o }); closePanel(); } },
+      { need: 'look', name: '위젯 삭제', sub: '홈에서 빼요 · 꾸미기 → 시계 · 위젯에서 다시 추가해요', danger: true, action: true, val: armed === 'wdel' ? '한 번 더 누르면 삭제' : '', act: function () { twice('wdel', function () { var o = P.widgets || {}; o[w] = false; if (w === 'clock' && P.clock === 'off') P.clock = '24'; set({ widgets: o }); closePanel(); toast(name + ' 위젯을 뺐어요. 꾸미기 → 시계 · 위젯에서 다시 추가할 수 있어요'); }); } },
       { need: 'look', name: '위젯 자리 처음대로', sub: '이 디자인의 기본 배치로 돌아가요', action: true, act: function () { if (P.wpos) delete P.wpos[P.layout]; savePrefs(); layoutWidgets(); closePanel(); toast('기본 배치로 돌렸어요'); } }
     ];
   }
@@ -1265,13 +1265,17 @@
         '<g filter="url(#sh)"><rect x="34" y="54" width="124" height="84" rx="18" fill="url(#scr)"/><path d="M84 76v40l36-20z" fill="url(#pl)" stroke="url(#pl)" stroke-width="6" stroke-linejoin="round"/>' +
         '<rect x="66" y="146" width="60" height="9" rx="4.5" fill="#fff" opacity=".9"/></g>' +
         '<path d="M150 30l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill="#fff"/><circle cx="38" cy="38" r="3.5" fill="#fff" opacity=".8"/>' },
-    { pkg: 'cove.cards', label: '짝꿍 카드', page: 'apps/cards.html', c1: '#065f46', c2: '#14b8a6', tag: '같은 그림 찾기 게임', words: ['짝꿍', '카드게임', '카드놀이', '같은그림'],
-      sym: '<defs><pattern id="pt" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="10" fill="#fbbf24"/><rect x="5" width="5" height="10" fill="#f59e0b"/></pattern>' +
-        '<linearGradient id="hr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fb7185"/><stop offset="1" stop-color="#e11d48"/></linearGradient></defs>' +
-        '<g filter="url(#sh)" transform="rotate(-14 76 100)"><rect x="42" y="50" width="68" height="96" rx="14" fill="#fff"/><rect x="50" y="58" width="52" height="80" rx="9" fill="url(#pt)"/></g>' +
-        '<g filter="url(#sh)" transform="rotate(10 120 100)"><rect x="86" y="50" width="68" height="96" rx="14" fill="#fff"/>' +
-        '<path d="M120 122c-14-10-22-17-22-27a11 11 0 0 1 22-3 11 11 0 0 1 22 3c0 10-8 17-22 27z" fill="url(#hr)"/></g>' +
-        '<path d="M44 34l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill="#fff"/><path d="M160 150l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#fff" opacity=".85"/>' }
+    { pkg: 'cove.cards', label: 'Cove 게임', page: 'apps/cards.html', c1: '#065f46', c2: '#14b8a6', tag: '짝꿍 카드 · 오목 · 블록 쌓기', words: ['게임', '짝꿍', '카드게임', '카드놀이', '같은그림'],
+      sym: '<defs><linearGradient id="pad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d9f5ee"/></linearGradient></defs>' +
+        '<g filter="url(#sh)"><path d="M58 70h76a26 26 0 0 1 25 19l9 34a17 17 0 0 1-29 15l-15-17H68l-15 17a17 17 0 0 1-29-15l9-34a26 26 0 0 1 25-19z" fill="url(#pad)"/></g>' +
+        '<path d="M66 92v22M55 103h22" stroke="#0f766e" stroke-width="7" stroke-linecap="round"/><circle cx="124" cy="96" r="6" fill="#f59e0b"/><circle cx="138" cy="108" r="6" fill="#ef4444"/><circle cx="110" cy="108" r="6" fill="#3b82f6"/><circle cx="124" cy="120" r="6" fill="#22c55e"/>' +
+        '<rect x="36" y="30" width="22" height="22" rx="5" fill="#fbbf24" transform="rotate(-12 47 41)"/><circle cx="148" cy="44" r="10" fill="#111827"/><circle cx="126" cy="38" r="10" fill="#f8fafc"/>' },
+    { pkg: 'cove.sports', label: 'Cove 스포츠', page: 'apps/sports.html', c1: '#14532d', c2: '#22c55e', tag: '가상 리그 · 일정 · 라이브', words: ['스포츠', '축구', '야구', '경기일정', '경기결과', '코브리그'],
+      sym: '<defs><linearGradient id="ball" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dcfce7"/></linearGradient></defs>' +
+        '<path d="M30 150h132" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity=".55"/><path d="M96 150V128" stroke="#fff" stroke-width="5" opacity=".55"/>' +
+        '<g filter="url(#sh)"><circle cx="96" cy="88" r="44" fill="url(#ball)"/></g>' +
+        '<path d="M96 70l17 12-6 20H85l-6-20z" fill="#14532d"/><path d="M96 70V48M113 82l20-8M107 102l12 18M85 102l-12 18M79 82l-20-8" stroke="#14532d" stroke-width="4" stroke-linecap="round"/>' +
+        '<circle cx="152" cy="40" r="12" fill="#ef4444"/><text x="152" y="45" text-anchor="middle" font-size="12" font-weight="800" fill="#fff" font-family="sans-serif">●</text>' }
   ];
   // 창가의 작은 섬: a game that grows in real time; its tile shows what is waiting on the island.
   MINI.push({ pkg: 'cove.island', label: '창가의 작은 섬', page: 'apps/island.html', c1: '#0369a1', c2: '#22d3ee', live: 'island', words: ['작은섬', '섬열어', '섬켜', '섬가자', '섬보여'] });
@@ -1452,6 +1456,8 @@
       ROOT.appdata.family = ROOT.appdata.family || {};
       ROOT.appdata.family[mini.pkg] = m.data;
       savePrefs();
+    } else if (m.type === 'addEvent' && m.event && m.event.title && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(m.event.start || '')) {
+      calCmd(JSON.stringify({ op: 'add', title: String(m.event.title).slice(0, 60), start: m.event.start, allDay: false, owner: mini.pid }));
     } else if (m.type === 'exit') closeMini();
     else if (m.type === 'toast') toast(String(m.text || '').slice(0, 120));
   });
@@ -1572,7 +1578,10 @@
     });
     var ism = islandSummary(pr.id);
     if (ism) rows.push({ name: '🏝️ 창가의 작은 섬 Lv.' + ism.lvl, sub: '조개 ' + ism.shells + ' · 손님 ' + ism.guests + ' · 할 일 ' + ism.todo + '개' });
-    var best = appData(pr.id, 'cove.cards').best || {};
+    var cgd = appData(pr.id, 'cove.cards');
+    if (cgd.gomoku) rows.push({ name: '⚫ 오목', sub: '컴퓨터 상대 ' + (cgd.gomoku.w || 0) + '승 ' + (cgd.gomoku.l || 0) + '패' + (cgd.gomoku.pvp ? ' · 둘이서 ' + cgd.gomoku.pvp + '판' : '') });
+    if (cgd.blocks && cgd.blocks.best) rows.push({ name: '🧱 블록 쌓기 최고 ' + cgd.blocks.best.toLocaleString() + '점', sub: cgd.blocks.played + '판 · 가장 많이 지운 줄 ' + (cgd.blocks.lines || 0) });
+    var best = cgd.best || {};
     Object.keys(best).sort().forEach(function (lv) {
       var b = best[lv];
       rows.push({ name: '🃏 짝꿍 카드 ' + lv.replace('x', '×') + ' 최고 기록', sub: b.moves + '번 뒤집기 · ' + fmtSecs(b.secs), val: whenText(b.t) });
@@ -1983,9 +1992,9 @@
       ];
     }
     return [
-      { name: '시계 위젯', sub: '시계를 누르면 탁상시계 화면 · 형식은 거기서', val: widgetOn('clock') ? '표시' : '숨김', change: function () { var o = P.widgets || {}; o.clock = !widgetOn('clock'); if (o.clock && P.clock === 'off') P.clock = '24'; set({ widgets: o }); } },
-      { name: '날씨 위젯', sub: '날씨를 누르면 자세한 날씨 · 도시는 거기서', val: widgetOn('weather') ? '표시' : '숨김', change: function () { var o = P.widgets || {}; o.weather = !widgetOn('weather'); set({ widgets: o }); } },
-      { name: '뉴스 위젯', sub: '헤드라인이 돌아가며 나와요 · 분야는 뉴스 화면 ⚙에서', val: widgetOn('news') ? '표시' : '숨김', change: function () { var o = P.widgets || {}; o.news = !widgetOn('news'); set({ widgets: o }); } },
+      { name: '시계 위젯', sub: '시계를 누르면 탁상시계 화면 · 형식은 거기서', val: widgetOn('clock') ? '홈에 있음' : '빠져 있음', change: function () { var o = P.widgets || {}; o.clock = !widgetOn('clock'); if (o.clock && P.clock === 'off') P.clock = '24'; set({ widgets: o }); } },
+      { name: '날씨 위젯', sub: '날씨를 누르면 자세한 날씨 · 도시는 거기서', val: widgetOn('weather') ? '홈에 있음' : '빠져 있음', change: function () { var o = P.widgets || {}; o.weather = !widgetOn('weather'); set({ widgets: o }); } },
+      { name: '뉴스 위젯', sub: '헤드라인이 돌아가며 나와요 · 분야는 뉴스 화면 ⚙에서', val: widgetOn('news') ? '홈에 있음' : '빠져 있음', change: function () { var o = P.widgets || {}; o.news = !widgetOn('news'); set({ widgets: o }); } },
       { name: '위젯 자리 처음대로', sub: '위젯은 길게 OK → 위치 옮기기로 옮겨요', action: true, act: function () { if (P.wpos) delete P.wpos[P.layout]; savePrefs(); layoutWidgets(); toast('이 디자인의 기본 배치로 돌렸어요'); } },
       { name: '글꼴', val: labelOf(FONTS, P.font), change: function (d) { set({ font: cycle(FONTS, P.font, d) }); } },
       { name: '시계 아래 다음 일정', sub: '오늘·내일 일정을 한 줄로', val: P.calPreview !== false ? '표시' : '숨김', change: function () { set({ calPreview: P.calPreview === false }); } },
@@ -3395,10 +3404,12 @@
 
     // card game
     var cg = appData(pr.id, 'cove.cards'), best = cg.best || {};
-    w.push({ cls: 'mr-w mr-cards', act: function () { launch('cove.cards'); }, html: '<h3>짝꿍 카드 <small>' + (cg.played || 0) + '판</small></h3><div class="mr-trophy">' +
+    var gom = cg.gomoku || {}, blk = cg.blocks || {};
+    w.push({ cls: 'mr-w mr-cards', act: function () { launch('cove.cards'); }, html: '<h3>Cove 게임 <small>' + ((cg.played || 0) + (blk.played || 0) + (gom.w || 0) + (gom.l || 0) + (gom.pvp || 0)) + '판</small></h3><div class="mr-trophy">' +
       '<svg viewBox="0 0 64 64"><path d="M18 8h28v12a14 14 0 0 1-28 0z" fill="#fbbf24"/><path d="M18 12H9a9 9 0 0 0 11 13M46 12h9a9 9 0 0 1-11 13" fill="none" stroke="#fbbf24" stroke-width="4"/><path d="M28 34h8v10h-8z" fill="#f59e0b"/><rect x="20" y="44" width="24" height="7" rx="2" fill="#b45309"/></svg>' +
-      '<div>' + [['3x4', '쉬움'], ['4x4', '보통'], ['4x5', '어려움']].map(function (l) { var x = best[l[0]];
-        return '<span class="' + (x ? '' : 'dim') + '"><b>' + l[1] + '</b>' + (x ? x.moves + '번 · ' + fmtSecs(x.secs) : '기록 없음') + '</span>'; }).join('') + '</div></div>' });
+      '<div><span class="' + (Object.keys(best).length ? '' : 'dim') + '"><b>카드</b>' + (best['4x4'] ? best['4x4'].moves + '번 (보통)' : best['3x4'] ? best['3x4'].moves + '번 (쉬움)' : '기록 없음') + '</span>' +
+      '<span class="' + (gom.w || gom.l ? '' : 'dim') + '"><b>오목</b>' + (gom.w || gom.l ? (gom.w || 0) + '승 ' + (gom.l || 0) + '패' : '기록 없음') + '</span>' +
+      '<span class="' + (blk.best ? '' : 'dim') + '"><b>블록</b>' + (blk.best ? blk.best.toLocaleString() + '점' : '기록 없음') + '</span></div></div>' });
 
     // 창가의 작은 섬: a live miniature of the island
     var ism = islandSummary(pr.id);
@@ -3593,6 +3604,14 @@
     if (window.CoveKeyboard.isOpen()) { window.CoveKeyboard.insert(raw); return; }   // typed on the phone
     var done = function (msg) { toast('🎙 "' + raw + '" → ' + msg); };
     if (has(t, ['내프로필', '나의프로필', '프로필정보', '내정보'])) { openMe(); done('나의 프로필'); return; }
+    if (has(t, ['축구', '야구', '스포츠', '경기일정', '경기결과']) && !has(t, ['뉴스', '기사']) && BYPKG['cove.sports']) {
+      var slg = has(t, ['야구']) ? 'baseball' : has(t, ['축구']) ? 'soccer' : '';
+      done(slg === 'baseball' ? '코브 베이스볼' : slg ? '코브 리그' : 'Cove 스포츠'); launch('cove.sports', false, { lg: slg, live: has(t, ['라이브', '생중계', '중계']) }); return;
+    }
+    if (has(t, ['오목', '블록쌓기', '블록게임', '짝꿍카드', '카드게임']) && BYPKG['cove.cards']) {
+      var gid = has(t, ['오목']) ? 'gomoku' : has(t, ['블록']) ? 'blocks' : 'cards';
+      done({ gomoku: '오목', blocks: '블록 쌓기', cards: '짝꿍 카드' }[gid]); launch('cove.cards', false, { game: gid }); return;
+    }
     if (cinemaVoice(raw, t, done)) return;
     if (islandVoice(raw, t, done)) return;
 

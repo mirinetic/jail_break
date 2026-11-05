@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cove 스포츠</title>
+<style>
+  html { font-size: calc(100vw / 96); background: #070b16; }
+  body { margin: 0; height: 100vh; overflow: hidden; color: #f3f5fa; cursor: none;
+    background: radial-gradient(120% 70% at 80% -10%, #1b2a55 0%, #0a1020 55%, #070b16 100%);
+    font-family: "Roboto", "Noto Sans CJK KR", "Noto Sans KR", sans-serif; -webkit-font-smoothing: antialiased; }
+  [hidden] { display: none !important; }
+  .dim { color: #94a0b8; }
+  header { position: absolute; left: 3.4rem; right: 3.4rem; top: 2.2rem; display: flex; align-items: center; gap: 2rem; }
+  header h1 { margin: 0; font-size: 2.1rem; font-weight: 800; letter-spacing: -.01em; }
+  header h1 b { color: #34d399; }
+  .tabs { display: flex; gap: .6rem; }
+  .tab { padding: .6rem 1.3rem; border-radius: 2rem; background: rgba(255,255,255,.07); font-size: 1.1rem; color: #b8c2d8; }
+  .tab.on { background: rgba(52,211,153,.18); color: #fff; box-shadow: inset 0 -.25rem 0 #34d399; }
+  .tab.sel { background: #fff; color: #0b1222; box-shadow: none; }
+  .clock { margin-left: auto; font-size: 1.2rem; color: #94a0b8; }
+
+  .dates { position: absolute; left: 3.4rem; right: 34rem; top: 6.8rem; display: flex; gap: .6rem; }
+  .date { flex: 1; text-align: center; padding: .6rem .3rem; border-radius: 1rem; background: rgba(255,255,255,.05); font-size: 1rem; color: #94a0b8; }
+  .date b { display: block; font-size: 1.3rem; color: #e5e9f2; }
+  .date.on { background: rgba(255,255,255,.13); color: #fff; }
+  .date.sel { background: #fff; color: #0b1222; } .date.sel b { color: #0b1222; }
+  .date.today b::after { content: " •"; color: #34d399; }
+
+  .list { position: absolute; left: 3.4rem; right: 34rem; top: 12rem; bottom: 3.6rem; overflow: hidden; display: flex; flex-direction: column; gap: .8rem; padding: .4rem; }
+  .match { display: grid; grid-template-columns: 7.6rem 1fr 7rem 1fr 9rem; align-items: center; gap: 1rem; padding: 1rem 1.4rem; border-radius: 1.3rem; background: rgba(255,255,255,.06); flex: none; border: .1rem solid transparent; }
+  .match.live { border-color: rgba(239,68,68,.45); background: linear-gradient(90deg, rgba(239,68,68,.12), rgba(255,255,255,.05)); }
+  .match.sel { outline: .22rem solid #fff; outline-offset: .2rem; background: rgba(255,255,255,.14); }
+  .when { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+  .when small { display: block; font-size: .85rem; color: #94a0b8; }
+  .team { display: flex; align-items: center; gap: .9rem; font-size: 1.25rem; font-weight: 600; min-width: 0; }
+  .team.away { flex-direction: row-reverse; text-align: right; }
+  .team span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .team.lose span { opacity: .55; }
+  .crest { width: 3rem; height: 3rem; flex: none; }
+  .score { text-align: center; font-size: 2.1rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+  .score.vs { font-size: 1.2rem; color: #94a0b8; font-weight: 500; }
+  .state { justify-self: end; font-size: .95rem; padding: .35rem .8rem; border-radius: 1rem; background: rgba(255,255,255,.08); color: #b8c2d8; white-space: nowrap; }
+  .state.live { background: #ef4444; color: #fff; font-weight: 700; animation: blink 1.6s ease-in-out infinite; }
+  .state.added { background: rgba(52,211,153,.2); color: #6ee7b7; }
+  @keyframes blink { 50% { opacity: .65; } }
+  .empty { margin: 3rem auto; font-size: 1.4rem; color: #94a0b8; }
+
+  .side { position: absolute; right: 3.4rem; top: 6.8rem; bottom: 3.6rem; width: 28rem; display: flex; flex-direction: column; gap: 1.2rem; }
+  .card { border-radius: 1.3rem; background: rgba(255,255,255,.06); padding: 1.1rem 1.3rem; }
+  .card h3 { margin: 0 0 .7rem; font-size: 1.05rem; color: #94a0b8; font-weight: 600; letter-spacing: .04em; }
+  table { width: 100%; border-collapse: collapse; font-size: 1rem; }
+  td { padding: .32rem .2rem; } td.n { width: 1.6rem; color: #94a0b8; } td.r { text-align: right; font-variant-numeric: tabular-nums; } td.p { font-weight: 700; }
+  td .crest { width: 1.6rem; height: 1.6rem; vertical-align: middle; margin-right: .5rem; }
+  .news { display: grid; gap: .5rem; }
+  .ni { padding: .7rem .8rem; border-radius: .9rem; font-size: 1.05rem; line-height: 1.4; }
+  .ni small { display: block; font-size: .85rem; color: #94a0b8; margin-top: .2rem; }
+  .ni.sel { background: #fff; color: #0b1222; } .ni.sel small { color: #475569; }
+  .hint { position: absolute; left: 3.4rem; bottom: 1.3rem; display: flex; gap: 1.6rem; font-size: .95rem; color: #94a0b8; }
+  .hint kbd { font: inherit; font-weight: 700; padding: .05rem .45rem; border-radius: .35rem; background: rgba(255,255,255,.16); color: #fff; margin-right: .35rem; }
+
+  /* match page */
+  #detail { position: absolute; inset: 0; background: radial-gradient(120% 70% at 50% -10%, var(--c1, #1b2a55) 0%, #0a1020 60%, #070b16 100%); padding: 2.6rem 3.4rem 3.6rem; display: flex; flex-direction: column; gap: 1.6rem; }
+  .board { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 3rem; padding: 1.4rem 2rem 1.6rem; border-radius: 1.6rem; background: rgba(0,0,0,.25); }
+  .bteam { display: flex; flex-direction: column; align-items: center; gap: .6rem; font-size: 1.6rem; font-weight: 700; }
+  .bteam .crest { width: 6.4rem; height: 6.4rem; }
+  .bmid { text-align: center; }
+  .bscore { font-size: 5.6rem; font-weight: 800; letter-spacing: .06em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .bmid .state { display: inline-block; margin-top: .8rem; font-size: 1.1rem; }
+  .bmid .lg { font-size: 1rem; color: #94a0b8; margin-bottom: .6rem; }
+  .dbody { flex: 1; min-height: 0; display: grid; grid-template-columns: 1.2fr 1fr .9fr; gap: 1.6rem; }
+  .tl { display: grid; gap: .45rem; font-size: 1.1rem; align-content: start; }
+  .ev { display: grid; grid-template-columns: 3.6rem 1fr; gap: .8rem; padding: .45rem .6rem; border-radius: .7rem; background: rgba(255,255,255,.04); }
+  .ev b { color: #fde68a; font-variant-numeric: tabular-nums; }
+  .ev.away { text-align: right; grid-template-columns: 1fr 3.6rem; }
+  .stat { display: grid; grid-template-columns: 3rem 1fr 3rem; gap: .8rem; align-items: center; font-size: 1.05rem; margin-bottom: .8rem; }
+  .stat small { grid-column: 1 / 4; text-align: center; color: #94a0b8; font-size: .9rem; margin-bottom: -.4rem; }
+  .bar { height: .5rem; border-radius: .3rem; background: rgba(255,255,255,.12); overflow: hidden; display: flex; }
+  .bar i { display: block; height: 100%; }
+  .stat span:last-child { text-align: right; }
+  .acts { display: grid; gap: .7rem; align-content: start; }
+  .act { padding: 1rem 1.2rem; border-radius: 1.1rem; background: rgba(255,255,255,.08); font-size: 1.15rem; font-weight: 600; }
+  .act small { display: block; font-weight: 400; font-size: .9rem; color: #94a0b8; margin-top: .2rem; }
+  .act.sel { background: #fff; color: #0b1222; } .act.sel small { color: #475569; }
+  .act.live { background: rgba(239,68,68,.22); } .act.live.sel { background: #fff; }
+  .inn { display: grid; grid-template-columns: 6rem repeat(9, 1fr) 2.6rem; gap: .2rem; font-size: 1rem; text-align: center; font-variant-numeric: tabular-nums; }
+  .inn span { padding: .45rem 0; background: rgba(255,255,255,.05); border-radius: .3rem; }
+  .inn .h { color: #94a0b8; background: none; }
+  .inn .t { font-weight: 800; background: rgba(255,255,255,.12); }
+  .inn .nm { text-align: left; padding-left: .5rem; }
+
+  /* video */
+  #video { position: absolute; inset: 0; background: #000; }
+  #vcv { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .vbug { position: absolute; left: 2.4rem; top: 2rem; display: flex; align-items: stretch; border-radius: .7rem; overflow: hidden; font-weight: 700; font-size: 1.3rem; box-shadow: 0 .6rem 1.6rem rgba(0,0,0,.5); }
+  .vbug span { padding: .5rem .9rem; background: #0b1222; } .vbug .sc { background: #fff; color: #0b1222; font-variant-numeric: tabular-nums; } .vbug .tm { background: #ef4444; }
+  .vtag { position: absolute; right: 2.4rem; top: 2rem; padding: .5rem 1rem; border-radius: 2rem; font-weight: 700; background: rgba(0,0,0,.55); }
+  .vtag.live { background: #ef4444; }
+  .vcap { position: absolute; left: 50%; bottom: 4.6rem; transform: translateX(-50%); padding: .9rem 1.8rem; border-radius: 1rem; background: rgba(5,10,20,.78); font-size: 1.6rem; font-weight: 700; white-space: nowrap; transition: opacity .4s; }
+  .vfake { position: absolute; right: 2.4rem; bottom: 1.6rem; font-size: .9rem; color: rgba(255,255,255,.55); }
+
+  /* article */
+  #article { position: absolute; inset: 0; background: rgba(4,7,14,.78); display: grid; place-items: center; }
+  .art { width: min(70rem, 86vw); padding: 2.6rem 3rem; border-radius: 1.6rem; background: #0f1628; border: .08rem solid rgba(255,255,255,.1); box-shadow: 0 2rem 5rem rgba(0,0,0,.5); }
+  .art .k { font-size: 1rem; font-weight: 800; color: #34d399; letter-spacing: .06em; }
+  .art h2 { margin: .7rem 0 1rem; font-size: 2.4rem; line-height: 1.3; }
+  .art p { font-size: 1.3rem; line-height: 1.75; color: #d6dbe7; margin: 0 0 .8rem; }
+  .art .src { font-size: .95rem; color: #94a0b8; margin-top: 1.4rem; }
+</style>
+</head>
+<body>
+  <header><h1>Cove <b>스포츠</b></h1><div class="tabs" id="tabs"></div><div class="clock" id="clk"></div></header>
+  <section id="home">
+    <div class="dates" id="dates"></div>
+    <div class="list" id="list"></div>
+    <div class="side"><div class="card"><h3 id="stH">순위</h3><table id="table"></table></div><div class="card" style="flex:1;min-height:0;overflow:hidden"><h3>스포츠 뉴스</h3><div class="news" id="news"></div></div></div>
+    <div class="hint"><span><kbd>◀ ▶</kbd>날짜 · 종목 (맨 위)</span><span><kbd>▲ ▼</kbd>경기</span><span><kbd>OK</kbd>경기 보기</span><span><kbd>뒤로</kbd>나가기</span></div>
+  </section>
+  <section id="detail" hidden></section>
+  <section id="video" hidden><canvas id="vcv"></canvas><div class="vbug" id="vbug"></div><div class="vtag" id="vtag"></div><div class="vcap" id="vcap"></div><div class="vfake">Cove 스포츠의 가상 경기 화면이에요 · 뒤로 닫기</div></section>
+  <section id="article" hidden><div class="art" id="art"></div></section>
+
+<script src="sdk.js"></script>
+<script>
+(function () {
+  'use strict';
+  // Everything here is invented for Cove: leagues, teams, players, matches and news. The schedule is made
+  // from the date, so every TV shows the same games, and live games follow the real clock.
+  var $ = function (id) { return document.getElementById(id); };
+  var MIN = 60000, DAY = 86400000;
+  function h32(s) { var h = 2166136261; s = String(s); for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h; }
+  function rnd(s) { return (h32(s) % 100003) / 100003; }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  var LEAGUES = {
+    soccer: { name: '축구 · 코브 리그', short: '코브 리그', len: 45, slots: [[13, 0], [16, 0], [19, 0], [21, 0]], teams: [
+      ['gal', '은하 유나이티드', '#1d4ed8', '#93c5fd'], ['wind', '바람 시티', '#0ea5e9', '#e0f2fe'], ['sun', '햇살 FC', '#f59e0b', '#7c2d12'], ['wave', '파도 원더러스', '#0891b2', '#cffafe'],
+      ['star', '북극성 FC', '#4338ca', '#fde68a'], ['moon', '달빛 레인저스', '#7c3aed', '#ede9fe'], ['pine', '소나무 SC', '#15803d', '#dcfce7'], ['fire', '불꽃 유나이티드', '#dc2626', '#fee2e2']] },
+    baseball: { name: '야구 · 코브 베이스볼', short: '코브 베이스볼', len: 120, slots: [[12, 30], [17, 30], [20, 30]], teams: [
+      ['owl', '부엉이즈', '#1e3a8a', '#fbbf24'], ['fox', '여우스', '#ea580c', '#fff7ed'], ['whale', '고래스', '#0369a1', '#e0f2fe'], ['crane', '두루미스', '#0f766e', '#f0fdfa'],
+      ['comet', '혜성스', '#9333ea', '#faf5ff'], ['otter', '수달스', '#78350f', '#fde68a']] }
+  };
+  var TEAM = {};
+  Object.keys(LEAGUES).forEach(function (lg) { LEAGUES[lg].teams.forEach(function (t) { TEAM[t[0]] = { id: t[0], name: t[1], c1: t[2], c2: t[3], lg: lg, str: 0.75 + rnd('str' + t[0]) * 0.6 }; }); });
+  var SUR = '김이박최정강조윤장임한오서신권황안송류홍', GIV = ['하늘', '바다', '서준', '도윤', '민재', '태양', '지호', '준서', '우진', '현우', '건우', '시우', '예준', '주원', '은호', '하준', '로운', '산', '별', '결'];
+  function player(team, i) { return SUR.charAt(h32(team + 's' + i) % SUR.length) + GIV[h32(team + 'g' + i) % GIV.length]; }
+  function crest(t, cls) {
+    var T = TEAM[t];
+    return '<svg class="crest ' + (cls || '') + '" viewBox="0 0 40 46"><path d="M20 2l17 6v14c0 11-7 18-17 22C10 40 3 33 3 22V8z" fill="' + T.c1 + '" stroke="' + T.c2 + '" stroke-width="2.4"/>' +
+      '<path d="M3 20h34" stroke="' + T.c2 + '" stroke-width="2" opacity=".5"/><text x="20" y="31" text-anchor="middle" font-size="15" font-weight="800" fill="' + T.c2 + '" font-family="sans-serif">' + T.name.charAt(0) + '</text></svg>';
+  }
+
+  // ---------- time and schedule ----------
+  var who = {}, data = {}, shift = 0;
+  function nowMs() { return Date.now(); }
+  function wall(t) { return new Date((t === undefined ? Date.now() : t) + shift * MIN); }   // local fields show Cove's time zone
+  function dayStart(offset) { var d = wall(); d.setHours(0, 0, 0, 0); return d.getTime() + offset * DAY - shift * MIN; }   // real ms of that wall-day's midnight
+  function keyOf(ms) { var d = wall(ms); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function matchesOn(lg, offset) {
+    var L = LEAGUES[lg], d0 = dayStart(offset), key = keyOf(d0 + 12 * 3600000), ids = L.teams.map(function (t) { return t[0]; });
+    ids.sort(function (a, b) { return h32(key + a) - h32(key + b); });
+    return L.slots.map(function (sl, i) {
+      var home = ids[i * 2], away = ids[i * 2 + 1];
+      return { id: lg + ':' + key + ':' + i, lg: lg, home: home, away: away, start: d0 + (sl[0] * 60 + sl[1]) * MIN, day: key, venue: TEAM[home].name.split(' ')[0] + ' 경기장' };
+    });
+  }
+  // a match's events (all of them, decided by its id); live shows those that have happened
+  var evCache = {};
+  function events(m) {
+    if (evCache[m.id]) return evCache[m.id];
+    var out = [];
+    if (m.lg === 'soccer') {
+      [m.home, m.away].forEach(function (t, side) {
+        var lam = TEAM[t].str * (side ? 1.1 : 1.35), n = 0, r = rnd(m.id + t + 'n');
+        var cum = 0, p = Math.exp(-lam), f = p; while (r > f && n < 6) { n++; p = p * lam / n; f += p; }
+        for (var i = 0; i < n; i++) out.push({ min: 1 + Math.floor(rnd(m.id + t + 'm' + i) * 90), side: side, kind: 'goal', who: player(t, 1 + h32(m.id + t + 'p' + i) % 10) });
+        if (rnd(m.id + t + 'y') < 0.6) out.push({ min: 10 + Math.floor(rnd(m.id + t + 'ym') * 80), side: side, kind: 'card', who: player(t, 2 + h32(m.id + t + 'yp') % 9) });
+      });
+      out.sort(function (a, b) { return a.min - b.min; });
+    } else {
+      [m.home, m.away].forEach(function (t, side) {
+        for (var inn = 1; inn <= 9; inn++) {
+          var r = rnd(m.id + t + 'i' + inn), r2 = rnd(m.id + t + 'j' + inn), runs = r < 0.2 * TEAM[t].str ? 1 + (r2 < 0.3 ? 1 : 0) + (r2 < 0.08 ? 1 : 0) : 0;
+          if (runs) out.push({ inn: inn, side: side, runs: runs, kind: 'run', who: player(t, 1 + h32(m.id + t + 'b' + inn) % 9), hr: rnd(m.id + t + 'hr' + inn) < 0.3 });
+        }
+      });
+      out.sort(function (a, b) { return a.inn - b.inn || a.side - b.side; });
+    }
+    return (evCache[m.id] = out);
+  }
+  // game clock: football is 2 x 20 minutes with 5 minutes between (shown as 1'-90'); baseball runs 9 innings in 2 hours
+  function stateOf(m, t) {
+    var L = LEAGUES[m.lg], el = ((t || nowMs()) - m.start) / MIN;
+    if (el < 0) return { phase: 'pre' };
+    if (el >= L.len) return { phase: 'end', clock: m.lg === 'soccer' ? 90 : 9.99 };
+    if (m.lg === 'soccer') {
+      if (el < 20) return { phase: 'live', clock: Math.max(1, Math.floor(el / 20 * 45)), label: Math.max(1, Math.floor(el / 20 * 45)) + "'" };
+      if (el < 25) return { phase: 'live', clock: 45, label: '하프타임', ht: true };
+      return { phase: 'live', clock: 45 + Math.floor((el - 25) / 20 * 45), label: (45 + Math.max(1, Math.floor((el - 25) / 20 * 45))) + "'" };
+    }
+    var inn = el / L.len * 9;
+    return { phase: 'live', clock: inn, label: (Math.floor(inn) + 1) + '회 ' + (inn % 1 < 0.5 ? '초' : '말') };
+  }
+  function scoreOf(m, st) {
+    var ev = events(m), s = [0, 0];
+    ev.forEach(function (e) {
+      if (st.phase === 'pre') return;
+      if (m.lg === 'soccer') { if (e.kind === 'goal' && (st.phase === 'end' || e.min <= st.clock)) s[e.side]++; }
+      else if (st.phase === 'end' || e.inn - 1 + (e.side ? 0.5 : 0) + 0.25 <= st.clock) s[e.side] += e.runs;
+    });
+    return s;
+  }
+  function statsOf(m) {
+    var r = function (k) { return rnd(m.id + k); }, poss = 38 + Math.round(r('pos') * 24);
+    return m.lg === 'soccer' ? [['점유율', poss, 100 - poss, '%'], ['슈팅', 6 + Math.round(r('s1') * 12), 5 + Math.round(r('s2') * 11), ''], ['유효 슈팅', 2 + Math.round(r('o1') * 6), 1 + Math.round(r('o2') * 6), ''], ['코너킥', 2 + Math.round(r('c1') * 7), 1 + Math.round(r('c2') * 7), '']]
+      : [['안타', 5 + Math.round(r('h1') * 9), 4 + Math.round(r('h2') * 9), ''], ['홈런', Math.round(r('hr1') * 3), Math.round(r('hr2') * 3), ''], ['볼넷', 1 + Math.round(r('b1') * 5), 1 + Math.round(r('b2') * 5), ''], ['실책', Math.round(r('e1') * 2), Math.round(r('e2') * 2), '']];
+  }
+  function standings(lg) {
+    var tab = {};
+    LEAGUES[lg].teams.forEach(function (t) { tab[t[0]] = { id: t[0], p: 0, w: 0, d: 0, l: 0, pts: Math.round(rnd(lg + t[0] + 'base') * 14) + 10, gf: 0, ga: 0 }; });
+    for (var o = -14; o <= 0; o++) matchesOn(lg, o).forEach(function (m) {
+      var st = stateOf(m); if (st.phase !== 'end') return;
+      var s = scoreOf(m, st), a = tab[m.home], b = tab[m.away];
+      a.p++; b.p++; a.gf += s[0]; a.ga += s[1]; b.gf += s[1]; b.ga += s[0];
+      if (s[0] > s[1]) { a.w++; b.l++; a.pts += 3; } else if (s[0] < s[1]) { b.w++; a.l++; b.pts += 3; } else { a.d++; b.d++; a.pts++; b.pts++; }
+    });
+    return Object.keys(tab).map(function (k) { return tab[k]; }).sort(function (a, b) { return b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga); });
+  }
+  function headline(m) {
+    var st = stateOf(m), s = scoreOf(m, st), H = TEAM[m.home].name, A = TEAM[m.away].name, ev = events(m);
+    if (st.phase === 'pre') return { t: H + ' vs ' + A + ', ' + pad(wall(m.start).getHours()) + ':' + pad(wall(m.start).getMinutes()) + ' 맞대결 예고', b: '두 팀의 시즌 맞대결이 열린다. ' + H + '는 홈 팬들 앞에서 연승을, ' + A + '는 반등을 노린다. 양 팀 감독은 "준비는 끝났다"고 입을 모았다.' };
+    if (st.phase === 'live') return { t: '[LIVE] ' + H + ' ' + s[0] + '-' + s[1] + ' ' + A + ' (' + st.label + ')', b: '경기가 한창이다. 지금까지 ' + H + ' ' + s[0] + '점, ' + A + ' ' + s[1] + '점. Cove 스포츠에서 실시간으로 볼 수 있다.' };
+    var win = s[0] === s[1] ? null : s[0] > s[1] ? H : A, star = ev.filter(function (e) { return e.kind === 'goal' || e.hr; })[0];
+    var t = win ? win + ', ' + (s[0] > s[1] ? A : H) + '에 ' + Math.max(s[0], s[1]) + '-' + Math.min(s[0], s[1]) + ' 승리' : H + '·' + A + ', ' + s[0] + '-' + s[1] + ' 무승부';
+    return { t: t, b: (star ? star.who + '의 ' + (m.lg === 'soccer' ? star.min + "분 골" : star.inn + '회 ' + (star.hr ? '홈런' : '적시타')) + '이 흐름을 바꿨다. ' : '') + (win ? win + '는 이날 승리로 순위 경쟁에 힘을 보탰다.' : '두 팀은 승점을 나눠 가졌다.') + ' 경기 하이라이트는 Cove 스포츠에서 볼 수 있다.' };
+  }
+
+  // ---------- home ----------
+  var lg = 'soccer', day = 0, zone = 'list', sel = 0, nsel = 0, view = 'home', det = null, dsel = 0, vid = null;
+  function dayLabel(o) { return o === 0 ? '오늘' : o === -1 ? '어제' : o === 1 ? '내일' : ''; }
+  function render() {
+    var d = wall();
+    $('clk').textContent = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    $('tabs').innerHTML = Object.keys(LEAGUES).map(function (k) { return '<span class="tab' + (k === lg ? ' on' : '') + (zone === 'tabs' && k === lg ? ' sel' : '') + '">' + LEAGUES[k].name + '</span>'; }).join('');
+    var ds = '';
+    for (var o = -3; o <= 3; o++) { var w = wall(dayStart(day + o) + 12 * 3600000); ds += '<div class="date' + (o === 0 ? ' on' : '') + (zone === 'dates' && o === 0 ? ' sel' : '') + (day + o === 0 ? ' today' : '') + '">' + (dayLabel(day + o) || '일월화수목금토'.charAt(w.getDay()) + '요일') + '<b>' + (w.getMonth() + 1) + '.' + w.getDate() + '</b></div>'; }
+    $('dates').innerHTML = ds;
+    var ms = matchesOn(lg, day);
+    sel = Math.max(0, Math.min(ms.length - 1, sel));
+    $('list').innerHTML = ms.length ? ms.map(function (m, i) {
+      var st = stateOf(m), s = scoreOf(m, st), w2 = wall(m.start), added = data.added && data.added[m.id];
+      var winner = st.phase === 'end' && s[0] !== s[1] ? (s[0] > s[1] ? 0 : 1) : -1;
+      return '<div class="match' + (st.phase === 'live' ? ' live' : '') + (zone === 'list' && i === sel ? ' sel' : '') + '"><div class="when">' + pad(w2.getHours()) + ':' + pad(w2.getMinutes()) + '<small>' + esc(m.venue) + '</small></div>' +
+        '<div class="team' + (winner === 1 ? ' lose' : '') + '">' + crest(m.home) + '<span>' + TEAM[m.home].name + '</span></div>' +
+        (st.phase === 'pre' ? '<div class="score vs">VS</div>' : '<div class="score">' + s[0] + ' : ' + s[1] + '</div>') +
+        '<div class="team away' + (winner === 0 ? ' lose' : '') + '">' + crest(m.away) + '<span>' + TEAM[m.away].name + '</span></div>' +
+        '<div class="state' + (st.phase === 'live' ? ' live' : added ? ' added' : '') + '">' + (st.phase === 'live' ? '● LIVE ' + st.label : st.phase === 'end' ? '경기 종료' : added ? '✓ 일정에 있음' : '예정') + '</div></div>';
+    }).join('') : '<div class="empty">이 날은 경기가 없어요</div>';
+    var tb = standings(lg);
+    $('stH').textContent = LEAGUES[lg].short + ' 순위';
+    $('table').innerHTML = tb.map(function (r, i) { return '<tr><td class="n">' + (i + 1) + '</td><td>' + crest(r.id) + TEAM[r.id].name + '</td><td class="r dim">' + r.w + '승 ' + (lg === 'soccer' || r.d ? r.d + '무 ' : '') + r.l + '패</td><td class="r p">' + r.pts + '</td></tr>'; }).join('');
+    var nw = newsList();
+    nsel = Math.max(0, Math.min(nw.length - 1, nsel));
+    $('news').innerHTML = nw.map(function (n, i) { return '<div class="ni' + (zone === 'news' && i === nsel ? ' sel' : '') + '">' + esc(n.t) + '<small>' + esc(n.lg) + ' · ' + n.ago + '</small></div>'; }).join('');
+  }
+  function newsList() {
+    var out = [];
+    [0, -1].forEach(function (o) { matchesOn(lg, o).forEach(function (m) { var st = stateOf(m); if (st.phase !== 'pre') { var h = headline(m); out.push({ t: h.t, b: h.b, m: m, lg: LEAGUES[m.lg].short, ago: st.phase === 'live' ? '지금' : o === 0 ? '오늘' : '어제' }); } }); });
+    matchesOn(lg, 1).slice(0, 1).forEach(function (m) { var h = headline(m); out.push({ t: h.t, b: h.b, m: m, lg: LEAGUES[m.lg].short, ago: '예고' }); });
+    return out.slice(0, 5);
+  }
+  function homeKey(k) {
+    var ms = matchesOn(lg, day);
+    if (k === 'back') { CoveApp.exit(); return; }
+    if (zone === 'tabs') {
+      if (k === 'left' || k === 'right') { lg = lg === 'soccer' ? 'baseball' : 'soccer'; sel = 0; } else if (k === 'down') zone = 'dates';
+    } else if (zone === 'dates') {
+      if (k === 'left') day = Math.max(-7, day - 1); else if (k === 'right') day = Math.min(7, day + 1);
+      else if (k === 'up') zone = 'tabs'; else if (k === 'down' || k === 'ok') zone = 'list';
+    } else if (zone === 'list') {
+      if (k === 'up') { if (sel === 0) zone = 'dates'; else sel--; }
+      else if (k === 'down') sel = Math.min(ms.length - 1, sel + 1);
+      else if (k === 'right') zone = 'news';
+      else if (k === 'left') { zone = 'dates'; }
+      else if (k === 'ok' && ms[sel]) { openDetail(ms[sel]); return; }
+    } else {
+      if (k === 'up') nsel = Math.max(0, nsel - 1); else if (k === 'down') nsel = nsel + 1; else if (k === 'left') zone = 'list';
+      else if (k === 'ok') { var n = newsList()[nsel]; if (n) openArticle(n); return; }
+    }
+    render();
+  }
+
+  // ---------- one match ----------
+  function openDetail(m) { det = m; dsel = 0; view = 'detail'; $('detail').hidden = false; renderDetail(); }
+  function actions(m) {
+    var st = stateOf(m), a = [];
+    if (st.phase === 'live') a.push(['live', '● 라이브 보기', '지금 ' + st.label]);
+    if (st.phase === 'end') a.push(['hl', '▶ 하이라이트 보기', m.lg === 'soccer' ? '골 장면 모아 보기' : '득점 장면 모아 보기']);
+    if (st.phase === 'pre') a.push(['cal', data.added && data.added[m.id] ? '✓ 내 일정에 있어요' : '📅 내 일정에 추가', '경기 시작 시간이 Cove 일정에 들어가요']);
+    a.push(['news', '📰 관련 기사', headline(m).t]);
+    return a;
+  }
+  function renderDetail() {
+    var m = det, st = stateOf(m), s = scoreOf(m, st), H = TEAM[m.home], A = TEAM[m.away], w = wall(m.start), ev = events(m);
+    $('detail').style.setProperty('--c1', H.c1);
+    var shown = ev.filter(function (e) { return st.phase === 'end' || (st.phase === 'live' && (m.lg === 'soccer' ? e.min <= st.clock : e.inn - 1 + (e.side ? 0.5 : 0) + 0.25 <= st.clock)); });
+    var board = '<div class="board"><div class="bteam">' + crest(m.home) + H.name + '</div><div class="bmid"><div class="lg">' + LEAGUES[m.lg].short + ' · ' + (w.getMonth() + 1) + '월 ' + w.getDate() + '일 ' + pad(w.getHours()) + ':' + pad(w.getMinutes()) + ' · ' + esc(m.venue) + '</div>' +
+      (st.phase === 'pre' ? '<div class="bscore" style="font-size:3.4rem">VS</div>' : '<div class="bscore">' + s[0] + ' : ' + s[1] + '</div>') +
+      '<span class="state' + (st.phase === 'live' ? ' live' : '') + '">' + (st.phase === 'live' ? '● LIVE ' + st.label : st.phase === 'end' ? '경기 종료' : '경기 전') + '</span></div><div class="bteam">' + crest(m.away) + A.name + '</div></div>';
+    var left;
+    if (m.lg === 'soccer') {
+      left = '<div class="card"><h3>' + (st.phase === 'pre' ? '최근 맞대결' : '경기 기록') + '</h3><div class="tl">' + (st.phase === 'pre' ? recent(m) :
+        (shown.length ? shown.map(function (e) { return '<div class="ev' + (e.side ? ' away' : '') + '">' + (e.side ? '<span>' + (e.kind === 'goal' ? '⚽ ' : '🟨 ') + e.who + '</span><b>' + e.min + "'</b>" : '<b>' + e.min + "'</b><span>" + (e.kind === 'goal' ? '⚽ ' : '🟨 ') + e.who + '</span>') + '</div>'; }).join('') : '<span class="dim">아직 기록이 없어요</span>')) + '</div></div>';
+    } else {
+      var inn = function (side) { var r = []; for (var i = 1; i <= 9; i++) { var v = shown.filter(function (e) { return e.side === side && e.inn === i; }).reduce(function (a, e) { return a + e.runs; }, 0); r.push(st.phase === 'pre' || (st.phase === 'live' && i - 1 + (side ? 0.5 : 0) + 0.25 > st.clock) ? '' : v); } return r; };
+      var row = function (t, side) { return '<span class="nm">' + TEAM[t].name + '</span>' + inn(side).map(function (v) { return '<span>' + v + '</span>'; }).join('') + '<span class="t">' + (st.phase === 'pre' ? '' : s[side]) + '</span>'; };
+      left = '<div class="card"><h3>' + (st.phase === 'pre' ? '최근 맞대결' : '이닝별 점수') + '</h3>' + (st.phase === 'pre' ? '<div class="tl">' + recent(m) + '</div>' :
+        '<div class="inn"><span class="h"></span>' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (i) { return '<span class="h">' + i + '</span>'; }).join('') + '<span class="h">R</span>' + row(m.home, 0) + row(m.away, 1) + '</div>' +
+        '<div class="tl" style="margin-top:1rem">' + shown.filter(function (e) { return e.hr; }).slice(-4).map(function (e) { return '<div class="ev"><b>' + e.inn + '회</b><span>💥 ' + e.who + ' 홈런 (' + TEAM[e.side ? m.away : m.home].name + ')</span></div>'; }).join('') + '</div>') + '</div>';
+    }
+    var stats = '<div class="card"><h3>' + (st.phase === 'pre' ? '경기 정보' : '팀 기록') + '</h3>' + (st.phase === 'pre' ? '<div class="tl"><div class="ev"><b>시간</b><span>' + pad(w.getHours()) + ':' + pad(w.getMinutes()) + ' 시작 · ' + (m.lg === 'soccer' ? '전후반 각 20분' : '9이닝 약 2시간') + '</span></div><div class="ev"><b>장소</b><span>' + esc(m.venue) + '</span></div><div class="ev"><b>순위</b><span>' + rankText(m) + '</span></div></div>' :
+      statsOf(m).map(function (x) { var a = st.phase === 'live' ? Math.round(x[1] * Math.min(1, (m.lg === 'soccer' ? st.clock / 90 : st.clock / 9))) : x[1], b = st.phase === 'live' ? Math.round(x[2] * Math.min(1, (m.lg === 'soccer' ? st.clock / 90 : st.clock / 9))) : x[2]; if (x[3] === '%') { a = x[1]; b = x[2]; }
+        var tot = Math.max(1, a + b); return '<div class="stat"><small>' + x[0] + '</small><span>' + a + x[3] + '</span><div class="bar"><i style="width:' + (100 * a / tot) + '%;background:' + H.c1 + '"></i><i style="width:' + (100 * b / tot) + '%;background:' + A.c1 + '"></i></div><span>' + b + x[3] + '</span></div>'; }).join('')) + '</div>';
+    var acts = actions(m);
+    dsel = Math.max(0, Math.min(acts.length - 1, dsel));
+    var ac = '<div class="acts">' + acts.map(function (a, i) { return '<div class="act' + (a[0] === 'live' ? ' live' : '') + (i === dsel ? ' sel' : '') + '">' + a[1] + '<small>' + esc(a[2]) + '</small></div>'; }).join('') + '</div>';
+    $('detail').innerHTML = board + '<div class="dbody">' + left + stats + ac + '</div><div class="hint"><span><kbd>▲ ▼</kbd>고르기</span><span><kbd>OK</kbd>선택</span><span><kbd>뒤로</kbd>경기 목록</span></div>';
+  }
+  function recent(m) {
+    var out = [];
+    for (var o = -1; o >= -14 && out.length < 3; o--) matchesOn(m.lg, o).forEach(function (x) { if (((x.home === m.home && x.away === m.away) || (x.home === m.away && x.away === m.home)) && out.length < 3) { var s = scoreOf(x, stateOf(x)); out.push('<div class="ev"><b>' + (wall(x.start).getMonth() + 1) + '.' + wall(x.start).getDate() + '</b><span>' + TEAM[x.home].name + ' ' + s[0] + ' : ' + s[1] + ' ' + TEAM[x.away].name + '</span></div>'); } });
+    return out.length ? out.join('') : '<span class="dim">최근 2주 동안 맞대결이 없었어요</span>';
+  }
+  function rankText(m) { var tb = standings(m.lg), r = function (t) { for (var i = 0; i < tb.length; i++) if (tb[i].id === t) return i + 1; return '-'; }; return TEAM[m.home].name + ' ' + r(m.home) + '위 · ' + TEAM[m.away].name + ' ' + r(m.away) + '위'; }
+  function detailKey(k) {
+    var acts = actions(det);
+    if (k === 'back') { view = 'home'; det = null; $('detail').hidden = true; render(); return; }
+    if (k === 'up') dsel = Math.max(0, dsel - 1); else if (k === 'down') dsel = Math.min(acts.length - 1, dsel + 1);
+    else if (k === 'ok') {
+      var a = acts[dsel][0];
+      if (a === 'live' || a === 'hl') { openVideo(det, a === 'live'); return; }
+      if (a === 'news') { var h = headline(det); openArticle({ t: h.t, b: h.b, m: det, lg: LEAGUES[det.lg].short }); return; }
+      if (a === 'cal') {
+        if (data.added && data.added[det.id]) { CoveApp.toast('이미 일정에 있어요'); return; }
+        var w = wall(det.start);
+        CoveApp.addEvent({ title: '⚽ '.replace('⚽', det.lg === 'soccer' ? '⚽' : '⚾') + TEAM[det.home].name + ' vs ' + TEAM[det.away].name, start: w.getFullYear() + '-' + pad(w.getMonth() + 1) + '-' + pad(w.getDate()) + 'T' + pad(w.getHours()) + ':' + pad(w.getMinutes()) });
+        data.added = data.added || {}; data.added[det.id] = 1; CoveApp.save(data);
+      }
+    }
+    renderDetail();
+  }
+
+  // ---------- video: a drawn pitch (or diamond) with the score bug ----------
+  function openVideo(m, live) {
+    view = 'video'; $('video').hidden = false;
+    var goals = events(m).filter(function (e) { return e.kind === 'goal' || e.hr || (m.lg === 'baseball' && e.runs >= 2); });
+    vid = { m: m, live: live, t0: Date.now(), goals: goals, seq: 0, seqAt: Date.now(), dots: [] };
+    for (var i = 0; i < 20; i++) vid.dots.push({ side: i < 10 ? 0 : 1, bx: (i % 10) / 10, by: rnd(m.id + 'd' + i), ph: rnd(m.id + 'ph' + i) * 6 });
+    $('vtag').className = 'vtag' + (live ? ' live' : ''); $('vtag').textContent = live ? '● LIVE' : '하이라이트';
+    loop();
+  }
+  function closeVideo() { vid = null; $('video').hidden = true; view = 'detail'; renderDetail(); }
+  function loop() {
+    if (!vid) return;
+    requestAnimationFrame(loop);
+    var cv = $('vcv'), W = cv.clientWidth, H = cv.clientHeight;
+    if (cv.width !== W) { cv.width = W; cv.height = H; }
+    var x = cv.getContext('2d'), t = (Date.now() - vid.t0) / 1000, m = vid.m, HT = TEAM[m.home], AT = TEAM[m.away];
+    var st = vid.live ? stateOf(m) : { phase: 'end', clock: 90 }, s, cap = '', clock = '';
+    if (vid.live) { s = scoreOf(m, st); clock = st.label || ''; var last = events(m).filter(function (e) { return m.lg === 'soccer' ? e.kind === 'goal' && e.min <= st.clock && e.min > st.clock - 6 : e.runs && e.inn - 1 + (e.side ? 0.5 : 0) + 0.25 <= st.clock && e.inn - 1 + (e.side ? 0.5 : 0) + 0.25 > st.clock - 0.4; }).pop();
+      cap = last ? (m.lg === 'soccer' ? last.min + "' 골! " : last.inn + '회 ') + TEAM[last.side ? m.away : m.home].name + ' ' + last.who + (m.lg === 'baseball' ? (last.hr ? ' 홈런!' : ' 적시타 ' + last.runs + '점') : '') : st.ht ? '하프타임 · 잠시 쉬어요' : ''; }
+    else {
+      if (!vid.goals.length) { cap = '득점 없이 끝난 경기예요'; s = scoreOf(m, st); }
+      else {
+        if (Date.now() - vid.seqAt > 7000) { vid.seq++; vid.seqAt = Date.now(); if (vid.seq >= vid.goals.length) { closeVideo(); return; } }
+        var g = vid.goals[vid.seq];
+        var upto = { phase: 'live', clock: m.lg === 'soccer' ? g.min : g.inn - 1 + (g.side ? 0.5 : 0) + 0.3 };
+        s = scoreOf(m, upto); clock = m.lg === 'soccer' ? g.min + "'" : g.inn + '회';
+        cap = (m.lg === 'soccer' ? g.min + "' 골! " : g.inn + '회 ' + (g.hr ? '홈런! ' : '적시타 ')) + TEAM[g.side ? m.away : m.home].name + ' ' + g.who + '  (' + (vid.seq + 1) + '/' + vid.goals.length + ')';
+      }
+    }
+    // the field
+    if (m.lg === 'soccer') {
+      for (var i = 0; i < 12; i++) { x.fillStyle = i % 2 ? '#2f7d3a' : '#348a40'; x.fillRect(i * W / 12, 0, W / 12 + 1, H); }
+      x.strokeStyle = 'rgba(255,255,255,.75)'; x.lineWidth = 3;
+      var px = W * 0.06, py = H * 0.1, pw = W * 0.88, ph = H * 0.8;
+      x.strokeRect(px, py, pw, ph); x.beginPath(); x.moveTo(W / 2, py); x.lineTo(W / 2, py + ph); x.stroke();
+      x.beginPath(); x.arc(W / 2, H / 2, ph * 0.15, 0, 7); x.stroke();
+      x.strokeRect(px, H / 2 - ph * 0.22, pw * 0.13, ph * 0.44); x.strokeRect(px + pw * 0.87, H / 2 - ph * 0.22, pw * 0.13, ph * 0.44);
+      var bx = W / 2 + Math.sin(t * 0.7) * pw * 0.3 + Math.sin(t * 1.9) * pw * 0.08, by = H / 2 + Math.cos(t * 0.9) * ph * 0.25;
+      vid.dots.forEach(function (d) {
+        var hx = px + pw * (d.side ? 0.55 + d.bx * 0.4 : 0.05 + d.bx * 0.4), hy = py + ph * (0.1 + d.by * 0.8);
+        var dx = hx + (bx - hx) * 0.18 + Math.sin(t + d.ph) * 14, dy = hy + (by - hy) * 0.18 + Math.cos(t * 0.8 + d.ph) * 10;
+        x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.ellipse(dx, dy + 12, 11, 4, 0, 0, 7); x.fill();
+        x.fillStyle = d.side ? AT.c1 : HT.c1; x.beginPath(); x.arc(dx, dy, 10, 0, 7); x.fill();
+        x.strokeStyle = d.side ? AT.c2 : HT.c2; x.lineWidth = 2.5; x.stroke();
+      });
+      x.fillStyle = '#fff'; x.beginPath(); x.arc(bx, by, 7, 0, 7); x.fill();
+    } else {
+      x.fillStyle = '#2f7d3a'; x.fillRect(0, 0, W, H);
+      x.fillStyle = '#b07a48'; x.beginPath(); x.moveTo(W / 2, H * 0.92); x.lineTo(W * 0.24, H * 0.56); x.lineTo(W / 2, H * 0.2); x.lineTo(W * 0.76, H * 0.56); x.closePath(); x.fill();
+      x.fillStyle = '#348a40'; x.beginPath(); x.moveTo(W / 2, H * 0.8); x.lineTo(W * 0.36, H * 0.56); x.lineTo(W / 2, H * 0.32); x.lineTo(W * 0.64, H * 0.56); x.closePath(); x.fill();
+      [[0.5, 0.88], [0.27, 0.56], [0.5, 0.24], [0.73, 0.56]].forEach(function (b) { x.fillStyle = '#fff'; x.fillRect(W * b[0] - 9, H * b[1] - 9, 18, 18); });
+      x.fillStyle = '#c08a58'; x.beginPath(); x.arc(W / 2, H * 0.56, 22, 0, 7); x.fill();
+      var pos = [[0.5, 0.56], [0.5, 0.9], [0.66, 0.5], [0.6, 0.36], [0.4, 0.36], [0.34, 0.5], [0.2, 0.3], [0.5, 0.12], [0.8, 0.3]];
+      pos.forEach(function (q, i) { var dx = W * q[0] + Math.sin(t + i) * 4, dy = H * q[1] + Math.cos(t * 1.2 + i) * 3; x.fillStyle = AT.c1; x.beginPath(); x.arc(dx, dy, 10, 0, 7); x.fill(); x.strokeStyle = AT.c2; x.lineWidth = 2.5; x.stroke(); });
+      var pt = (t % 3) / 3; x.fillStyle = '#fff'; x.beginPath(); x.arc(W / 2, H * (0.56 + (0.88 - 0.56) * Math.min(1, pt * 1.6)), 6, 0, 7); x.fill();
+      x.fillStyle = HT.c1; x.beginPath(); x.arc(W / 2 + 26, H * 0.9, 11, 0, 7); x.fill();
+    }
+    var vg = x.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.9); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.45)'); x.fillStyle = vg; x.fillRect(0, 0, W, H);
+    $('vbug').innerHTML = '<span>' + HT.name + '</span><span class="sc">' + s[0] + ' - ' + s[1] + '</span><span>' + AT.name + '</span>' + (clock ? '<span class="tm">' + clock + '</span>' : '');
+    $('vcap').textContent = cap; $('vcap').style.opacity = cap ? 1 : 0;
+  }
+
+  // ---------- an article ----------
+  function openArticle(n) {
+    view = 'article'; $('article').hidden = false;
+    $('art').innerHTML = '<div class="k">' + esc(n.lg) + ' · Cove 스포츠</div><h2>' + esc(n.t) + '</h2><p>' + esc(n.b) + '</p>' +
+      '<p class="src">가상 리그의 기사예요. 경기 화면은 경기 목록에서 OK를 눌러 볼 수 있어요. · OK/뒤로 닫기</p>';
+  }
+  function closeArticle() { $('article').hidden = true; view = det ? 'detail' : 'home'; if (view === 'home') render(); else renderDetail(); }
+
+  CoveApp.onInit(function (profile, d, ex) {
+    who = profile || {}; data = d && typeof d === 'object' ? d : {};
+    shift = ex && ex.env && ex.env.shift || 0;
+    var it = ex && ex.intent || {};
+    // start on the league asked for, or the one that has a live game now
+    if (it.lg) lg = it.lg; else if (!matchesOn('soccer', 0).some(function (m) { return stateOf(m).phase === 'live'; }) && matchesOn('baseball', 0).some(function (m) { return stateOf(m).phase === 'live'; })) lg = 'baseball';
+    var ms = matchesOn(lg, 0), live = 0;
+    ms.forEach(function (m, i) { var p = stateOf(m).phase; if (p === 'live') live = i; });
+    sel = live || Math.max(0, ms.findIndex(function (m) { return stateOf(m).phase !== 'end'; }));
+    render();
+    if (it.live && ms[live] && stateOf(ms[live]).phase === 'live') { openDetail(ms[live]); openVideo(ms[live], true); }
+  });
+  CoveApp.onEnv(function (env) { shift = env.shift || 0; });
+  setInterval(function () { if (view === 'home') render(); else if (view === 'detail') renderDetail(); }, 5000);
+  CoveApp.onKey(function (k) {
+    if (view === 'video') { if (k === 'back' || k === 'ok') closeVideo(); return; }
+    if (view === 'article') { if (k === 'back' || k === 'ok') closeArticle(); return; }
+    if (view === 'detail') { detailKey(k); return; }
+    homeKey(k);
+  });
+})();
+</script>
+</body>
+</html>
