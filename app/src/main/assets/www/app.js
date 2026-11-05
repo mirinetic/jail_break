@@ -12,7 +12,7 @@
     ['blue-ridges', '푸른 능선'], ['golden-hour', '골든 아워'], ['night-peaks', '밤의 봉우리'], ['desert-dunes', '사막 언덕'],
     ['ocean-dusk', '해 질 녘 바다'], ['forest-fog', '안개 숲'], ['mirror-lake', '거울 호수'], ['soft-aurora', '오로라'],
     ['snowy-peaks', '눈 덮인 산'], ['city-night', '도시 야경'], ['sunny-beach', '한낮 해변'], ['autumn-forest', '가을 숲'],
-    ['milky-way', '은하수'], ['blossom-dawn', '벚꽃 새벽']
+    ['milky-way', '은하수'], ['blossom-dawn', '벚꽃 새벽'], ['dawn-sea', '여명 바다'], ['ringed-planet', '고리 행성']
   ];
   // Moving backgrounds drawn on a canvas; "base" puts the effect over a wallpaper.
   var LIVE = [['flow', '흐르는 빛', null], ['stars', '반짝이는 별', null], ['snow', '내리는 눈', 'snowy-peaks']];
@@ -777,28 +777,43 @@
   // They need no TV permission. Cove passes them the remote keys and the profile, keeps their data per
   // profile (ROOT.appdata) and counts their use; Back at their first screen returns here.
   var MINI = [
-    { pkg: 'cove.cinema', label: 'Cove 시네마', page: 'apps/cinema.html', c1: '#4c1d95', c2: '#db2777', words: ['시네마', '영화관'],
-      sym: '<rect x="44" y="56" width="104" height="80" rx="14" fill="none" stroke="#fff" stroke-width="9"/><path d="M84 76v40l34-20z" fill="#fff"/><path d="M60 40l20 16M132 40l-20 16" stroke="#fff" stroke-width="8" stroke-linecap="round"/>' },
-    { pkg: 'cove.cards', label: '짝꿍 카드', page: 'apps/cards.html', c1: '#0f766e', c2: '#22c55e', words: ['짝꿍', '카드게임', '카드놀이', '같은그림'],
-      sym: '<rect x="40" y="52" width="62" height="88" rx="12" fill="#fff" transform="rotate(-12 71 96)"/><rect x="90" y="52" width="62" height="88" rx="12" fill="#fde68a" transform="rotate(10 121 96)"/><path d="M71 84c-6-9-20-4-15 7 2 5 9 10 15 15 6-5 13-10 15-15 5-11-9-16-15-7z" fill="#ef4444" transform="rotate(-12 71 96)"/><path d="M121 78l5 11 12 1-9 8 3 12-11-6-11 6 3-12-9-8 12-1z" fill="#0f766e" transform="rotate(10 121 96)"/>' }
+    { pkg: 'cove.cinema', label: 'Cove 시네마', page: 'apps/cinema.html', c1: '#3b0764', c2: '#db2777', tag: '가상 OTT · 이어 보기', words: ['시네마', '영화관'],
+      sym: '<defs><linearGradient id="scr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#ffe1ef"/></linearGradient>' +
+        '<linearGradient id="pl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ec4899"/><stop offset="1" stop-color="#f97316"/></linearGradient></defs>' +
+        '<path d="M60 34l26 22M132 34l-26 22" stroke="#fff" stroke-width="7" stroke-linecap="round" opacity=".85"/>' +
+        '<g filter="url(#sh)"><rect x="34" y="54" width="124" height="84" rx="18" fill="url(#scr)"/><path d="M84 76v40l36-20z" fill="url(#pl)" stroke="url(#pl)" stroke-width="6" stroke-linejoin="round"/>' +
+        '<rect x="66" y="146" width="60" height="9" rx="4.5" fill="#fff" opacity=".9"/></g>' +
+        '<path d="M150 30l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill="#fff"/><circle cx="38" cy="38" r="3.5" fill="#fff" opacity=".8"/>' },
+    { pkg: 'cove.cards', label: '짝꿍 카드', page: 'apps/cards.html', c1: '#065f46', c2: '#14b8a6', tag: '같은 그림 찾기 게임', words: ['짝꿍', '카드게임', '카드놀이', '같은그림'],
+      sym: '<defs><pattern id="pt" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="10" fill="#fbbf24"/><rect x="5" width="5" height="10" fill="#f59e0b"/></pattern>' +
+        '<linearGradient id="hr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fb7185"/><stop offset="1" stop-color="#e11d48"/></linearGradient></defs>' +
+        '<g filter="url(#sh)" transform="rotate(-14 76 100)"><rect x="42" y="50" width="68" height="96" rx="14" fill="#fff"/><rect x="50" y="58" width="52" height="80" rx="9" fill="url(#pt)"/></g>' +
+        '<g filter="url(#sh)" transform="rotate(10 120 100)"><rect x="86" y="50" width="68" height="96" rx="14" fill="#fff"/>' +
+        '<path d="M120 122c-14-10-22-17-22-27a11 11 0 0 1 22-3 11 11 0 0 1 22 3c0 10-8 17-22 27z" fill="url(#hr)"/></g>' +
+        '<path d="M44 34l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill="#fff"/><path d="M160 150l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#fff" opacity=".85"/>' }
   ];
   // Calendar and memo are Cove's own screens, shown as app tiles too. Their pictures are drawn live:
   // today's date and the next event, the newest memo and how many there are.
-  MINI.push({ pkg: 'cove.calendar', label: '일정', screen: 'cal', c1: '#1e3a8a', c2: '#0284c7' },
-            { pkg: 'cove.memo', label: '메모', screen: 'memo', c1: '#a16207', c2: '#f59e0b' });
+  MINI.push({ pkg: 'cove.calendar', label: '일정', screen: 'cal', c1: '#1e3a8a', c2: '#0ea5e9' },
+            { pkg: 'cove.memo', label: '메모', screen: 'memo', c1: '#b45309', c2: '#fbbf24' });
   function xesc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]; }); }
   function cut(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+  var FONT = 'font-family="Noto Sans KR, Roboto, sans-serif"';
   function liveSym(m) {
     var now = NOW();
     if (m.screen === 'cal') {
-      return '<rect x="36" y="40" width="120" height="116" rx="20" fill="#fff"/><path d="M36 60a20 20 0 0 1 20-20h80a20 20 0 0 1 20 20v14H36z" fill="#ef4444"/>' +
-        '<text x="96" y="66" font-family="sans-serif" font-weight="700" font-size="20" fill="#fff" text-anchor="middle">' + '일월화수목금토'.charAt(now.getDay()) + '요일</text>' +
-        '<text x="96" y="136" font-family="sans-serif" font-weight="800" font-size="62" fill="#1f2937" text-anchor="middle">' + now.getDate() + '</text>';
+      return '<defs><linearGradient id="hd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f87171"/><stop offset="1" stop-color="#dc2626"/></linearGradient></defs>' +
+        '<g filter="url(#sh)"><rect x="38" y="42" width="116" height="116" rx="24" fill="#fff"/><path d="M38 66a24 24 0 0 1 24-24h68a24 24 0 0 1 24 24v12H38z" fill="url(#hd)"/></g>' +
+        '<rect x="66" y="32" width="10" height="22" rx="5" fill="#1e293b"/><rect x="116" y="32" width="10" height="22" rx="5" fill="#1e293b"/>' +
+        '<text x="96" y="71" ' + FONT + ' font-weight="700" font-size="17" fill="#fff" text-anchor="middle">' + '일월화수목금토'.charAt(now.getDay()) + '요일</text>' +
+        '<text x="96" y="140" ' + FONT + ' font-weight="800" font-size="58" fill="#1f2937" text-anchor="middle">' + now.getDate() + '</text>';
     }
     var n = activeMemos().length;
-    return '<path d="M44 40h104v84l-32 32H44z" fill="#fef08a"/><path d="M116 156v-32h32z" fill="#facc15"/>' +
-      '<path d="M62 74h68M62 96h52M62 118h36" stroke="#a16207" stroke-width="8" stroke-linecap="round"/>' +
-      (n ? '<circle cx="146" cy="46" r="24" fill="#ef4444"/><text x="146" y="55" font-family="sans-serif" font-weight="800" font-size="' + (n > 9 ? 22 : 26) + '" fill="#fff" text-anchor="middle">' + (n > 99 ? '99' : n) + '</text>' : '');
+    return '<defs><linearGradient id="nt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff9c4"/><stop offset="1" stop-color="#fde047"/></linearGradient></defs>' +
+      '<g filter="url(#sh)" transform="rotate(-4 96 100)"><path d="M44 42h106v82l-34 34H44z" fill="url(#nt)"/><path d="M116 158v-26a8 8 0 0 1 8-8h26z" fill="#facc15"/>' +
+      '<path d="M62 78h70M62 100h56M62 122h38" stroke="#a16207" stroke-width="7" stroke-linecap="round" opacity=".75"/></g>' +
+      '<circle cx="96" cy="44" r="10" fill="#ef4444"/><circle cx="93" cy="41" r="3" fill="#fff" opacity=".7"/>' +
+      (n ? '<g filter="url(#sh)"><circle cx="150" cy="44" r="22" fill="#ef4444"/></g><text x="150" y="52" ' + FONT + ' font-weight="800" font-size="' + (n > 9 ? 20 : 24) + '" fill="#fff" text-anchor="middle">' + (n > 99 ? '99' : n) + '</text>' : '');
   }
   function liveText(m) {
     var now = NOW();
@@ -811,21 +826,23 @@
     var list = activeMemos();
     return ['메모', list.length ? '메모 ' + list.length + '개' : '새 메모가 없어요', list.length ? cut(list[0].text.split('\n')[0], 13) : ''];
   }
+  // Tile pictures: a gradient with a soft light from the top left, a drop-shadowed symbol, and on the
+  // banner the name with a short line of what it is (or what it shows right now).
   function miniSvg(m, w, h) {
-    var sq = w === h;
+    var sq = w === h, sym = m.screen ? liveSym(m) : m.sym;
+    var t = m.screen ? liveText(m) : [m.label, m.tag, ''];
     var s = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
-      '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + m.c1 + '"/><stop offset="1" stop-color="' + m.c2 + '"/></linearGradient></defs>' +
-      '<rect width="' + w + '" height="' + h + '" rx="' + (sq ? 40 : 0) + '" fill="url(#g)"/>' +
-      (m.screen ? liveArt(m, sq) : sq ? m.sym : '<g transform="translate(36 84)">' + m.sym + '</g><text x="246" y="196" font-family="sans-serif" font-weight="800" font-size="50" fill="#fff">' + m.label + '</text>') + '</svg>';
+      '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + m.c1 + '"/><stop offset="1" stop-color="' + m.c2 + '"/></linearGradient>' +
+      '<radialGradient id="lt" cx=".2" cy=".1" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".32"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient>' +
+      '<filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000" flood-opacity=".28"/></filter></defs>' +
+      '<rect width="' + w + '" height="' + h + '" rx="' + (sq ? 42 : 0) + '" fill="url(#g)"/><rect width="' + w + '" height="' + h + '" rx="' + (sq ? 42 : 0) + '" fill="url(#lt)"/>' +
+      (sq ? sym
+        : '<circle cx="590" cy="40" r="150" fill="#fff" opacity=".06"/><circle cx="640" cy="330" r="120" fill="#fff" opacity=".05"/>' +
+          '<g transform="translate(26 50) scale(1.35)">' + sym + '</g>' +
+          '<text x="312" y="' + (t[2] ? 150 : 172) + '" ' + FONT + ' font-weight="800" font-size="50" fill="#fff">' + xesc(t[0]) + '</text>' +
+          '<text x="314" y="' + (t[2] ? 204 : 222) + '" ' + FONT + ' font-weight="600" font-size="28" fill="#fff" opacity=".9">' + xesc(t[1]) + '</text>' +
+          (t[2] ? '<text x="314" y="248" ' + FONT + ' font-size="26" fill="#fff" opacity=".82">' + xesc(t[2]) + '</text>' : '')) + '</svg>';
     return 'data:image/svg+xml,' + encodeURIComponent(s);
-  }
-  function liveArt(m, sq) {
-    if (sq) return liveSym(m);
-    var t = liveText(m);
-    return '<g transform="translate(28 84)">' + liveSym(m) + '</g>' +
-      '<text x="240" y="138" font-family="sans-serif" font-weight="800" font-size="44" fill="#fff">' + xesc(t[0]) + '</text>' +
-      '<text x="240" y="198" font-family="sans-serif" font-weight="700" font-size="30" fill="#fff" opacity=".92">' + xesc(t[1]) + '</text>' +
-      '<text x="240" y="244" font-family="sans-serif" font-size="28" fill="#fff" opacity=".85">' + xesc(t[2]) + '</text>';
   }
   // Redraws the calendar and memo tiles when what they show has changed.
   function refreshLive() {

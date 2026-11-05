@@ -3,161 +3,219 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#0e1118">
+<meta name="theme-color" content="#0b0f1d">
 <title>Cove 리모컨</title>
 <style>
-  :root { --bg:#0e1118; --pad:#191e2a; --key:#232a3a; --key-on:#33405a; --ink:#eef1f7; --dim:#8d96aa; --accent:#9cc2ff; color-scheme:dark; }
+  :root { --bg:#0b0f1d; --card:#141a2c; --card2:#1b2238; --line:#262f4a; --key:#212a44; --key-on:#2e3a5e; --ink:#eef1f8; --dim:#8f98b0;
+          --accent:#7fb2ff; --accent2:#a78bfa; --grad:linear-gradient(135deg,#5b8cff,#a78bfa); color-scheme:dark; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   [hidden] { display:none !important; }
   html,body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system, "Apple SD Gothic Neo", "Noto Sans KR", Roboto, sans-serif; }
-  body { padding:max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
-         min-height:100vh; display:flex; flex-direction:column; gap:22px; max-width:460px; margin:0 auto; user-select:none; -webkit-user-select:none; }
-  header { display:flex; justify-content:space-between; align-items:center; }
-  header b { font-size:20px; letter-spacing:.02em; }
-  header span { font-size:13px; color:var(--dim); display:flex; align-items:center; gap:6px; }
-  header i { width:8px; height:8px; border-radius:50%; background:#5fd39a; display:inline-block; }
-  header.off i { background:#f08a8a; }
-  button { font:inherit; color:inherit; border:0; background:var(--key); border-radius:16px; padding:14px 10px; touch-action:manipulation; transition:background .1s, transform .1s; }
-  button:active, button.on { background:var(--key-on); transform:scale(.97); }
-  .pad { position:relative; width:min(78vw, 320px); aspect-ratio:1; margin:6px auto 0; border-radius:50%; background:var(--pad); }
-  .pad button { position:absolute; background:transparent; border-radius:50%; width:34%; height:34%; font-size:26px; color:var(--dim); }
-  .pad button:active { background:rgba(255,255,255,.06); }
-  .pad .up { top:2%; left:33%; } .pad .down { bottom:2%; left:33%; } .pad .left { left:2%; top:33%; } .pad .right { right:2%; top:33%; }
-  .pad .ok { left:30%; top:30%; width:40%; height:40%; background:var(--key); color:var(--ink); font-size:18px; font-weight:600; }
-  .row { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
-  .row.two { grid-template-columns:1fr 1fr; }
-  .row.four { grid-template-columns:repeat(4, 1fr); }
-  .row.four button { font-size:14px; padding:14px 4px; }
-  h2 { margin:8px 0 -8px; font-size:13px; font-weight:600; color:var(--dim); letter-spacing:.08em; }
-  .wide { width:100%; background:var(--accent); color:#0c1220; font-weight:600; }
-  .note { font-size:13px; color:var(--dim); line-height:1.5; margin:0; }
-  #msg { position:fixed; left:50%; bottom:max(24px, env(safe-area-inset-bottom)); transform:translateX(-50%); background:#222a3b; padding:10px 16px; border-radius:20px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; }
-  #msg.on { opacity:1; }
-  .pairing { margin:auto 0; text-align:center; display:grid; gap:10px; }
-  .pairing b { font-size:20px; }
-  .say { display:grid; grid-template-columns:1fr auto; gap:8px; }
-  .say input { font:inherit; font-size:16px; color:var(--ink); background:var(--pad); border:1px solid #2c3446; border-radius:14px; padding:14px; min-width:0; }
-  .say button { background:var(--accent); color:#0c1220; font-weight:600; padding:14px 18px; }
-  .chips { display:flex; flex-wrap:wrap; gap:8px; }
-  .chips button { padding:10px 14px; border-radius:20px; display:flex; align-items:center; gap:8px; }
-  .chips i { width:12px; height:12px; border-radius:50%; display:inline-block; }
-  .chips button.cur { outline:2px solid var(--accent); }
-  .eg { font-size:12px; color:var(--dim); line-height:1.6; margin:0; }
-  .voice { display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:center; }
-  .mic { width:58px; height:58px; border-radius:50%; background:var(--accent); color:#0c1220; padding:0; display:grid; place-items:center; }
+  body { min-height:100vh; max-width:480px; margin:0 auto; user-select:none; -webkit-user-select:none;
+         background:radial-gradient(120% 60% at 50% -10%, #1f2b5c 0%, rgba(11,15,29,0) 60%), var(--bg); }
+  button { font:inherit; color:inherit; border:0; background:var(--key); border-radius:16px; padding:14px 10px; touch-action:manipulation; transition:background .12s, transform .12s; }
+  button:active, button.on { background:var(--key-on); transform:scale(.96); }
+  svg.ic { width:22px; height:22px; flex:none; }
+
+  /* header */
+  header { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:10px; padding:max(14px, env(safe-area-inset-top)) 18px 12px;
+           background:linear-gradient(180deg, rgba(11,15,29,.96) 70%, rgba(11,15,29,0)); }
+  header .logo { width:34px; height:34px; border-radius:10px; flex:none; box-shadow:0 4px 14px rgba(40,60,160,.45); }
+  header b { font-size:19px; letter-spacing:.01em; }
+  header .st { margin-left:auto; font-size:12.5px; color:var(--dim); display:flex; align-items:center; gap:6px; padding:6px 10px; border-radius:20px; background:rgba(255,255,255,.05); }
+  header .st i { width:8px; height:8px; border-radius:50%; background:#5fd39a; box-shadow:0 0 0 3px rgba(95,211,154,.18); }
+  header.off .st i { background:#f08a8a; box-shadow:0 0 0 3px rgba(240,138,138,.18); }
+
+  main { padding:4px 18px calc(96px + env(safe-area-inset-bottom)); display:grid; gap:18px; }
+  section.tab { display:grid; gap:16px; animation:in .2s ease; }
+  @keyframes in { from { opacity:0; transform:translateY(6px); } }
+  h2 { margin:6px 2px -6px; font-size:12.5px; font-weight:700; color:var(--dim); letter-spacing:.1em; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:16px; display:grid; gap:12px; }
+
+  /* voice */
+  .voice { display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:center; padding:10px; border-radius:24px; background:var(--card); border:1px solid var(--line); }
+  .mic { width:54px; height:54px; border-radius:18px; background:var(--grad); color:#fff; padding:0; display:grid; place-items:center; box-shadow:0 6px 18px rgba(110,120,255,.35); }
   .mic svg { width:26px; height:26px; }
-  .mic.live { background:#ff7a8a; animation:pulse 1.2s ease-in-out infinite; }
-  @keyframes pulse { 50% { box-shadow:0 0 0 10px rgba(255,122,138,.18); } }
-  .listen { display:flex; align-items:center; gap:10px; background:#2a1f2a; border:1px solid #5a3446; border-radius:14px; padding:12px 14px; margin-top:10px; }
+  .mic.live { background:linear-gradient(135deg,#ff7a8a,#ff9f6b); animation:pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow:0 0 0 12px rgba(255,122,138,.18); } }
+  .say { display:grid; grid-template-columns:1fr auto; gap:8px; }
+  .say input { font:inherit; font-size:16px; color:var(--ink); background:transparent; border:0; padding:12px 4px; min-width:0; outline:none; }
+  .say button { background:var(--key); color:var(--accent); font-weight:700; padding:12px 14px; border-radius:14px; }
+  .listen { display:flex; align-items:center; gap:10px; background:#2a1f2e; border:1px solid #5a3446; border-radius:16px; padding:12px 14px; }
   .listen span { flex:1; font-size:15px; min-width:0; }
   .listen button { padding:8px 14px; font-size:14px; }
-  .hint { margin-top:10px; font-size:14px; line-height:1.5; background:#1d2638; border:1px solid #33405a; border-radius:14px; padding:12px 14px; }
+  .hint { font-size:14px; line-height:1.5; background:#1a2340; border:1px solid #33405a; border-radius:16px; padding:12px 14px; }
   .hint b { color:var(--accent); }
-  .guide { margin-top:12px; background:#151b27; border:1px solid #2c3446; border-radius:18px; padding:16px; display:grid; gap:12px; }
-  .guide > b { font-size:16px; }
-  .guide p { margin:0; font-size:13px; color:var(--dim); line-height:1.55; }
-  .guide ol { margin:0; padding-left:20px; display:grid; gap:12px; font-size:14px; line-height:1.5; }
-  .guide li b { color:var(--ink); }
-  .guide code { display:block; margin-top:6px; padding:8px 10px; background:#0b0f17; border-radius:10px; font-size:13px; color:#cfe0ff; word-break:break-all; user-select:text; -webkit-user-select:text; }
-  .guide .cp { margin-top:6px; padding:8px 12px; font-size:13px; background:#26314a; color:var(--accent); border-radius:10px; }
-  .guide .acts { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  .guide .acts button { font-size:14px; padding:12px 8px; }
-  .guide .acts .go { background:var(--accent); color:#0c1220; font-weight:600; }
-  .card { background:#151b27; border:1px solid #2c3446; border-radius:16px; padding:14px; display:grid; gap:10px; }
-  .card label { font-size:12px; color:var(--dim); display:grid; gap:4px; }
-  .card input, .card select { font:inherit; font-size:16px; color:var(--ink); background:var(--pad); border:1px solid #2c3446; border-radius:12px; padding:11px 12px; min-width:0; width:100%; color-scheme:dark; }
-  .card .two { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  .card .go { background:var(--accent); color:#0c1220; font-weight:600; }
+  .eg { font-size:12.5px; color:var(--dim); line-height:1.6; margin:0; }
+  .linkish { background:none; padding:2px 0; color:var(--accent); font-size:13px; text-decoration:underline; justify-self:start; }
+
+  /* D-pad */
+  .padwrap { display:grid; place-items:center; padding:6px 0 2px; }
+  .pad { position:relative; width:min(76vw, 300px); aspect-ratio:1; border-radius:50%;
+         background:radial-gradient(circle at 50% 35%, #27304e, #161c30 70%); box-shadow:inset 0 2px 0 rgba(255,255,255,.06), 0 18px 40px rgba(0,0,0,.45), 0 0 0 1px var(--line); }
+  .pad::after { content:""; position:absolute; inset:14%; border-radius:50%; border:1px dashed rgba(255,255,255,.06); pointer-events:none; }
+  .pad button { position:absolute; background:transparent; border-radius:50%; width:32%; height:32%; color:#c6cee3; padding:0; display:grid; place-items:center; }
+  .pad button svg { width:26px; height:26px; }
+  .pad button:active { background:rgba(255,255,255,.07); }
+  .pad .up { top:3%; left:34%; } .pad .down { bottom:3%; left:34%; } .pad .left { left:3%; top:34%; } .pad .right { right:3%; top:34%; }
+  .pad .ok { left:31%; top:31%; width:38%; height:38%; z-index:1; background:var(--grad); color:#fff; font-size:19px; font-weight:800; letter-spacing:.04em;
+             box-shadow:0 8px 24px rgba(110,120,255,.45), inset 0 2px 0 rgba(255,255,255,.25); }
+  .pad .ok:active { transform:scale(.94); }
+  .keys3 { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+  .keys3 button { display:flex; flex-direction:column; align-items:center; gap:6px; font-size:13px; padding:14px 6px; border-radius:18px; background:var(--card2); border:1px solid var(--line); }
+  .quick { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+  .quick button { display:flex; flex-direction:column; align-items:center; gap:8px; font-size:13px; padding:16px 6px; border-radius:20px; background:var(--card); border:1px solid var(--line); }
+  .quick button span { width:40px; height:40px; border-radius:13px; display:grid; place-items:center; }
+  .quick button span svg { width:22px; height:22px; }
+
+  /* profiles, designs */
+  .profiles { display:flex; gap:12px; overflow-x:auto; padding:4px 2px 8px; scrollbar-width:none; }
+  .profiles::-webkit-scrollbar { display:none; }
+  .profiles button { flex:none; width:76px; background:none; padding:0; display:grid; justify-items:center; gap:6px; font-size:13px; }
+  .profiles .av { width:60px; height:60px; border-radius:50%; display:grid; place-items:center; font-size:26px; font-weight:700; color:#fff; box-shadow:inset 0 0 0 2px rgba(255,255,255,.3); }
+  .profiles button.cur .av { box-shadow:0 0 0 3px var(--bg), 0 0 0 5px var(--accent); }
+  .profiles button.cur { color:var(--accent); font-weight:700; }
+  .designs { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; }
+  .designs button { height:74px; border-radius:18px; text-align:left; padding:12px 14px; display:flex; flex-direction:column; justify-content:flex-end; font-weight:700; font-size:15px;
+                    position:relative; overflow:hidden; border:1px solid rgba(255,255,255,.08); }
+  .designs button small { font-weight:400; font-size:11.5px; opacity:.8; }
+  .designs button::before { content:""; position:absolute; inset:0; background:var(--dz); opacity:.9; z-index:-1; }
+  .designs button { isolation:isolate; background:transparent; }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .row2 button { display:flex; align-items:center; justify-content:center; gap:8px; }
+  .wide { width:100%; background:var(--grad); color:#fff; font-weight:700; padding:15px; border-radius:16px; }
+  .note { font-size:12.5px; color:var(--dim); line-height:1.5; margin:0; }
+
+  /* forms and lists */
+  .card label { font-size:12px; color:var(--dim); display:grid; gap:5px; }
+  .card input, .card select { font:inherit; font-size:16px; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:12px; padding:12px; min-width:0; width:100%; color-scheme:dark; }
+  .card .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .card .go { background:var(--grad); color:#fff; font-weight:700; }
+  .card > b { font-size:15px; }
   .list { display:grid; gap:8px; }
-  .item { display:flex; align-items:center; gap:10px; background:#151b27; border:1px solid #232b3b; border-radius:12px; padding:10px 12px; }
+  .item { display:flex; align-items:center; gap:12px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:12px 14px; }
   .item div { flex:1; min-width:0; }
-  .item b { display:block; font-size:15px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .item b { display:block; font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .item span { font-size:12px; color:var(--dim); }
-  .item button { padding:8px 12px; font-size:13px; }
+  .item button { padding:8px 12px; font-size:13px; border-radius:12px; }
   .item i { width:10px; height:10px; border-radius:50%; flex:none; }
   details.how { font-size:13px; color:var(--dim); line-height:1.6; }
   details.how summary { color:var(--accent); cursor:pointer; padding:4px 0; }
   details.how ol { margin:6px 0 0; padding-left:18px; display:grid; gap:6px; }
   details.how b { color:var(--ink); }
-  .memo-in { font:inherit; font-size:16px; color:#1d1a12; background:#ffe58a; border:0; border-radius:12px; padding:12px; min-height:90px; resize:vertical; width:100%; }
-  .swatches { display:flex; gap:10px; }
-  .swatches button { width:34px; height:34px; border-radius:50%; padding:0; border:2px solid transparent; }
+  .memo-in { font:inherit; font-size:16px; color:#1d1a12; background:linear-gradient(160deg,#fff3a6,#ffe066); border:0; border-radius:14px; padding:14px; min-height:100px; resize:vertical; width:100%;
+             box-shadow:0 8px 20px rgba(0,0,0,.25); transform:rotate(-.6deg); }
+  .swatches { display:flex; gap:12px; }
+  .swatches button { width:34px; height:34px; border-radius:50%; padding:0; border:2px solid transparent; box-shadow:0 2px 6px rgba(0,0,0,.3); }
   .swatches button.on { border-color:#fff; }
-  .mnote { background:var(--c,#ffe58a); color:#1d1a12; border-radius:12px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; }
+  .mnote { background:var(--c,#ffe58a); color:#1d1a12; border-radius:14px; padding:12px 14px; display:flex; gap:10px; align-items:flex-start; box-shadow:0 6px 16px rgba(0,0,0,.25); }
   .mnote div { flex:1; min-width:0; white-space:pre-wrap; word-break:keep-all; font-size:15px; }
   .mnote small { display:block; font-size:12px; opacity:.6; margin-top:4px; }
   .mnote button { background:rgba(0,0,0,.12); color:#1d1a12; padding:6px 10px; font-size:13px; }
-  .linkish { background:none; padding:4px 0; color:var(--accent); font-size:13px; text-decoration:underline; justify-self:start; }
+
+  /* voice guide */
+  .guide { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:16px; display:grid; gap:12px; }
+  .guide > b { font-size:16px; }
+  .guide p { margin:0; font-size:13px; color:var(--dim); line-height:1.55; }
+  .guide ol { margin:0; padding-left:20px; display:grid; gap:12px; font-size:14px; line-height:1.5; }
+  .guide li b { color:var(--ink); }
+  .guide code { display:block; margin-top:6px; padding:8px 10px; background:#090c16; border-radius:10px; font-size:13px; color:#cfe0ff; word-break:break-all; user-select:text; -webkit-user-select:text; }
+  .guide .cp { margin-top:6px; padding:8px 12px; font-size:13px; background:#26314a; color:var(--accent); border-radius:10px; }
+  .guide .acts { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .guide .acts button { font-size:14px; padding:12px 8px; }
+  .guide .acts .go { background:var(--grad); color:#fff; font-weight:700; }
+
+  /* tab bar */
+  nav.tabs { position:fixed; left:50%; transform:translateX(-50%); bottom:max(12px, env(safe-area-inset-bottom)); z-index:6; width:min(calc(100% - 24px), 456px);
+             display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; padding:6px; border-radius:24px; background:rgba(20,26,44,.86); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+             border:1px solid var(--line); box-shadow:0 12px 30px rgba(0,0,0,.45); }
+  nav.tabs button { background:none; padding:8px 4px 7px; border-radius:18px; display:grid; justify-items:center; gap:3px; font-size:11.5px; color:var(--dim); }
+  nav.tabs button svg { width:22px; height:22px; }
+  nav.tabs button.cur { background:rgba(127,178,255,.14); color:var(--ink); }
+  nav.tabs button.cur svg { color:var(--accent); }
+
+  #msg { position:fixed; left:50%; bottom:calc(92px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:#26304a; padding:10px 16px; border-radius:20px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:7; max-width:90vw; text-align:center; }
+  #msg.on { opacity:1; }
+  .pairing { min-height:70vh; display:grid; place-content:center; text-align:center; gap:12px; padding:24px; }
+  .pairing img { width:84px; height:84px; margin:0 auto; border-radius:24px; }
+  .pairing b { font-size:20px; }
 </style>
 </head>
 <body>
-<header id="head"><b>Cove</b><span><i></i><em id="status" style="font-style:normal">TV에 연결됨</em></span></header>
+<header id="head"><img class="logo" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj4KICA8IS0tIENvdmU6IGEgc2hlbHRlcmVkIGJheSAodGhlIEMpIGhvbGRpbmcgdGhlIHJpc2luZyBzdW4gb3ZlciBjYWxtIHdhdGVyIC0tPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzFiMWY1ZSIvPjxzdG9wIG9mZnNldD0iLjU1IiBzdG9wLWNvbG9yPSIjMmEzZjllIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMGU5ZmIzIi8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ibHQiIGN4PSIuMjIiIGN5PSIuMTIiIHI9Ii45Ij48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmZmYiIHN0b3Atb3BhY2l0eT0iLjI4Ii8+PHN0b3Agb2Zmc2V0PSIuNiIgc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIwIi8+PC9yYWRpYWxHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ic3VuIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZmZlMDhhIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmY3YTU5Ii8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0iZ2xvdyIgY3g9Ii41IiBjeT0iLjUiIHI9Ii41Ij48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmZmI4NmIiIHN0b3Atb3BhY2l0eT0iLjU1Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZiODZiIiBzdG9wLW9wYWNpdHk9IjAiLz48L3JhZGlhbEdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJjIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZmZmZmZmIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjY2ZlOWZmIi8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxjbGlwUGF0aCBpZD0iaW4iPjxjaXJjbGUgY3g9IjI2MiIgY3k9IjI2MiIgcj0iMTE4Ii8+PC9jbGlwUGF0aD4KICAgIDxmaWx0ZXIgaWQ9InNoIiB4PSItMjAlIiB5PSItMjAlIiB3aWR0aD0iMTQwJSIgaGVpZ2h0PSIxNDAlIj48ZmVEcm9wU2hhZG93IGR4PSIwIiBkeT0iMTAiIHN0ZERldmlhdGlvbj0iMTIiIGZsb29kLWNvbG9yPSIjMDYwYTJhIiBmbG9vZC1vcGFjaXR5PSIuNDUiLz48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSIxMTYiIGZpbGw9InVybCgjYmcpIi8+CiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSIxMTYiIGZpbGw9InVybCgjbHQpIi8+CiAgPGNpcmNsZSBjeD0iMjc2IiBjeT0iMjUwIiByPSIxNTAiIGZpbGw9InVybCgjZ2xvdykiLz4KICA8ZyBjbGlwLXBhdGg9InVybCgjaW4pIj4KICAgIDxjaXJjbGUgY3g9IjI3OCIgY3k9IjI3MCIgcj0iNjIiIGZpbGw9InVybCgjc3VuKSIvPgogICAgPHJlY3QgeD0iMTIwIiB5PSIyODIiIHdpZHRoPSIyOTAiIGhlaWdodD0iMTQwIiBmaWxsPSIjMTIzYThhIiBvcGFjaXR5PSIuOTIiLz4KICAgIDxwYXRoIGQ9Ik0xNDAgMzAwYzMwLTEyIDYwLTEyIDkwIDBzNjAgMTIgOTAgMCA2MC0xMiA5MCAwIiBmaWxsPSJub25lIiBzdHJva2U9IiM4ZmQzZmYiIHN0cm9rZS13aWR0aD0iMTAiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iLjkiLz4KICAgIDxwYXRoIGQ9Ik0xNTAgMzM2YzI2LTEwIDUyLTEwIDc4IDBzNTIgMTAgNzggMCA1Mi0xMCA3OCAwIiBmaWxsPSJub25lIiBzdHJva2U9IiM4ZmQzZmYiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIuNTUiLz4KICAgIDxwYXRoIGQ9Ik0yMzggMjk2aDgwIiBzdHJva2U9IiNmZmQ1OWEiIHN0cm9rZS13aWR0aD0iOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIuODUiLz4KICA8L2c+CiAgPGcgZmlsdGVyPSJ1cmwoI3NoKSI+CiAgICA8cGF0aCBkPSJNMzYyIDE2MEExNDIgMTQyIDAgMSAwIDM2MiAzNjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCNjKSIgc3Ryb2tlLXdpZHRoPSI0NiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPgogIDxwYXRoIGQ9Ik0zOTYgMTIwbDcgMTggMTggNy0xOCA3LTcgMTgtNy0xOC0xOC03IDE4LTd6IiBmaWxsPSIjZmZmIiBvcGFjaXR5PSIuOSIvPgo8L3N2Zz4K" alt=""><b>Cove</b><span class="st"><i></i><em id="status" style="font-style:normal">TV에 연결됨</em></span></header>
 
-<div id="main">
-  <div class="voice">
-    <button id="mic" class="mic" aria-label="음성으로 말하기">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-    </button>
-    <div class="say">
-      <input id="sayText" type="text" enterkeyhint="send" autocomplete="off" placeholder="말하거나 입력하세요">
-      <button id="sayBtn">보내기</button>
+<main id="main">
+  <!-- remote -->
+  <section class="tab" data-tab="remote">
+    <div class="voice">
+      <button id="mic" class="mic" aria-label="음성으로 말하기">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <div class="say">
+        <input id="sayText" type="text" enterkeyhint="send" autocomplete="off" placeholder="말하거나 입력하세요">
+        <button id="sayBtn">보내기</button>
+      </div>
     </div>
-  </div>
-  <div id="listen" class="listen" hidden><span id="listenText">듣고 있어요… 말해 보세요</span><button id="listenStop">그만</button></div>
-  <div id="kbHint" class="hint" hidden></div>
-  <p class="eg" style="margin-top:8px">예: "넷플릭스 틀어줘", "미니멀로 바꿔", "배경 다음", "엄마 프로필", "유튜브 홈에서 빼줘"</p>
-  <button id="guideOpen" class="linkish" hidden>마이크 버튼 한 번으로 말하기 설정하기</button>
-  <div id="guide" class="guide" hidden></div>
+    <div id="listen" class="listen" hidden><span id="listenText">듣고 있어요… 말해 보세요</span><button id="listenStop">그만</button></div>
+    <div id="kbHint" class="hint" hidden></div>
+    <p class="eg">"넷플릭스 틀어줘", "미니멀로 바꿔", "배경 다음", "엄마 프로필". TV에 글자 입력창이 떠 있으면 여기 쓴 글이 그대로 들어가요.</p>
+    <button id="guideOpen" class="linkish" hidden>마이크 버튼 한 번으로 말하기 설정하기</button>
+    <div id="guide" class="guide" hidden></div>
 
-  <div class="pad" style="margin-top:18px">
-    <button class="up" data-key="up" aria-label="위">▲</button>
-    <button class="left" data-key="left" aria-label="왼쪽">◀</button>
-    <button class="ok" data-key="ok" aria-label="OK, 길게 누르면 메뉴">OK</button>
-    <button class="right" data-key="right" aria-label="오른쪽">▶</button>
-    <button class="down" data-key="down" aria-label="아래">▼</button>
-  </div>
-  <p class="eg" style="text-align:center;margin-top:8px">OK를 길게 누르면 앱 메뉴(홈에서 빼기, 옮기기, 삭제)가 열려요</p>
-  <div class="row" style="margin-top:14px">
-    <button data-key="back">뒤로</button>
-    <button data-cmd="home">홈</button>
-    <button data-cmd="panel:drawer">모든 앱</button>
-  </div>
-  <div class="row four" style="margin-top:10px">
-    <button data-cmd="panel:calendar">일정</button>
-    <button data-cmd="panel:memo">메모</button>
-    <button data-cmd="panel:me">나의 프로필</button>
-    <button data-cmd="panel:look">꾸미기</button>
-    <button data-cmd="panel:settings">설정</button>
-  </div>
+    <div class="padwrap"><div class="pad">
+      <button class="up" data-key="up" aria-label="위"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="left" data-key="left" aria-label="왼쪽"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="ok" data-key="ok" aria-label="OK, 길게 누르면 메뉴">OK</button>
+      <button class="right" data-key="right" aria-label="오른쪽"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="down" data-key="down" aria-label="아래"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div></div>
+    <p class="eg" style="text-align:center;margin-top:-6px">OK를 길게 누르면 앱 메뉴가 열려요</p>
+    <div class="keys3">
+      <button data-key="back"><svg class="ic" viewBox="0 0 24 24"><path d="M10 6L4 12l6 6M4 12h11a5 5 0 0 1 0 10h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>뒤로</button>
+      <button data-cmd="home"><svg class="ic" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>홈</button>
+      <button data-cmd="panel:drawer"><svg class="ic" viewBox="0 0 24 24"><g fill="currentColor"><rect x="4" y="4" width="6" height="6" rx="1.6"/><rect x="14" y="4" width="6" height="6" rx="1.6"/><rect x="4" y="14" width="6" height="6" rx="1.6"/><rect x="14" y="14" width="6" height="6" rx="1.6"/></g></svg>모든 앱</button>
+    </div>
+    <h2>바로 가기</h2>
+    <div class="quick">
+      <button data-cmd="panel:profiles"><span style="background:linear-gradient(135deg,#6d8bff,#a78bfa)"><svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="4" fill="#fff"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0" fill="#fff"/></svg></span>프로필</button>
+      <button data-cmd="panel:me"><span style="background:linear-gradient(135deg,#f472b6,#fb923c)"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="#fff"/></svg></span>나의 프로필</button>
+      <button data-cmd="panel:calendar"><span style="background:linear-gradient(135deg,#3b82f6,#0ea5e9)"><svg viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14.5" rx="3" fill="#fff"/><rect x="4" y="5.5" width="16" height="5" rx="2" fill="#fecaca"/></svg></span>일정</button>
+      <button data-cmd="panel:memo"><span style="background:linear-gradient(135deg,#f59e0b,#fbbf24)"><svg viewBox="0 0 24 24"><path d="M5 4h14v11l-5 5H5z" fill="#fff"/><path d="M14 20v-5h5" fill="#fde68a"/></svg></span>메모</button>
+      <button data-cmd="panel:look"><span style="background:linear-gradient(135deg,#14b8a6,#22c55e)"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0 0 18c1.1 0 1.7-.8 1.7-1.6 0-.9-.8-1.3-.8-2.1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3Z" fill="#fff"/></svg></span>꾸미기</button>
+      <button data-cmd="panel:settings"><span style="background:linear-gradient(135deg,#64748b,#94a3b8)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="#fff" stroke-width="2.2"/><path d="M12 2.8v3M12 18.2v3M21.2 12h-3M5.8 12h-3M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1M18.5 18.5l-2.1-2.1M7.6 7.6 5.5 5.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg></span>설정</button>
+    </div>
+  </section>
 
-  <h2>프로필</h2>
-  <div class="chips" id="profiles" style="margin-top:18px"><span class="eg">불러오는 중…</span></div>
-
-  <h2>디자인</h2>
-  <div class="row four" style="margin-top:18px">
-    <button data-cmd="design:glass">Glass</button>
-    <button data-cmd="design:icons">Icons</button>
-    <button data-cmd="design:minimal">Minimal</button>
-    <button data-cmd="design:theater">Theater</button>
-  </div>
-  <div class="row" style="margin-top:10px">
-    <button data-cmd="design:column">Column</button>
-    <button data-cmd="design:dock">Dock</button>
-    <button data-cmd="design:collage">Collage</button>
-  </div>
-
-  <h2>배경</h2>
-  <div class="row two" style="margin-top:18px">
-    <button data-cmd="bg:prev">◀ 이전 배경</button>
-    <button data-cmd="bg:next">다음 배경 ▶</button>
-  </div>
-  <div style="margin-top:10px; display:grid">
+  <!-- look -->
+  <section class="tab" data-tab="look" hidden>
+    <h2>프로필</h2>
+    <div class="profiles" id="profiles"><span class="eg">불러오는 중…</span></div>
+    <h2>디자인</h2>
+    <div class="designs">
+      <button data-cmd="design:glass" style="--dz:linear-gradient(135deg,#3b5998,#8fa6cf)">Glass<small>사진 위 유리 타일</small></button>
+      <button data-cmd="design:icons" style="--dz:linear-gradient(135deg,#e11d48,#f59e0b)">Icons<small>브랜드 컬러 아이콘</small></button>
+      <button data-cmd="design:minimal" style="--dz:linear-gradient(135deg,#111827,#4b5563)">Minimal<small>큰 시계, 로고 한 줄</small></button>
+      <button data-cmd="design:theater" style="--dz:linear-gradient(135deg,#4c1d95,#db2777)">Theater<small>고른 앱을 크게</small></button>
+      <button data-cmd="design:column" style="--dz:linear-gradient(135deg,#065f46,#14b8a6)">Column<small>왼쪽 목록, 오른쪽 앱</small></button>
+      <button data-cmd="design:dock" style="--dz:linear-gradient(135deg,#1e3a8a,#0ea5e9)">Dock<small>큰 시계, 아래 독</small></button>
+      <button data-cmd="design:collage" style="--dz:linear-gradient(135deg,#9a3412,#fbbf24)">Collage<small>크고 작은 타일</small></button>
+    </div>
+    <h2>배경 · 타일</h2>
+    <div class="row2">
+      <button data-cmd="bg:prev"><svg class="ic" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>이전 배경</button>
+      <button data-cmd="bg:next">다음 배경<svg class="ic" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
     <button data-cmd="tiles:next">타일 스타일 바꾸기</button>
-  </div>
+    <h2>내 사진</h2>
+    <button class="wide" id="pick">폰 사진을 TV 배경으로</button>
+    <input id="file" type="file" accept="image/*" hidden>
+    <p class="note">사진은 TV 안에만 저장되고 인터넷으로 나가지 않아요.</p>
+  </section>
 
-  <h2>일정</h2>
-  <div style="margin-top:18px; display:grid; gap:12px">
+  <!-- calendar -->
+  <section class="tab" data-tab="cal" hidden>
     <div class="card">
+      <b>일정 추가</b>
       <label>제목<input id="evTitle" type="text" placeholder="예: 치과, 가족 저녁" autocomplete="off"></label>
       <div class="two">
         <label>날짜<input id="evDate" type="date"></label>
@@ -167,10 +225,10 @@
       <button class="go" id="evAdd">일정 추가</button>
       <p class="eg">음성으로도 돼요: "내일 오후 3시 치과 추가", "금요일 7시 가족 저녁 등록"</p>
     </div>
+    <h2>다가오는 일정</h2>
     <div class="list" id="evList"></div>
-
     <div class="card">
-      <b style="font-size:15px">구독 캘린더 연결 (Google · 아이폰)</b>
+      <b>구독 캘린더 연결 (Google · 아이폰)</b>
       <label>캘린더 주소 (iCal / webcal)<input id="subUrl" type="url" placeholder="https://… 또는 webcal://…" autocomplete="off"></label>
       <div class="two">
         <label>이름 (선택)<input id="subName" type="text" placeholder="예: 회사" autocomplete="off"></label>
@@ -190,10 +248,10 @@
       </ol><p>공개 캘린더는 링크를 아는 사람 누구나 볼 수 있어요. 링크는 다른 곳에 공유하지 마세요.</p></details>
     </div>
     <div class="list" id="subList"></div>
-  </div>
+  </section>
 
-  <h2>메모</h2>
-  <div style="margin-top:18px; display:grid; gap:12px">
+  <!-- memos -->
+  <section class="tab" data-tab="memo" hidden>
     <div class="card">
       <textarea id="memoText" class="memo-in" placeholder="TV에 붙일 메모 (예: 6시에 저녁 먹자)"></textarea>
       <div class="two">
@@ -202,25 +260,27 @@
       </div>
       <div class="two">
         <label>보이는 날<input id="memoFrom" type="date"></label>
-        <label>보이는 기간<select id="memoDays"><option value="0">지울 때까지</option><option value="1">그날 하루</option><option value="3">3일</option><option value="7">1주일</option><option value="30">한 달</option></select></label>
+        <label>보이는 기간<select id="memoDays"><option value="0">지울 때까지</option><option value="1">그날 하루</option><option value="2">2일</option><option value="3">3일</option><option value="5">5일</option><option value="7">1주일</option><option value="14">2주일</option><option value="30">한 달</option><option value="90">3개월</option></select></label>
       </div>
       <div class="swatches" id="memoColors"></div>
       <button class="go" id="memoAdd">TV에 붙이기</button>
     </div>
+    <h2>붙어 있는 메모</h2>
     <div class="list" id="memoList"></div>
-  </div>
+  </section>
+</main>
 
-  <h2>내 사진</h2>
-  <div style="margin-top:18px; display:grid; gap:10px">
-    <button class="wide" id="pick">폰 사진을 TV 배경으로</button>
-    <input id="file" type="file" accept="image/*" hidden>
-    <p class="note">사진은 TV 안에만 저장되고 인터넷으로 나가지 않아요.</p>
-  </div>
-</div>
+<nav class="tabs" id="tabs">
+  <button data-go="remote" class="cur"><svg viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="9" r="2.3" fill="currentColor"/><path d="M10 14.5h4M10 17.5h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>리모컨</button>
+  <button data-go="look"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0 0 18c1.1 0 1.7-.8 1.7-1.6 0-.9-.8-1.3-.8-2.1 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.4 17 3 12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7.5" cy="11" r="1.3" fill="currentColor"/><circle cx="10.5" cy="7.3" r="1.3" fill="currentColor"/><circle cx="15" cy="7.6" r="1.3" fill="currentColor"/></svg>꾸미기</button>
+  <button data-go="cal"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>일정</button>
+  <button data-go="memo"><svg viewBox="0 0 24 24"><path d="M5 4h14v11l-5 5H5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M14 20v-5h5M8.5 9h7M8.5 12.5h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>메모</button>
+</nav>
 
 <div id="pairing" class="pairing" hidden>
+  <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj4KICA8IS0tIENvdmU6IGEgc2hlbHRlcmVkIGJheSAodGhlIEMpIGhvbGRpbmcgdGhlIHJpc2luZyBzdW4gb3ZlciBjYWxtIHdhdGVyIC0tPgogIDxkZWZzPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJiZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPjxzdG9wIG9mZnNldD0iMCIgc3RvcC1jb2xvcj0iIzFiMWY1ZSIvPjxzdG9wIG9mZnNldD0iLjU1IiBzdG9wLWNvbG9yPSIjMmEzZjllIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjMGU5ZmIzIi8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0ibHQiIGN4PSIuMjIiIGN5PSIuMTIiIHI9Ii45Ij48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmZmYiIHN0b3Atb3BhY2l0eT0iLjI4Ii8+PHN0b3Agb2Zmc2V0PSIuNiIgc3RvcC1jb2xvcj0iI2ZmZiIgc3RvcC1vcGFjaXR5PSIwIi8+PC9yYWRpYWxHcmFkaWVudD4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ic3VuIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZmZlMDhhIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmY3YTU5Ii8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxyYWRpYWxHcmFkaWVudCBpZD0iZ2xvdyIgY3g9Ii41IiBjeT0iLjUiIHI9Ii41Ij48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmZmI4NmIiIHN0b3Atb3BhY2l0eT0iLjU1Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZiODZiIiBzdG9wLW9wYWNpdHk9IjAiLz48L3JhZGlhbEdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJjIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZmZmZmZmIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjY2ZlOWZmIi8+PC9saW5lYXJHcmFkaWVudD4KICAgIDxjbGlwUGF0aCBpZD0iaW4iPjxjaXJjbGUgY3g9IjI2MiIgY3k9IjI2MiIgcj0iMTE4Ii8+PC9jbGlwUGF0aD4KICAgIDxmaWx0ZXIgaWQ9InNoIiB4PSItMjAlIiB5PSItMjAlIiB3aWR0aD0iMTQwJSIgaGVpZ2h0PSIxNDAlIj48ZmVEcm9wU2hhZG93IGR4PSIwIiBkeT0iMTAiIHN0ZERldmlhdGlvbj0iMTIiIGZsb29kLWNvbG9yPSIjMDYwYTJhIiBmbG9vZC1vcGFjaXR5PSIuNDUiLz48L2ZpbHRlcj4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSIxMTYiIGZpbGw9InVybCgjYmcpIi8+CiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSIxMTYiIGZpbGw9InVybCgjbHQpIi8+CiAgPGNpcmNsZSBjeD0iMjc2IiBjeT0iMjUwIiByPSIxNTAiIGZpbGw9InVybCgjZ2xvdykiLz4KICA8ZyBjbGlwLXBhdGg9InVybCgjaW4pIj4KICAgIDxjaXJjbGUgY3g9IjI3OCIgY3k9IjI3MCIgcj0iNjIiIGZpbGw9InVybCgjc3VuKSIvPgogICAgPHJlY3QgeD0iMTIwIiB5PSIyODIiIHdpZHRoPSIyOTAiIGhlaWdodD0iMTQwIiBmaWxsPSIjMTIzYThhIiBvcGFjaXR5PSIuOTIiLz4KICAgIDxwYXRoIGQ9Ik0xNDAgMzAwYzMwLTEyIDYwLTEyIDkwIDBzNjAgMTIgOTAgMCA2MC0xMiA5MCAwIiBmaWxsPSJub25lIiBzdHJva2U9IiM4ZmQzZmYiIHN0cm9rZS13aWR0aD0iMTAiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgb3BhY2l0eT0iLjkiLz4KICAgIDxwYXRoIGQ9Ik0xNTAgMzM2YzI2LTEwIDUyLTEwIDc4IDBzNTIgMTAgNzggMCA1Mi0xMCA3OCAwIiBmaWxsPSJub25lIiBzdHJva2U9IiM4ZmQzZmYiIHN0cm9rZS13aWR0aD0iOSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIuNTUiLz4KICAgIDxwYXRoIGQ9Ik0yMzggMjk2aDgwIiBzdHJva2U9IiNmZmQ1OWEiIHN0cm9rZS13aWR0aD0iOCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIuODUiLz4KICA8L2c+CiAgPGcgZmlsdGVyPSJ1cmwoI3NoKSI+CiAgICA8cGF0aCBkPSJNMzYyIDE2MEExNDIgMTQyIDAgMSAwIDM2MiAzNjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0idXJsKCNjKSIgc3Ryb2tlLXdpZHRoPSI0NiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPC9nPgogIDxwYXRoIGQ9Ik0zOTYgMTIwbDcgMTggMTggNy0xOCA3LTcgMTgtNy0xOC0xOC03IDE4LTd6IiBmaWxsPSIjZmZmIiBvcGFjaXR5PSIuOSIvPgo8L3N2Zz4K" alt="">
   <b>TV와 다시 연결해 주세요</b>
-  <p class="note">TV에서 설정을 열고 화면의 QR 코드를 폰 카메라로 찍으면 리모컨이 연결돼요.</p>
+  <p class="note">TV에서 설정 → 폰 리모컨을 열고, 화면의 QR 코드를 폰 카메라로 찍으면 리모컨이 연결돼요.</p>
 </div>
 
 <div id="msg"></div>
@@ -231,7 +291,7 @@
   var msgTimer;
   function msg(t) { var m = $('msg'); m.textContent = t; m.classList.add('on'); clearTimeout(msgTimer); msgTimer = setTimeout(function () { m.classList.remove('on'); }, 1800); }
   function state(ok) { $('head').classList.toggle('off', !ok); $('status').textContent = ok ? 'TV에 연결됨' : '연결 끊김'; }
-  function paired(ok) { $('main').hidden = !ok; $('pairing').hidden = ok; }
+  function paired(ok) { $('main').hidden = !ok; $('tabs').hidden = !ok; $('pairing').hidden = ok; }
   function post(path, body) {
     var sep = path.indexOf('?') < 0 ? '?' : '&';
     return fetch(path + sep + 't=' + encodeURIComponent(token), { method: 'POST', body: body || '' })
@@ -239,6 +299,16 @@
       .catch(function () { state(false); msg('TV에 연결할 수 없어요. 같은 와이파이인지 확인해 주세요.'); });
   }
   function buzz() { if (navigator.vibrate) navigator.vibrate(12); }
+
+  // bottom tab bar
+  function showTab(id) {
+    Array.prototype.forEach.call(document.querySelectorAll('section.tab'), function (s) { s.hidden = s.getAttribute('data-tab') !== id; });
+    Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (b) { b.classList.toggle('cur', b.getAttribute('data-go') === id); });
+    try { localStorage.setItem('cove.tab', id); } catch (e) {}
+    window.scrollTo(0, 0);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (b) { b.addEventListener('click', function () { buzz(); showTab(b.getAttribute('data-go')); }); });
+  try { var savedTab = localStorage.getItem('cove.tab'); if (savedTab && document.querySelector('section.tab[data-tab="' + savedTab + '"]')) showTab(savedTab); } catch (e) {}
 
   // Arrow keys repeat while held, like a real remote.
   var repeatTimer = null, repeatDelay = null;
@@ -510,7 +580,7 @@
       renderMemos(root);
       if (!root || !Array.isArray(root.profiles)) { $('profiles').innerHTML = '<span class="eg">TV에서 프로필을 만들면 여기에 나타나요</span>'; return; }
       $('profiles').innerHTML = root.profiles.map(function (p) {
-        return '<button data-cmd="profile:' + esc(p.id) + '" class="' + (p.id === root.current ? 'cur' : '') + '"><i style="background:' + esc(p.color) + '"></i>' + esc(p.name) + '</button>';
+        return '<button data-cmd="profile:' + esc(p.id) + '" class="' + (p.id === root.current ? 'cur' : '') + '"><span class="av" style="background:' + esc(p.color) + '">' + esc(p.avatar || String(p.name).charAt(0)) + '</span>' + esc(p.name) + '</button>';
       }).join('');
       Array.prototype.forEach.call($('profiles').querySelectorAll('[data-cmd]'), bindCmd);
     }).catch(function () { state(false); });
