@@ -453,16 +453,21 @@
   // Widgets sit in the free part of the home screen: the area above the apps (and below or beside the top
   // bar), measured from where each design actually draws them. That area is split into slots, 3 across and
   // up to 3 down; a widget lives in a slot and can be moved between slots, so it never covers an app.
-  var WIDGETS = [['clock', '시계'], ['weather', '날씨']];
+  var WIDGETS = [['clock', '시계'], ['weather', '날씨'], ['news', '뉴스']];
   var WDEF = {
     minimal: { clock: [0, 1], weather: [1, 1], news: [2, 1] },
     dock: { clock: [0, 1], weather: [1, 1], news: [2, 1] },
-    theater: { clock: [0, 0], weather: [0, 1], news: [0, 1] },
-    icons: { clock: [0, 0], weather: [0, 1], news: [0, 1] },
-    _: { clock: [0, 0], weather: [1, 0], news: [0, 1] }
+    theater: { clock: [0, 0], weather: [0, 1], news: [0, 2] },
+    icons: { clock: [0, 0], weather: [0, 1], news: [0, 2] },
+    _: { clock: [0, 0], weather: [1, 0], news: [0, 2] }
   };
   var wmove = null;   // {w, orig}
-  function widgetOn(w) { var o = P.widgets || {}; if (w === 'clock' && P.clock === 'off') return false; return o[w] !== false; }
+  function widgetOn(w) {
+    var o = P.widgets || {};
+    if (w === 'clock' && P.clock === 'off') return false;
+    if (w === 'news' && o.news === undefined && isKids()) return false;   // off for kids unless turned on
+    return o[w] !== false;
+  }
   function wSlot(w) {
     var saved = P.wpos && P.wpos[P.layout] && P.wpos[P.layout][w];
     return saved || (WDEF[P.layout] || WDEF._)[w] || [0, 0];
@@ -485,19 +490,28 @@
   }
   // Designs whose apps start near the top keep a band for the widgets as tall as the clock widget.
   var BAND_LAYOUTS = ['grid', 'column', 'collage', 'icons', 'theater'];
-  function fitBand() {
+  function fitBand(extra) {
     var home = $('home'), ck = $('clock'), want = '';
-    if (BAND_LAYOUTS.indexOf(P.layout) >= 0 && ck && widgetOn('clock')) {
-      ck.hidden = false;
-      var rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-      want = Math.max(ck.offsetHeight + rem * 1.4, rem * 6) + 'px';
+    if (BAND_LAYOUTS.indexOf(P.layout) >= 0 && ((ck && widgetOn('clock')) || extra)) {
+      var rem = parseFloat(getComputedStyle(document.documentElement).fontSize), ch = 0;
+      if (ck && widgetOn('clock')) { ck.hidden = false; ch = ck.offsetHeight; }
+      want = Math.max(ch + rem * 1.4, rem * 6) + (extra || 0) * rem + 'px';
     }
     if (home.style.getPropertyValue('--band') !== want) { if (want) home.style.setProperty('--band', want); else home.style.removeProperty('--band'); return true; }
     return false;
   }
   function layoutWidgets() {
     if (!ROOT || !P) return;
-    fitBand();
+    var news = $('wNews');
+    if (news) news.classList.remove('compact');
+    // grow the band (designs that have one) until every widget that is on finds a place
+    for (var extra = 0; extra <= 14; extra += 3.5) {
+      fitBand(extra);
+      if (!placeWidgets() || BAND_LAYOUTS.indexOf(P.layout) < 0) break;
+    }
+  }
+  // one placement pass; returns how many widgets that are on found no place
+  function placeWidgets() {
     var z = freeZone(), H = Math.max(0, z.B - z.T), rem = z.rem, gap = rem * 0.9;
     var rows = Math.max(1, Math.min(3, Math.floor(H / (rem * 8.5))));
     var rowH = H / rows, placed = [];
@@ -512,13 +526,25 @@
       if (hits(p, Q)) p.y = Q.y + Q.h + gap;
       return p;
     };
+    var missing = 0;
     WIDGETS.forEach(function (wd) {
       var el = document.querySelector('.widget[data-w="' + wd[0] + '"]');
       if (!el) return;
       el.hidden = !widgetOn(wd[0]);
       el.classList.remove('nofit');
       if (el.hidden) return;
-      var w = el.offsetWidth, h = el.offsetHeight, want = wSlot(wd[0]), r0 = Math.min(want[0], rows - 1), c0 = want[1];
+      var pick = findSpot(el, wd[0]);
+      if (!pick && wd[0] === 'news') { el.classList.add('compact'); pick = findSpot(el, wd[0]); }   // one-line headlines when space is tight
+      if (!pick) { el.hidden = true; el.classList.add('nofit'); missing++; return; }   // never over the apps
+      placed.push(pick);
+      el.style.left = (pick.x - z.hr.left) + 'px';
+      el.style.top = (pick.y - z.hr.top) + 'px';
+      var sr = Math.max(0, Math.min(rows - 1, Math.floor((pick.y + pick.h / 2 - z.T) / rowH))), sc = Math.max(0, Math.min(2, Math.floor((pick.x + pick.w / 2 - z.L) / ((z.R - z.L) / 3))));
+      el.setAttribute('data-slot', sr + ',' + sc);
+    });
+    return missing;
+    function findSpot(el, id) {
+      var w = el.offsetWidth, h = el.offsetHeight, want = wSlot(id), r0 = Math.min(want[0], rows - 1), c0 = want[1];
       // candidates: the chosen slot, then right under or beside widgets already placed, then the other slots
       var cands = [slotPos(r0, c0, w, h)];
       placed.forEach(function (o) {
@@ -528,15 +554,9 @@
       var others = [];
       for (var r = 0; r < rows; r++) for (var c = 0; c < 3; c++) others.push([r, c, Math.abs(r - r0) * 1.2 + Math.abs(c - c0)]);
       others.sort(function (a, b2) { return a[2] - b2[2]; }).forEach(function (o) { cands.push(slotPos(o[0], o[1], w, h)); });
-      var pick = null;
-      for (var i = 0; i < cands.length && !pick; i++) if (fits(cands[i])) pick = cands[i];
-      if (!pick) { el.hidden = true; el.classList.add('nofit'); return; }   // never over the apps
-      placed.push(pick);
-      el.style.left = (pick.x - z.hr.left) + 'px';
-      el.style.top = (pick.y - z.hr.top) + 'px';
-      var sr = Math.max(0, Math.min(rows - 1, Math.floor((pick.y + pick.h / 2 - z.T) / rowH))), sc = Math.max(0, Math.min(2, Math.floor((pick.x + pick.w / 2 - z.L) / ((z.R - z.L) / 3))));
-      el.setAttribute('data-slot', sr + ',' + sc);
-    });
+      for (var i = 0; i < cands.length; i++) if (fits(cands[i])) return cands[i];
+      return null;
+    }
   }
   function startWidgetMove(w) {
     closePanelQuiet();
@@ -574,7 +594,7 @@
       { need: 'look', name: '위젯 자리 처음대로', sub: '이 디자인의 기본 배치로 돌아가요', action: true, act: function () { if (P.wpos) delete P.wpos[P.layout]; savePrefs(); layoutWidgets(); closePanel(); toast('기본 배치로 돌렸어요'); } }
     ];
   }
-  function openWidget(w) { if (w === 'clock') openClockPage(); else if (w === 'weather') openWxPage(); }
+  function openWidget(w) { if (w === 'clock') openClockPage(); else if (w === 'weather') openWxPage(); else if (w === 'news') openNewsPage(widgetNewsCat(), Math.max(0, nwRot.i)); }
 
   // ---------- clock page: a desk clock ----------
   var CSTYLES = [['digital', '디지털'], ['analog', '아날로그'], ['flip', '플립']];
@@ -590,7 +610,7 @@
   }
   function closePage() {
     if (page && page.timer) clearInterval(page.timer);
-    $('clockPage').hidden = true; $('wxPage').hidden = true;
+    $('clockPage').hidden = true; $('wxPage').hidden = true; $('newsPage').hidden = true;
     page = null; base = 'home';
     restoreFocus('home');
   }
@@ -700,6 +720,209 @@
     if (page.kind === 'clock') renderClockPage(); else renderWxPage();
   }
 
+  // ---------- news ----------
+  // Google News (Korea) RSS: no key needed. The TV app downloads the feeds (web pages may not read them
+  // directly); each category is fetched at most every 30 minutes. Only headlines, outlets and links are
+  // shown; the full article opens on the phone through a QR code.
+  var GN = 'hl=ko&gl=KR&ceid=KR:ko';
+  var NEWS_CATS = [['top', '주요 뉴스', '', '#ef4444'], ['nation', '국내', 'NATION', '#3b82f6'], ['world', '세계', 'WORLD', '#8b5cf6'], ['business', '경제', 'BUSINESS', '#10b981'],
+    ['tech', 'IT·과학', 'TECHNOLOGY', '#06b6d4'], ['ent', '연예', 'ENTERTAINMENT', '#ec4899'], ['sports', '스포츠', 'SPORTS', '#f59e0b'], ['health', '건강', 'HEALTH', '#22c55e']];
+  var NEWS_DEFAULT = ['top', 'nation', 'world', 'business', 'tech', 'sports', 'ent'];
+  var news = {};       // category -> {at, items, busy, error}
+  var nwRot = { i: -1, at: 0, cat: null };
+  function newsUrl(cat) {
+    if (cat.indexOf('q:') === 0) return 'https://news.google.com/rss/search?q=' + encodeURIComponent(cat.slice(2)) + '&' + GN;
+    var c = find(NEWS_CATS, cat);
+    return c && c[2] ? 'https://news.google.com/rss/headlines/section/topic/' + c[2] + '?' + GN : 'https://news.google.com/rss?' + GN;
+  }
+  function newsTabs() {
+    var l = (P.newsCats || NEWS_DEFAULT).filter(function (c) { return find(NEWS_CATS, c); });
+    return l.concat((P.newsKeys || []).map(function (k) { return 'q:' + k; }));
+  }
+  function catName(cat) { return cat.indexOf('q:') === 0 ? '“' + cat.slice(2) + '”' : (find(NEWS_CATS, cat) || [0, cat])[1]; }
+  function catColor(cat) { return cat.indexOf('q:') === 0 ? '#94a3b8' : (find(NEWS_CATS, cat) || [0, 0, 0, '#94a3b8'])[3]; }
+  function timeAgo(t) {
+    if (!t) return '';
+    var m = Math.round((Date.now() - t) / 60000);
+    return m < 1 ? '방금' : m < 60 ? m + '분 전' : m < 1440 ? Math.round(m / 60) + '시간 전' : Math.round(m / 1440) + '일 전';
+  }
+  function fetchNews(cat, force) {
+    var n = news[cat] || (news[cat] = { at: 0, items: [], busy: false, error: '' });
+    if (n.busy || (!force && n.items.length && Date.now() - n.at < 30 * 60000) || (!force && n.error && Date.now() - n.at < 5 * 60000)) return;
+    n.busy = true;
+    if (N && N.fetchFeed) N.fetchFeed('news:' + cat, newsUrl(cat));
+    else setTimeout(function () { feedFetched('news:' + cat, JSON.stringify({ ok: true, text: sampleFeed(cat) })); }, 150);
+  }
+  function feedFetched(id, json) {
+    if (id.indexOf('news:') !== 0) return;
+    var cat = id.slice(5), n = news[cat] || (news[cat] = { items: [] }), r = {};
+    try { r = JSON.parse(json); } catch (e) {}
+    n.busy = false; n.at = Date.now();
+    if (r.ok) { var items = parseFeed(r.text || ''); if (items.length) { n.items = items; n.error = ''; } else n.error = 'empty'; }
+    else n.error = r.error || 'error';
+    if (cat === widgetNewsCat()) renderNewsWidget(true);
+    if (page && page.kind === 'news') renderNewsPage();
+  }
+  function parseFeed(text) {
+    var doc;
+    try { doc = new DOMParser().parseFromString(text, 'text/xml'); } catch (e) { return []; }
+    var nodes = doc.getElementsByTagName('item');
+    if (!nodes.length) nodes = doc.getElementsByTagName('entry');
+    var out = [];
+    for (var i = 0; i < nodes.length && out.length < 40; i++) {
+      var it = nodes[i], g = function (tag) { var e = it.getElementsByTagName(tag)[0]; return e ? (e.textContent || '').trim() : ''; };
+      var title = g('title'), src = g('source'), link = g('link');
+      if (!link) { var le = it.getElementsByTagName('link')[0]; if (le) link = le.getAttribute('href') || ''; }
+      if (!src) { var m = /\s[-–]\s([^-–]{2,30})$/.exec(title); if (m) src = m[1].trim(); }
+      if (src && title.slice(-src.length) === src) title = title.slice(0, -src.length).replace(/\s*[-–]\s*$/, '').trim();
+      var when = new Date(g('pubDate') || g('updated') || g('published')), related = [], desc = g('description') || g('summary'), summary = '';
+      if (desc && desc.indexOf('<') >= 0) {
+        var hd = new DOMParser().parseFromString(desc, 'text/html');
+        Array.prototype.forEach.call(hd.querySelectorAll('li'), function (li) {
+          var a = li.querySelector('a'), f = li.querySelector('font');
+          if (!a) return;
+          var t = a.textContent.trim();
+          if (t && t !== title && t.indexOf(title) !== 0) related.push({ title: t, source: f ? f.textContent.trim() : '' });
+        });
+        if (!related.length) summary = (hd.body ? hd.body.textContent : '').trim().slice(0, 180);
+      } else if (desc) summary = desc.slice(0, 180);
+      if (title) out.push({ title: title, source: src, link: link, time: isNaN(when.getTime()) ? 0 : when.getTime(), related: related.slice(0, 4), summary: summary });
+    }
+    return out;
+  }
+  // the widget: the newest headlines of one category, one after another
+  function widgetNewsCat() { var c = P.newsWidget || 'top'; return find(NEWS_CATS, c) || c.indexOf('q:') === 0 ? c : 'top'; }
+  function renderNewsWidget(force) {
+    var el = $('wNews');
+    if (!el || !widgetOn('news')) return;
+    var cat = widgetNewsCat(), n = news[cat];
+    if (!n || !n.items.length) fetchNews(cat);
+    $('wnCat').textContent = catName(cat);
+    el.style.setProperty('--nc', catColor(cat));
+    var items = n && n.items ? n.items.slice(0, 10) : [], stage = $('wnStage');
+    if (!items.length) { stage.innerHTML = '<div class="wn-item cur"><b>' + (n && n.error ? '뉴스를 받지 못했어요' : '뉴스를 받아오는 중…') + '</b><small>Google 뉴스</small></div>'; nwRot.i = -1; return; }
+    if (!force && Date.now() - nwRot.at < 7000) return;
+    if (nwRot.cat !== cat) { nwRot.cat = cat; nwRot.i = -1; }
+    nwRot.at = Date.now();
+    nwRot.i = (nwRot.i + 1) % items.length;
+    var it = items[nwRot.i];
+    Array.prototype.forEach.call(stage.querySelectorAll('.wn-item'), function (old) {
+      if (!old.classList.contains('cur')) { old.parentNode.removeChild(old); return; }
+      old.classList.remove('cur'); old.classList.add('out');
+      setTimeout(function () { if (old.parentNode) old.parentNode.removeChild(old); }, 800);
+    });
+    var d = document.createElement('div');
+    d.className = 'wn-item';
+    d.innerHTML = '<b>' + esc(it.title) + '</b><small>' + esc(it.source || '') + (it.time ? ' · ' + timeAgo(it.time) : '') + '</small>';
+    stage.appendChild(d); void d.offsetWidth; d.classList.add('cur');
+    $('wnPos').innerHTML = items.map(function (x, k) { return '<i class="' + (k === nwRot.i ? 'on' : '') + '"></i>'; }).join('');
+    var bar = el.querySelector('.wn-bar i'); bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = '';
+  }
+  setInterval(function () { if (ROOT && base === 'home' && !document.hidden && !ambient) renderNewsWidget(false); }, 1000);
+
+  // the news page: a front page of the chosen category
+  function openNewsPage(cat, pick) {
+    closePanelQuiet();
+    if (focusEl) focusEl.classList.remove('focus');
+    var tabs = newsTabs();
+    cat = cat || tabs[0] || 'top';
+    base = 'newspg';
+    page = { kind: 'news', cat: cat, zone: 'list', i: pick || 0, art: null, extra: tabs.indexOf(cat) < 0 ? cat : null };
+    pageBg('nwBg'); $('newsPage').hidden = false;
+    fetchNews(cat);
+    renderNewsPage();
+  }
+  function pageTabs() { var t = newsTabs(); return page.extra ? t.concat([page.extra]) : t; }
+  function renderNewsPage() {
+    if (!page || page.kind !== 'news') return;
+    var tabs = pageTabs(), cat = page.cat, n = news[cat] || { items: [] }, items = n.items || [], col = catColor(cat), d = NOW();
+    page.i = Math.max(0, Math.min(Math.max(0, items.length - 1), page.i));
+    var head = '<header class="nw-head"><div><h1>오늘의 뉴스</h1><p>' + d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' }) +
+      ' · Google 뉴스' + (n.at && items.length ? ' · ' + timeAgo(n.at) + ' 업데이트' : '') + '</p></div><nav class="nw-tabs">' +
+      tabs.map(function (t) { return '<span class="' + (t === cat ? 'on' : '') + (page.zone === 'tabs' && t === cat ? ' sel' : '') + '" style="--nc:' + catColor(t) + '">' + esc(catName(t)) + '</span>'; }).join('') + '</nav></header>';
+    var body;
+    if (!items.length) body = '<div class="nw-empty">' + (n.error ? '뉴스를 받지 못했어요<br><small>인터넷 연결을 확인해 주세요. 잠시 뒤 다시 받아요</small>' : '뉴스를 받아오는 중…') + '</div>';
+    else {
+      var top = items[0];
+      body = '<div class="nw-main" style="--nc:' + col + '"><article class="nw-hero' + (page.zone === 'list' && page.i === 0 ? ' sel' : '') + '">' +
+        '<span class="nw-kicker">' + esc(catName(cat)) + ' · 톱 기사</span><h2>' + esc(top.title) + '</h2><p class="nw-meta">' + esc(top.source) + (top.time ? ' · ' + timeAgo(top.time) : '') + '</p>' +
+        (top.related.length ? '<div class="nw-rel"><small>관련 보도</small><ul>' + top.related.map(function (r) { return '<li>' + esc(r.title) + (r.source ? ' <em>' + esc(r.source) + '</em>' : '') + '</li>'; }).join('') + '</ul></div>'
+          : top.summary ? '<p class="nw-sum">' + esc(top.summary) + '</p>' : '') + '<span class="nw-open">OK 자세히 · QR로 원문 보기</span></article>' +
+        '<div class="nw-list" id="nwList">' + items.slice(1, 30).map(function (it, k) {
+          return '<div class="nw-item' + (page.zone === 'list' && page.i === k + 1 ? ' sel' : '') + '"><span class="nw-num">' + (k + 2) + '</span><div><b>' + esc(it.title) + '</b><small>' + esc(it.source) + (it.time ? ' · ' + timeAgo(it.time) : '') + '</small></div></div>';
+        }).join('') + '</div></div>';
+    }
+    $('nwBody').innerHTML = head + body;
+    var list = $('nwList'), sel = list && list.querySelector('.sel');
+    if (sel) { var top2 = sel.offsetTop - list.offsetTop; if (top2 < list.scrollTop + 10) list.scrollTop = Math.max(0, top2 - 20); else if (top2 + sel.offsetHeight > list.scrollTop + list.clientHeight - 10) list.scrollTop = top2 + sel.offsetHeight - list.clientHeight + 20; }
+    else if (list && page.i === 0) list.scrollTop = 0;
+    $('nwGear').className = 'cp-gear' + (page.zone === 'gear' ? ' sel' : '');
+    // one article, with a QR code for the original
+    var art = $('nwArticle');
+    if (page.art) {
+      var a = page.art, qr = N && N.qrSvg && a.link ? N.qrSvg(a.link) : '';
+      art.innerHTML = '<div class="nw-art" style="--nc:' + col + '"><div><span class="nw-kicker">' + esc(catName(cat)) + '</span><h2>' + esc(a.title) + '</h2>' +
+        '<p class="nw-meta">' + esc(a.source) + (a.time ? ' · ' + new Date(a.time).toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' (' + timeAgo(a.time) + ')' : '') + '</p>' +
+        (a.summary ? '<p class="nw-sum">' + esc(a.summary) + '</p>' : '') +
+        (a.related.length ? '<div class="nw-rel"><small>관련 보도</small><ul>' + a.related.map(function (r) { return '<li>' + esc(r.title) + (r.source ? ' <em>' + esc(r.source) + '</em>' : '') + '</li>'; }).join('') + '</ul></div>' : '') +
+        '<p class="nw-note">기사 원문은 언론사 사이트에서 읽어요. 출처: ' + esc(a.source || 'Google 뉴스') + '</p></div>' +
+        '<div class="nw-qr">' + (qr || '<div class="nw-qr-ph">TV에서는 여기에<br>QR 코드가 나와요</div>') + '<b>폰으로 원문 보기</b><small>폰 카메라로 QR을 찍으면<br>기사가 열려요</small></div>' +
+        '<div class="p-hint nw-art-hint"><span><kbd>뒤로</kbd>닫기</span></div></div>';
+      art.hidden = false;
+    } else art.hidden = true;
+  }
+  function newsKey(k) {
+    if (page.art) { if (k === 'back' || k === 'ok') { page.art = null; renderNewsPage(); } return; }
+    if (k === 'back') { closePage(); return; }
+    var tabs = pageTabs(), items = (news[page.cat] || { items: [] }).items || [], last = Math.min(items.length, 30) - 1;
+    if (page.zone === 'tabs') {
+      if (k === 'left' || k === 'right') { var ti = tabs.indexOf(page.cat); page.cat = tabs[(ti + (k === 'left' ? -1 : 1) + tabs.length) % tabs.length]; page.i = 0; fetchNews(page.cat); }
+      else if (k === 'down' || k === 'ok') page.zone = 'list';
+    } else if (page.zone === 'list') {
+      if (k === 'up') { if (page.i <= 1) page.zone = 'tabs'; else page.i--; }
+      else if (k === 'down') { if (page.i === 0 || page.i >= last) page.zone = 'gear'; else page.i++; }
+      else if (k === 'right' && page.i === 0 && last >= 1) page.i = 1;
+      else if (k === 'left' && page.i > 0) page.i = 0;
+      else if (k === 'ok' || k === 'longok') { if (items[page.i]) page.art = items[page.i]; }
+    } else {
+      if (k === 'up') page.zone = 'list';
+      else if (k === 'ok' || k === 'longok') { openPanel('newsset'); return; }
+    }
+    renderNewsPage();
+  }
+  function newsSetRows() {
+    var on = P.newsCats || NEWS_DEFAULT, rows = [];
+    rows.push({ name: '홈에 뉴스 위젯', val: widgetOn('news') ? '표시' : '숨김', change: function () { var o = P.widgets || {}; o.news = !widgetOn('news'); set({ widgets: o }); } });
+    rows.push({ name: '위젯에 보여줄 분야', val: catName(widgetNewsCat()), change: function (d) { var t = newsTabs(); set({ newsWidget: t[(t.indexOf(widgetNewsCat()) + d + t.length) % t.length] }); nwRot.cat = null; renderNewsWidget(true); } });
+    NEWS_CATS.forEach(function (c) {
+      var has2 = on.indexOf(c[0]) >= 0;
+      rows.push({ name: c[1] + ' 탭', check: has2, dot: c[3], act: function () {
+        var l = on.slice(), i = l.indexOf(c[0]);
+        if (i >= 0) { if (l.length + (P.newsKeys || []).length <= 1) { toast('탭이 하나는 있어야 해요'); return; } l.splice(i, 1); }
+        else l = NEWS_CATS.map(function (x) { return x[0]; }).filter(function (x) { return x === c[0] || l.indexOf(x) >= 0; });
+        set({ newsCats: l });
+      } });
+    });
+    (P.newsKeys || []).forEach(function (kw) {
+      rows.push({ name: '“' + kw + '” 탭 빼기', sub: '키워드 탭', danger: true, action: true, act: function () { set({ newsKeys: (P.newsKeys || []).filter(function (x) { return x !== kw; }) }); } });
+    });
+    if ((P.newsKeys || []).length < 5) rows.push({ name: '키워드 탭 추가', sub: '예: 날씨, 반도체, 우리 동네 이름', action: true, act: function () {
+      askText('뉴스 키워드', '', function (txt) { txt = String(txt || '').trim().slice(0, 20); if (!txt) return; var l = (P.newsKeys || []).filter(function (x) { return x !== txt; }); l.push(txt); set({ newsKeys: l }); fetchNews('q:' + txt); });
+    } });
+    return rows;
+  }
+  // invented headlines for the desktop preview (no real outlet's name or story)
+  function sampleFeed(cat) {
+    var base = { top: ['도심 공원 산책로 새 단장, 주말부터 개방', '올겨울 첫 한파 예보… 출근길 대비하세요', '동네 도서관 야간 개방 시범 운영', '전통시장 온라인 장보기 서비스 확대', '가을 단풍 절정 시기 지역별로 달라'],
+      business: ['소비자물가 상승세 둔화', '중소기업 수출 지원 프로그램 신청 시작', '전기요금 체계 개편 논의'], tech: ['가정용 로봇 청소기 신제품 경쟁', '스마트TV 앱 생태계 커져', '인공지능 번역 정확도 크게 개선'],
+      sports: ['프로야구 가을 무대 개막', '마라톤 대회 시민 참가 신청 마감 임박', '청소년 축구대표팀 결승 진출'], ent: ['가족 영화 흥행 1위', '인기 예능 새 시즌 방송 확정', '겨울 콘서트 일정 잇따라 발표'] };
+    var list = (base[cat] || base.top).concat(base.top), outlets = ['코브일보', '샘플뉴스', '미리보기신문', '예시방송'];
+    return '<rss><channel>' + list.slice(0, 12).map(function (t, i) {
+      return '<item><title>' + t + ' - ' + outlets[i % 4] + '</title><link>https://example.com/news/' + cat + '/' + i + '</link><pubDate>' + new Date(Date.now() - (i * 17 + 5) * 60000).toUTCString() + '</pubDate><source url="https://example.com">' + outlets[i % 4] + '</source>' +
+        '<description>&lt;ol&gt;&lt;li&gt;&lt;a href="#"&gt;' + t + '&lt;/a&gt; &lt;font&gt;' + outlets[i % 4] + '&lt;/font&gt;&lt;/li&gt;&lt;li&gt;&lt;a href="#"&gt;' + t.split(' ')[0] + ' 관련 후속 보도&lt;/a&gt; &lt;font&gt;' + outlets[(i + 1) % 4] + '&lt;/font&gt;&lt;/li&gt;&lt;li&gt;&lt;a href="#"&gt;전문가 "' + t.split(' ').slice(-1)[0] + '" 전망&lt;/a&gt; &lt;font&gt;' + outlets[(i + 2) % 4] + '&lt;/font&gt;&lt;/li&gt;&lt;/ol&gt;</description></item>';
+    }).join('') + '</channel></rss>';
+  }
+
   // ---------- clock ----------
   function tick() {
     var d = NOW();
@@ -713,7 +936,7 @@
     showNextEvent();
     showMemoLine();
     if (ROOT && ROOT.cal && ROOT.cal.subs && ROOT.cal.subs.length) syncCalendars(false);
-    if (ROOT) { idleCheck(); limitTick(); refreshLive(); }
+    if (ROOT) { idleCheck(); limitTick(); refreshLive(); if (widgetOn('news')) fetchNews(widgetNewsCat()); }
   }
 
   // ---------- render ----------
@@ -1762,6 +1985,7 @@
     return [
       { name: '시계 위젯', sub: '시계를 누르면 탁상시계 화면 · 형식은 거기서', val: widgetOn('clock') ? '표시' : '숨김', change: function () { var o = P.widgets || {}; o.clock = !widgetOn('clock'); if (o.clock && P.clock === 'off') P.clock = '24'; set({ widgets: o }); } },
       { name: '날씨 위젯', sub: '날씨를 누르면 자세한 날씨 · 도시는 거기서', val: widgetOn('weather') ? '표시' : '숨김', change: function () { var o = P.widgets || {}; o.weather = !widgetOn('weather'); set({ widgets: o }); } },
+      { name: '뉴스 위젯', sub: '헤드라인이 돌아가며 나와요 · 분야는 뉴스 화면 ⚙에서', val: widgetOn('news') ? '표시' : '숨김', change: function () { var o = P.widgets || {}; o.news = !widgetOn('news'); set({ widgets: o }); } },
       { name: '위젯 자리 처음대로', sub: '위젯은 길게 OK → 위치 옮기기로 옮겨요', action: true, act: function () { if (P.wpos) delete P.wpos[P.layout]; savePrefs(); layoutWidgets(); toast('이 디자인의 기본 배치로 돌렸어요'); } },
       { name: '글꼴', val: labelOf(FONTS, P.font), change: function (d) { set({ font: cycle(FONTS, P.font, d) }); } },
       { name: '시계 아래 다음 일정', sub: '오늘·내일 일정을 한 줄로', val: P.calPreview !== false ? '표시' : '숨김', change: function () { set({ calPreview: P.calPreview === false }); } },
@@ -2141,6 +2365,7 @@
     if (type === 'widget') return widgetRows();
     if (type === 'clockset') return clockSetRows();
     if (type === 'wxset') return wxSetRows();
+    if (type === 'newsset') return newsSetRows();
     if (type === 'usageprof') return usageProfRows();
     return lookRows();
   }
@@ -2148,7 +2373,7 @@
   // ---------- save / cancel ----------
   // Pages that change settings work on a draft: changes show at once as a preview, and 저장 keeps
   // them, 취소 (or leaving and choosing 버리기) puts everything back as it was.
-  var EDIT_TYPES = ['lookgrp', 'setgrp', 'ambient', 'mine', 'profset', 'profmanage', 'usageprof', 'clockset', 'wxset'];
+  var EDIT_TYPES = ['lookgrp', 'setgrp', 'ambient', 'mine', 'profset', 'profmanage', 'usageprof', 'clockset', 'wxset', 'newsset'];
   // A page opened from another settings page gets its own draft on top of the first one: its 저장 /
   // 취소 cover only what was changed there, and cancelling the outer page undoes everything inside it.
   var edits = [];    // [{key, orig}], innermost last
@@ -2191,7 +2416,7 @@
   }
 
   function openPanel(type, opts) {
-    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset', 'calev', 'ambient', 'memoitem', 'memoedit', 'profmanage', 'usage', 'usageprof', 'mine', 'lookgrp', 'setgrp', 'profset', 'widget', 'clockset', 'wxset'].indexOf(type) < 0) return;
+    if (['look', 'apps', 'settings', 'profiles', 'app', 'cats', 'cat', 'newprofile', 'allow', 'calset', 'calev', 'ambient', 'memoitem', 'memoedit', 'profmanage', 'usage', 'usageprof', 'mine', 'lookgrp', 'setgrp', 'profset', 'widget', 'clockset', 'wxset', 'newsset'].indexOf(type) < 0) return;
     var g = (opts || {}).grp, need = type === 'lookgrp' ? (g === 'home' ? 'apps' : 'look')
       : type === 'setgrp' ? (g === 'remote' || g === 'about' ? null : 'admin')
       : (type === 'apps' || type === 'cats' || type === 'cat') ? 'apps'
@@ -2237,6 +2462,7 @@
     if (base === 'me') { renderMe(); return; }
     if (base === 'clockpg') { renderClockPage(); return; }
     if (base === 'wxpg') { renderWxPage(); return; }
+    if (base === 'newspg') { renderNewsPage(); return; }
     if (backToMe()) return;
     if (base === 'drawer') restoreFocus('drawer'); else restoreFocus('home');
   }
@@ -2270,7 +2496,7 @@
     var rows = rowsFor(panel.type);
     panel.i = Math.max(0, Math.min(rows.length - 1, panel.i));
     var titles = { look: ['Appearance', '꾸미기'], apps: ['Apps', '앱 고르기'], settings: ['Settings', '설정'], profiles: ['Profiles', '프로필'], app: ['App', ''],
-      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'], calev: ['Event', '일정'], ambient: ['Screensaver', '화면 보호기'], memoitem: ['Memo', '메모'], memoedit: ['Memo', '메모'], profmanage: ['Manage profile', ''], usage: ['Usage', '사용 기록 · 시간 제한'], usageprof: ['Usage', ''], mine: ['My profile', '프로필 아이콘 · 이름 · 색'], lookgrp: ['꾸미기', ''], setgrp: ['설정', ''], profset: ['Profile', '프로필 설정'], widget: ['Widget', ''], clockset: ['Clock', '시계 설정'], wxset: ['Weather', '날씨 설정'] };
+      cats: ['Rows', '카테고리 줄'], cat: ['Row', ''], newprofile: ['New profile', '새 프로필'], allow: ['Kids', '허용 앱'], calset: ['Calendar', '캘린더 설정'], calev: ['Event', '일정'], ambient: ['Screensaver', '화면 보호기'], memoitem: ['Memo', '메모'], memoedit: ['Memo', '메모'], profmanage: ['Manage profile', ''], usage: ['Usage', '사용 기록 · 시간 제한'], usageprof: ['Usage', ''], mine: ['My profile', '프로필 아이콘 · 이름 · 색'], lookgrp: ['꾸미기', ''], setgrp: ['설정', ''], profset: ['Profile', '프로필 설정'], widget: ['Widget', ''], clockset: ['Clock', '시계 설정'], wxset: ['Weather', '날씨 설정'], newsset: ['News', '뉴스 설정'] };
     $('pKicker').textContent = titles[panel.type][0];
     $('pTitle').textContent = panel.type === 'app' ? (BYPKG[panel.pkg] ? BYPKG[panel.pkg].label : '')
       : panel.type === 'cat' ? ((catById(panel.cat) || {}).name || '내 앱')
@@ -2321,7 +2547,7 @@
       ambient: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '닫기']], memoitem: [['◀ ▶', '색'], ['OK', '선택'], ['뒤로', '닫기']],
       memoedit: [['▲ ▼', '이동'], ['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '취소']], profmanage: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']],
       usage: [['OK', '자세히'], ['뒤로', '돌아가기']], usageprof: [['◀ ▶', '시간 제한'], ['OK', '선택'], ['뒤로', '돌아가기']], mine: [['◀ ▶', '바꾸기'], ['OK', '입력'], ['뒤로', '돌아가기']],
-      lookgrp: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']], setgrp: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']], profset: [['OK', '선택'], ['뒤로', '돌아가기']], widget: [['OK', '선택'], ['뒤로', '닫기']], clockset: [['◀ ▶', '바꾸기'], ['뒤로', '돌아가기']], wxset: [['◀ ▶', '바꾸기'], ['뒤로', '돌아가기']] };
+      lookgrp: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']], setgrp: [['◀ ▶', '바꾸기'], ['OK', '선택'], ['뒤로', '돌아가기']], profset: [['OK', '선택'], ['뒤로', '돌아가기']], widget: [['OK', '선택'], ['뒤로', '닫기']], clockset: [['◀ ▶', '바꾸기'], ['뒤로', '돌아가기']], wxset: [['◀ ▶', '바꾸기'], ['뒤로', '돌아가기']], newsset: [['OK', '켜기 / 끄기'], ['◀ ▶', '바꾸기'], ['뒤로', '돌아가기']] };
     $('pHint').innerHTML = (panel.confirm ? [['OK', '선택'], ['뒤로', '계속 고치기']] : hints[panel.type] || hints.settings).map(function (h) { return '<span><kbd>' + h[0] + '</kbd>' + h[1] + '</span>'; }).join('');
   }
 
@@ -3023,6 +3249,7 @@
     if (base === 'mini') { if (mini) miniKey(k); else base = 'home'; return; }
     if (base === 'me') { meKey(k); return; }
     if (base === 'clockpg' || base === 'wxpg') { if (page) pageKey(k); else base = 'home'; return; }
+    if (base === 'newspg') { if (page) newsKey(k); else base = 'home'; return; }
     if (wmove) { widgetMoveKey(k); return; }
     if (moving) {
       if (k === 'ok' || k === 'longok') endMove(true);
@@ -3460,6 +3687,16 @@
     if (has(t, ['밝게', '밝'])) { set({ dim: Math.max(0, P.dim - 1) }); done('배경 밝게'); return; }
 
     // weather: "날씨 부산", "날씨 꺼"
+    if (has(t, ['뉴스', '헤드라인', '기사'])) {
+      var nc = null;
+      NEWS_CATS.forEach(function (c) { if (has(t, [norm(c[1]).replace('뉴스', '')]) && c[0] !== 'top') nc = c[0]; });
+      if (!nc && has(t, ['경제'])) nc = 'business'; if (!nc && has(t, ['과학', '테크', 'it'])) nc = 'tech'; if (!nc && has(t, ['해외', '국제'])) nc = 'world';
+      if (!nc) {
+        var kw = raw.split(/뉴스|기사|헤드라인/)[0].replace(/(오늘|최신|요즘|지금|주요|의|좀|관련)/g, '').trim();
+        if (kw && kw.length <= 20) nc = 'q:' + kw;
+      }
+      openNewsPage(nc || newsTabs()[0]); done(nc ? catName(nc) + ' 뉴스' : '오늘의 뉴스'); return;
+    }
     if (has(t, ['시계']) && has(t, ['보여', '열어', '켜', '띄워'])) { openClockPage(); done('탁상시계'); return; }
     if (has(t, ['날씨']) && has(t, ['보여', '열어', '어때', '자세히', '주간', '이번주', '내일'])) { if (!P.weather) set({ weather: 'seoul' }); openWxPage(); done('날씨'); return; }
     if (has(t, ['날씨'])) {
@@ -3523,6 +3760,7 @@
     key: key,
     say: say,
     calFetched: calFetched,
+    feedFetched: feedFetched,
     memo: function (text, color) { addMemo(text, color); },
     textResult: textResult,
     calCmd: calCmd,
@@ -3537,7 +3775,7 @@
       returnMe = false;
       dropEdits(true);   // Home leaves without saving
       if (sw) closeSwitcher(true);
-      if (page) { if (page.timer) clearInterval(page.timer); page = null; $('clockPage').hidden = true; $('wxPage').hidden = true; base = 'home'; }
+      if (page) { if (page.timer) clearInterval(page.timer); page = null; $('clockPage').hidden = true; $('wxPage').hidden = true; $('newsPage').hidden = true; base = 'home'; }
       if (wmove) { document.querySelector('.widget.wmove') && document.querySelector('.widget.wmove').classList.remove('wmove'); if (wmove.orig) setWpos(wmove.w, wmove.orig); wmove = null; }
       if (base === 'me') { base = 'home'; $('me').hidden = true; }
       closePanelQuiet();

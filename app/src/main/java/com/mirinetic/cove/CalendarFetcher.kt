@@ -30,6 +30,21 @@ class CalendarFetcher(private val activity: MainActivity) {
         }
     }
 
+    /** News and other RSS / Atom feeds, answered through Cove.feedFetched(id, json{ok, text|error}). */
+    fun fetchFeed(id: String, url: String) {
+        worker.execute {
+            val result = try {
+                val text = download(url.trim())
+                if (!text.contains("<rss") && !text.contains("<feed") && !text.contains("<rdf")) throw IllegalStateException("not a feed")
+                if (text.length > 2 * 1024 * 1024) throw IllegalStateException("too large")
+                JSONObject().put("ok", true).put("text", text)
+            } catch (e: Exception) {
+                JSONObject().put("ok", false).put("error", e.message ?: e.javaClass.simpleName)
+            }
+            activity.js("Cove.feedFetched(${JSONObject.quote(id)},${JSONObject.quote(result.toString())})")
+        }
+    }
+
     private fun normalise(url: String): String {
         val u = url.trim()
         return when {

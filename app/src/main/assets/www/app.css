@@ -636,3 +636,80 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .wx-day small { color: #8fc1ff; font-size: .95rem; }
 .wx-empty { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 1rem; font-size: 1.6rem; color: var(--ink-dim); }
 .wx-empty b { color: var(--ink); font-size: 2.2rem; }
+
+/* ---------- news widget ---------- */
+.wnews { width: 34rem; padding: 1rem 1.2rem .9rem; border-radius: 1.4rem; background: rgba(10,14,24,.38); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border: .08rem solid rgba(255,255,255,.1); box-shadow: 0 .8rem 2rem rgba(0,0,0,.25); margin: 0; }
+.wnews.focus { background: rgba(10,14,24,.55); }
+.wn-head { display: flex; align-items: center; gap: .6rem; font-size: .95rem; font-weight: 700; letter-spacing: .04em; color: var(--nc, #ef4444); text-transform: uppercase; }
+.wn-dot { width: .6rem; height: .6rem; border-radius: 50%; background: var(--nc, #ef4444); box-shadow: 0 0 0 .3rem rgba(255,255,255,.08); animation: wnpulse 2s ease-in-out infinite; }
+@keyframes wnpulse { 50% { box-shadow: 0 0 0 .5rem rgba(255,255,255,0); opacity: .6; } }
+.wn-pos { margin-left: auto; display: flex; gap: .25rem; }
+.wn-pos i { width: .35rem; height: .35rem; border-radius: 50%; background: rgba(255,255,255,.25); }
+.wn-pos i.on { background: #fff; width: .9rem; border-radius: .2rem; }
+.wn-stage { position: relative; height: 4.9rem; margin-top: .5rem; overflow: hidden; }
+.wn-item { position: absolute; inset: 0; display: flex; flex-direction: column; gap: .35rem; transform: translateY(70%); opacity: 0; transition: transform .7s cubic-bezier(.2,.7,.2,1), opacity .6s; }
+.wn-item.cur { transform: none; opacity: 1; }
+.wn-item.out { transform: translateY(-70%); opacity: 0; }
+.wn-item b { font-size: 1.32rem; font-weight: 600; line-height: 1.35; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all; }
+.wn-item small { font-size: .95rem; color: var(--ink-dim); }
+.wn-bar { height: .18rem; border-radius: .1rem; background: rgba(255,255,255,.1); margin-top: .5rem; overflow: hidden; }
+.wn-bar i { display: block; height: 100%; width: 100%; background: var(--nc, #ef4444); opacity: .8; transform-origin: left; animation: wnbar 7s linear forwards; }
+@keyframes wnbar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+[data-layout="minimal"] .wnews, [data-layout="dock"] .wnews { width: 40rem; }
+
+/* ---------- news page ---------- */
+.nw { position: absolute; inset: 3rem 4.6rem 6rem; display: flex; flex-direction: column; gap: 1.8rem; }
+.nw-head { display: flex; align-items: flex-end; gap: 2.4rem; padding-bottom: 1.2rem; border-bottom: .12rem solid rgba(255,255,255,.14); }
+.nw-head h1 { margin: 0; font-family: "Noto Serif CJK KR", "Noto Serif KR", serif; font-size: 3.4rem; font-weight: 800; letter-spacing: -.02em; }
+.nw-head p { margin: .3rem 0 0; font-size: 1.1rem; color: var(--ink-dim); }
+.nw-tabs { margin-left: auto; display: flex; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
+.nw-tabs span { padding: .55rem 1.1rem; border-radius: 2rem; font-size: 1.05rem; background: rgba(255,255,255,.07); color: var(--ink-dim); border: .1rem solid transparent; }
+.nw-tabs span.on { color: #fff; background: rgba(255,255,255,.12); border-color: var(--nc); box-shadow: inset 0 -.25rem 0 var(--nc); }
+.nw-tabs span.sel { background: #fff; color: #11141b; box-shadow: none; border-color: #fff; }
+.nw-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 2.4rem; }
+.nw-hero { position: relative; border-radius: 1.6rem; padding: 2.4rem 2.6rem; display: flex; flex-direction: column; gap: 1.1rem; overflow: hidden;
+  background: radial-gradient(120% 90% at 0% 0%, rgba(255,255,255,.14), rgba(255,255,255,.03) 60%), rgba(12,16,28,.55); border: .08rem solid rgba(255,255,255,.1); transition: transform .15s; }
+.nw-hero::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: .55rem; background: var(--nc); }
+.nw-hero.sel { outline: .25rem solid #fff; outline-offset: .3rem; transform: scale(1.01); }
+.nw-kicker { font-size: 1rem; font-weight: 800; letter-spacing: .08em; color: var(--nc); }
+.nw-hero h2 { margin: 0; font-family: "Noto Serif CJK KR", "Noto Serif KR", serif; font-size: 2.9rem; line-height: 1.28; font-weight: 800; word-break: keep-all; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.nw-meta { margin: 0; font-size: 1.15rem; color: var(--ink-dim); }
+.nw-sum { margin: 0; font-size: 1.25rem; line-height: 1.6; color: rgba(255,255,255,.82); }
+.nw-rel { margin-top: .4rem; padding-top: 1rem; border-top: .08rem solid rgba(255,255,255,.12); }
+.nw-rel small { font-size: .95rem; font-weight: 700; color: var(--ink-dim); letter-spacing: .06em; }
+.nw-rel ul { margin: .7rem 0 0; padding: 0; list-style: none; display: grid; gap: .6rem; }
+.nw-rel li { font-size: 1.12rem; line-height: 1.4; padding-left: 1rem; position: relative; word-break: keep-all; }
+.nw-rel li::before { content: ""; position: absolute; left: 0; top: .6rem; width: .35rem; height: .35rem; border-radius: 50%; background: var(--nc); }
+.nw-rel em { font-style: normal; font-size: .95rem; color: var(--ink-dim); }
+.nw-open { margin-top: auto; font-size: 1rem; color: var(--ink-dim); }
+.nw-list { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: .2rem; padding: .3rem; }
+.nw-item { display: flex; gap: 1.2rem; align-items: flex-start; padding: 1rem 1.1rem; border-radius: 1.1rem; border-bottom: .08rem solid rgba(255,255,255,.07); flex: none; transition: background .12s; }
+.nw-num { font-family: "Noto Serif CJK KR", "Noto Serif KR", serif; font-size: 1.9rem; font-weight: 800; line-height: 1; color: var(--nc); min-width: 2.4rem; opacity: .85; }
+.nw-item b { display: block; font-size: 1.28rem; font-weight: 600; line-height: 1.4; word-break: keep-all; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.nw-item small { display: block; margin-top: .35rem; font-size: .95rem; color: var(--ink-dim); }
+.nw-item.sel { background: #fff; color: #11141b; border-color: transparent; }
+.nw-item.sel small { color: #4b5563; }
+.nw-empty { flex: 1; display: grid; place-content: center; text-align: center; font-size: 1.7rem; color: var(--ink-dim); line-height: 1.6; }
+.nw-empty small { font-size: 1.1rem; }
+#nwArticle { position: absolute; inset: 0; background: rgba(4,6,12,.72); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); display: grid; place-items: center; animation: fade .2s ease; z-index: 2; }
+#nwArticle[hidden] { display: none !important; }
+.nw-art { position: relative; width: min(78rem, 88vw); display: grid; grid-template-columns: minmax(0, 1fr) 19rem; gap: 3rem; padding: 2.8rem 3rem 3.6rem; border-radius: 1.8rem;
+  background: radial-gradient(120% 90% at 0% 0%, rgba(255,255,255,.12), rgba(255,255,255,.03) 60%), #10141f; border: .08rem solid rgba(255,255,255,.12); box-shadow: 0 2rem 5rem rgba(0,0,0,.5); }
+.nw-art::before { content: ""; position: absolute; left: 0; top: 2.4rem; bottom: 2.4rem; width: .5rem; border-radius: 0 .3rem .3rem 0; background: var(--nc); }
+.nw-art h2 { margin: .6rem 0 .8rem; font-family: "Noto Serif CJK KR", "Noto Serif KR", serif; font-size: 2.6rem; line-height: 1.3; font-weight: 800; word-break: keep-all; }
+.nw-note { margin-top: 1.4rem; font-size: .95rem; color: var(--ink-dim); }
+.nw-qr { display: grid; justify-items: center; align-content: center; gap: .8rem; text-align: center; padding: 1.4rem; border-radius: 1.4rem; background: rgba(255,255,255,.06); }
+.nw-qr svg, .nw-qr-ph { width: 14rem; height: 14rem; border-radius: .8rem; background: #fff; }
+.nw-qr-ph { display: grid; place-items: center; color: #6b7280; font-size: 1rem; line-height: 1.5; }
+.nw-qr b { font-size: 1.25rem; }
+.nw-qr small { font-size: .95rem; color: var(--ink-dim); line-height: 1.5; }
+.nw-art-hint { position: absolute; left: 3rem; bottom: 1.3rem; opacity: .7; }
+/* compact news widget: one line per headline, for tight spaces */
+.wnews.compact { width: 30rem; padding: .7rem 1rem .6rem; }
+.wnews.compact .wn-stage { height: 2.3rem; margin-top: .3rem; }
+.wnews.compact .wn-item { flex-direction: row; align-items: baseline; gap: .8rem; }
+.wnews.compact .wn-item b { -webkit-line-clamp: 1; font-size: 1.18rem; flex: 1; min-width: 0; }
+.wnews.compact .wn-item small { flex: none; font-size: .9rem; }
+.wnews.compact .wn-bar { margin-top: .3rem; }
+[data-layout="minimal"] .wnews.compact, [data-layout="dock"] .wnews.compact { width: 26rem; }

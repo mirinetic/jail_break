@@ -162,6 +162,16 @@ class Bridge(private val activity: MainActivity) {
         }
     }
 
+    /** News feeds (RSS / Atom); answers later through Cove.feedFetched(id, json). */
+    @JavascriptInterface
+    fun fetchFeed(id: String, url: String) {
+        if (url.startsWith("https://", true) || url.startsWith("http://", true)) activity.calendars.fetchFeed(id, url)
+    }
+
+    /** A QR code (SVG) for a link, so an article can be opened on the phone. */
+    @JavascriptInterface
+    fun qrSvg(text: String): String = if (text.length in 1..1500) Qr.svg(text) else ""
+
     /** Answers later through Cove.updateResult(json). */
     @JavascriptInterface
     fun checkUpdate() = activity.updater.check()

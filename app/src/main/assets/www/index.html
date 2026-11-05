@@ -15,6 +15,7 @@
     <div id="widgets">
       <div class="widget wclock clock focusable" data-w="clock" id="clock"><div class="time" id="time"></div><div class="date" id="date"></div><div class="nextevt" id="nextEvt" hidden></div><div class="nextevt memo" id="memoLine" hidden></div></div>
       <div class="widget wwx focusable" data-w="weather" id="wWeather"><div class="weather" id="weather"></div></div>
+      <div class="widget wnews focusable" data-w="news" id="wNews"><div class="wn-head"><span class="wn-dot"></span><span id="wnCat">주요 뉴스</span><span class="wn-pos" id="wnPos"></span></div><div class="wn-stage" id="wnStage"></div><div class="wn-bar"><i></i></div></div>
     </div>
     <header class="top">
       <nav class="quick">
@@ -97,6 +98,14 @@
     <div class="wx-wrap" id="wxBody"></div>
     <div class="cp-gear" id="wxGear">⚙ 날씨 설정</div>
     <div class="p-hint cp-hint"><span><kbd>◀ ▶</kbd>도시 바꾸기</span><span><kbd>▼</kbd>설정</span><span><kbd>뒤로</kbd>닫기</span></div>
+  </section>
+
+  <section id="newsPage" class="wpage" hidden>
+    <div class="cp-bg" id="nwBg"></div>
+    <div class="nw" id="nwBody"></div>
+    <div class="cp-gear" id="nwGear">⚙ 뉴스 설정</div>
+    <div class="p-hint cp-hint"><span><kbd>◀ ▶</kbd>분야 (맨 위에서)</span><span><kbd>OK</kbd>자세히</span><span><kbd>뒤로</kbd>닫기</span></div>
+    <div id="nwArticle" hidden></div>
   </section>
 
   <section id="mini" hidden></section>
