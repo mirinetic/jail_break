@@ -2732,106 +2732,116 @@
   function leaveMe(keep) { if (base !== 'me') return; $('me').hidden = true; returnMe = !!keep; base = 'home'; }
   function backToMe() { if (!returnMe) return false; returnMe = false; openMe(true); return true; }
 
-  function meCard(title, body, act, extra) { return { title: title, body: body, act: act, style: extra || '' }; }
+  // 마이 룸: each kind of information drawn in its own way. Widgets are focusable; OK opens what they show.
+  function hexA(hex, a) { var m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return 'rgba(143,180,255,' + a + ')'; var n = parseInt(m[1], 16); return 'rgba(' + (n >> 16) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')'; }
+  function hue(str) { var h = 0; for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) % 360; return h; }
+  function dayTotals(pid, n) {
+    var u = (ROOT.usage || {})[pid] || {}, out = [];
+    for (var i = n - 1; i >= 0; i--) {
+      var d = wall(Date.now() - i * 86400000), k = dayKey(d), t = 0;
+      Object.keys(u).forEach(function (p) { t += u[p].days[k] || 0; });
+      if (i === 0 && mini && mini.pid === pid && mini.start) t += Date.now() - mini.start;
+      out.push({ d: d, ms: t });
+    }
+    return out;
+  }
+  function ringSvg(frac, color) {
+    var r = 42, c = 2 * Math.PI * r, f = Math.max(0, Math.min(1, frac));
+    return '<svg viewBox="0 0 100 100" class="mr-ring"><circle cx="50" cy="50" r="' + r + '" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="9"/>' +
+      '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + (c * f) + ' ' + c + '" transform="rotate(-90 50 50)"/></svg>';
+  }
+  function homePreview() {
+    var b = P.bg, bg = '';
+    if (b && (b.type === 'preset' || b.type === 'photo')) bg = 'background-image:url(&quot;' + bgUrl(b) + '&quot;)';
+    else if (b && b.type === 'color') bg = 'background:' + esc(find(COLORS, b.id)[2]).replace(/"/g, '&quot;');
+    else bg = 'background:linear-gradient(135deg,#1e293b,#0f172a)';
+    var apps = visibleApps().slice(0, P.layout === 'dock' || P.layout === 'minimal' ? 8 : 10);
+    var now = NOW(), hm = P.clock === '12' ? ((now.getHours() % 12) || 12) + ':' + pad2(now.getMinutes()) : pad2(now.getHours()) + ':' + pad2(now.getMinutes());
+    var round = P.shape === 'circle' ? ' round' : P.shape === 'square' ? ' sq' : '';
+    var icons = apps.map(function (p) { return '<i class="' + round + '" style="background-image:url(&quot;' + iconUrl(BYPKG[p]) + '&quot;)"></i>'; }).join('');
+    return '<div class="mr-mock lay-' + esc(P.layout) + '" style="' + bg + '"><div class="mr-dim" style="opacity:' + (DIM_VALUES[P.dim] || .2) + '"></div>' +
+      (P.clock === 'off' ? '' : '<b class="mr-clock">' + hm + '</b>') + '<div class="mr-apps">' + icons + '</div></div>';
+  }
+  function miniMonth() {
+    var now = NOW(), first = new Date(now.getFullYear(), now.getMonth(), 1), start = addDays(first, -first.getDay());
+    var last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    var occ = occurrences(first, new Date(last.getFullYear(), last.getMonth(), last.getDate(), 23, 59)), has = {};
+    occ.forEach(function (o) { has[dayKey(o.start)] = (has[dayKey(o.start)] || '') || (o.owner === ROOT.current ? 'mine' : 'fam'); });
+    var weeks = Math.ceil((first.getDay() + last.getDate()) / 7), html = DOW.map(function (d, i) { return '<span class="h' + (i === 0 ? ' sun' : '') + '">' + d + '</span>'; }).join('');
+    for (var i = 0; i < weeks * 7; i++) {
+      var d = addDays(start, i), k = dayKey(d), out = d.getMonth() !== now.getMonth();
+      html += '<span class="' + (out ? 'out' : '') + (k === dayKey(now) ? ' today' : '') + (d.getDay() === 0 ? ' sun' : '') + '">' + d.getDate() + (has[k] && !out ? '<em class="' + has[k] + '"></em>' : '') + '</span>';
+    }
+    return '<div class="mr-month"><b>' + (now.getMonth() + 1) + '월</b><div class="mr-mgrid">' + html + '</div></div>';
+  }
   function renderMe() {
-    var pr = current(), now = NOW();
-    var lines = function (l) { return l.filter(Boolean).map(function (x) { return '<li>' + x + '</li>'; }).join(''); };
-    var none = function (t) { return '<p class="me-none">' + t + '</p>'; };
-    var cards = [];
-
-    // look
-    var bgStyle = '', b = P.bg;
-    if (b && (b.type === 'preset' || b.type === 'photo')) bgStyle = 'background-image:linear-gradient(0deg,rgba(8,10,16,.92),rgba(8,10,16,.35)),url(&quot;' + bgUrl(b) + '&quot;)';
-    else if (b && b.type === 'color') bgStyle = 'background-image:linear-gradient(0deg,rgba(8,10,16,.85),rgba(8,10,16,.2)),' + esc(find(COLORS, b.id)[2]).replace(/"/g, '&quot;');
-    cards.push(meCard('홈 꾸미기', '<b class="me-big">' + esc(DESIGNS[P.design].name) + '</b><ul>' + lines([
-      '배경 · ' + esc(bgName(P.bg)), P.nightBg ? '밤 배경 · ' + esc(bgName(P.nightBg)) : '',
-      '타일 · ' + esc(labelOf(TILES, P.tiles)) + ', ' + esc(labelOf(SHAPES, P.shape)) + ', ' + esc(labelOf(SIZES, P.size)),
-      '글꼴 · ' + esc(labelOf(FONTS, P.font)) + ' · 시계 ' + esc(labelOf(CLOCKS, P.clock)),
-      '날씨 · ' + (P.weather && cityOf(P.weather) ? esc(cityOf(P.weather)[1]) : '사용 안 함')]) + '</ul>',
-      function () { openPanel('look'); }, bgStyle));
-
-    // home apps
-    var vis = visibleApps();
-    cards.push(meCard('홈 앱', '<b class="me-big">' + vis.length + '개</b><div class="me-icons">' +
-      vis.slice(0, 10).map(function (p) { return '<img src="' + iconUrl(BYPKG[p]) + '" alt="">'; }).join('') + '</div><ul>' + lines([
-      hasRows() ? '카테고리 줄 ' + P.cats.length + '개' + (P.recentRow ? ' · 최근 실행 줄' : '') : '줄 없이 한 화면',
-      '새 앱 자동 추가 · ' + (P.autoAdd !== false ? '켜짐' : '꺼짐'),
-      P.locked.length && hasPin() ? '잠근 앱 ' + P.locked.length + '개' : '']) + '</ul>',
-      function () { openPanel('apps'); }));
+    var pr = current(), now = NOW(), kids = isKids(pr);
+    var w = [];   // widgets in reading order: {cls, html, act}
+    // profile
+    var chips = [pr.id === master().id ? '마스터' : kids ? '키즈' : '일반', pr.lockIn && hasPin() ? '🔒 바꿀 때 PIN' : '', kids ? '허용 앱 ' + (pr.allow || []).length + '개' : '', limitOf(pr) ? '하루 ' + labelOf(LIMITS, pr.limit) : ''].filter(Boolean);
+    var hero = '<div class="mr-hero">' + avatarHtml(pr, 'huge') + '<div><h2>' + esc(pr.name) + '</h2><div class="mr-chips">' + chips.map(function (c) { return '<span>' + esc(c) + '</span>'; }).join('') + '</div>' +
+      '<p>' + esc(DESIGNS[P.design].name) + ' 디자인 · 앱 ' + visibleApps().length + '개' + (P.weather && cityOf(P.weather) ? ' · ' + esc(cityOf(P.weather)[1]) + ' 날씨' : '') + '</p></div></div>';
+    w.push({ cls: 'mr-btn', html: '프로필 설정', act: function () { openPanel('profset'); } });
+    w.push({ cls: 'mr-btn', html: '다른 프로필', act: function () { openSwitcher(); } });
 
     // usage
-    var u = (ROOT.usage || {})[pr.id] || {}, left = msLeft(pr);
-    var top = Object.keys(u).filter(function (p) { return BYPKG[p] && !BYPKG[p].screen && daysMs(u[p], 7) > 0; })
-      .sort(function (a, c) { return daysMs(u[c], 7) - daysMs(u[a], 7); }).slice(0, 3);
-    cards.push(meCard('사용 시간', '<b class="me-big">오늘 ' + fmtMs(profileMs(pr.id, 1)) + '</b><ul>' + lines(
-      ['최근 7일 · ' + fmtMs(profileMs(pr.id, 7))].concat(top.map(function (p) {
-        return '<img class="ic" src="' + iconUrl(BYPKG[p]) + '" alt="">' + esc(BYPKG[p].label) + ' · ' + (BYPKG[p].mini ? '' : '약 ') + fmtMs(daysMs(u[p], 7)); }))
-      .concat([left === Infinity ? '하루 제한 없음' : '하루 ' + esc(labelOf(LIMITS, pr.limit)) + ' · ' + (left > 0 ? fmtMs(left) + ' 남음' : '오늘 다 썼어요')])) + '</ul>',
-      function () { openPanel('usageprof', { target: pr.id }); }));
+    var days = dayTotals(pr.id, 7), today = days[6].ms, max = Math.max.apply(null, days.map(function (d) { return d.ms; }).concat([60000]));
+    var lim = limitOf(pr), left = msLeft(pr), frac = lim ? today / ((lim + (pr.extra && pr.extra.day === todayKey() ? pr.extra.min : 0)) * 60000) : today / max;
+    var u = (ROOT.usage || {})[pr.id] || {};
+    var topApps = Object.keys(u).filter(function (p) { return BYPKG[p] && !BYPKG[p].screen && daysMs(u[p], 7) > 0; }).sort(function (a, b) { return daysMs(u[b], 7) - daysMs(u[a], 7); }).slice(0, 3);
+    w.push({ cls: 'mr-w mr-usage', act: function () { openPanel('usageprof', { target: pr.id }); }, html:
+      '<h3>사용 시간</h3><div class="mr-urow"><div class="mr-ringbox">' + ringSvg(frac, lim && left <= 0 ? '#f87171' : pr.color) + '<div><b>' + fmtMs(today) + '</b><small>' + (lim ? (left > 0 ? fmtMs(left) + ' 남음' : '다 썼어요') : '오늘') + '</small></div></div>' +
+      '<div class="mr-bars">' + days.map(function (d, i) { return '<div><i style="height:' + Math.max(4, Math.round(100 * d.ms / max)) + '%' + (i === 6 ? ';background:' + esc(pr.color) : '') + '"></i><span>' + (i === 6 ? '오늘' : DOW[d.d.getDay()]) + '</span></div>'; }).join('') + '</div></div>' +
+      '<div class="mr-stats"><span><b>' + fmtMs(days.reduce(function (t, d) { return t + d.ms; }, 0)) + '</b>최근 7일</span><span><b>' + fmtMs(days.reduce(function (t, d) { return t + d.ms; }, 0) / 7) + '</b>하루 평균</span><span><b>' +
+        Object.keys(u).reduce(function (t, p) { return t + (BYPKG[p] && !BYPKG[p].screen ? u[p].opens : 0); }, 0) + '번</b>앱 열기</span></div>' +
+      '<div class="mr-top">' + (topApps.length ? topApps.map(function (p) { return '<span><img src="' + iconUrl(BYPKG[p]) + '" alt="">' + esc(cut(BYPKG[p].label, 8)) + ' <em>' + fmtMs(daysMs(u[p], 7)) + '</em></span>'; }).join('') : '<span class="dim">아직 기록이 없어요</span>') + '</div>' });
+
+    // my home
+    w.push({ cls: 'mr-w mr-home', act: function () { openPanel('look'); }, html: '<h3>내 홈 화면 <small>' + esc(DESIGNS[P.design].name) + ' · ' + esc(bgName(P.bg)) + '</small></h3>' + homePreview() });
 
     // calendar
     var evs = occurrences(now, addDays(startOfDay(now), 14)).filter(function (o) { return o.allDay ? startOfDay(o.start) >= startOfDay(now) : o.start >= now; });
-    var mineN = calData().events.filter(function (e) { return e.owner === pr.id; }).length;
-    var subsN = calData().subs.filter(function (s) { return visibleOwner(s.owner); }).length;
-    cards.push(meCard('일정', (evs.length ? '<ul class="me-ev">' + lines(evs.slice(0, 3).map(function (o) {
-        return '<b>' + esc(relDay(o.start)) + (o.allDay ? '' : ' ' + esc(fmtTime(o.start))) + '</b>' + esc(cut(o.title, 16)) + (o.owner === pr.id ? ' <i>개인</i>' : ''); })) + '</ul>'
-      : none('2주 안에 일정이 없어요')) + '<ul>' + lines(['2주 안 ' + evs.length + '개 · 내 개인 일정 ' + mineN + '개', subsN ? '구독 캘린더 ' + subsN + '개' : '']) + '</ul>',
-      function () { openCal('month'); }));
+    w.push({ cls: 'mr-w mr-cal', act: function () { openCal('month'); }, html: '<h3>일정</h3><div class="mr-crow">' + miniMonth() + '<ul class="mr-evs">' +
+      (evs.length ? evs.slice(0, 4).map(function (o) { return '<li class="' + (o.owner === pr.id ? 'mine' : 'fam') + '"><b>' + esc(relDay(o.start)) + (o.allDay ? '' : ' ' + esc(fmtTime(o.start))) + '</b>' + esc(cut(o.title, 14)) + '</li>'; }).join('')
+        : '<li class="none">2주 안에 일정이 없어요</li>') + '</ul></div>' });
 
     // memos
     var inbox = activeMemos(), sent = memos().filter(function (m) { return m.by === pr.id; });
-    cards.push(meCard('메모', (inbox.length ? '<ul class="me-memo">' + lines(inbox.slice(0, 2).map(function (m) {
-        var from = profileById(m.by); return '“' + esc(cut(m.text.split('\n')[0], 18)) + '”' + (from && from.id !== pr.id ? ' <i>' + esc(from.name) + '</i>' : ''); })) + '</ul>'
-      : none('나에게 온 메모가 없어요')) + '<ul>' + lines(['받은 메모 ' + inbox.length + '개 · 보낸 메모 ' + sent.length + '개']) + '</ul>',
-      function () { openMemo(); }));
+    w.push({ cls: 'mr-w mr-memo', act: function () { openMemo(); }, html: '<h3>메모 <small>받은 ' + inbox.length + ' · 보낸 ' + sent.length + '</small></h3><div class="mr-notes">' +
+      (inbox.length ? inbox.slice(0, 3).map(function (m, i) { var from = profileById(m.by);
+        return '<div class="mr-note" style="--c:' + esc(m.color || '#ffe58a') + ';--r:' + [-3, 2, -1][i] + 'deg"><p>' + esc(cut(m.text, 40)) + '</p><small>' + esc(from ? from.name : '') + '</small></div>'; }).join('')
+        : '<div class="mr-note empty"><p>나에게 온 메모가 없어요</p></div>') + '</div>' });
 
     // cinema
-    var cin = appData(pr.id, 'cove.cinema'), hist = cin.hist || [], cont = hist.filter(function (h) { return !h.done; });
-    cards.push(meCard('Cove 시네마', (hist.length ? '<ul>' + lines(hist.slice(0, 3).map(function (h) {
-        return esc(cut(h.title, 14)) + ' <i>' + (h.done ? '다 봤어요' : Math.round(100 * h.pos / h.dur) + '%') + '</i>'; })) + '</ul>'
-      : none('아직 본 작품이 없어요')) + '<ul>' + lines(['이어 보기 ' + cont.length + '편 · 찜 ' + (cin.fav || []).length + '편']) + '</ul>',
-      function () { launch('cove.cinema'); }));
+    var cin = appData(pr.id, 'cove.cinema'), hist = (cin.hist || []).slice(0, 3);
+    w.push({ cls: 'mr-w mr-cin', act: function () { launch('cove.cinema'); }, html: '<h3>Cove 시네마 <small>찜 ' + (cin.fav || []).length + '편</small></h3><div class="mr-posters">' +
+      (hist.length ? hist.map(function (h) { var c = hue(h.title);
+        return '<div class="mr-poster" style="background:linear-gradient(160deg,hsl(' + c + ',60%,38%),hsl(' + ((c + 50) % 360) + ',70%,18%))"><b>' + esc(cut(h.title, 9)) + '</b><i><em style="width:' + (h.done ? 100 : Math.round(100 * h.pos / h.dur)) + '%"></em></i><small>' + (h.done ? '다 봤어요' : '이어 보기') + '</small></div>'; }).join('')
+        : '<div class="mr-poster empty"><b>아직 본 작품이 없어요</b></div>') + '</div>' });
 
-    // cards game
+    // card game
     var cg = appData(pr.id, 'cove.cards'), best = cg.best || {};
-    var lvName = { '3x4': '쉬움', '4x4': '보통', '4x5': '어려움' };
-    cards.push(meCard('짝꿍 카드', (Object.keys(best).length ? '<ul>' + lines(['3x4', '4x4', '4x5'].filter(function (k) { return best[k]; }).map(function (k) {
-        return lvName[k] + ' · ' + best[k].moves + '번 · ' + fmtSecs(best[k].secs); })) + '</ul>' : none('아직 기록이 없어요')) +
-      '<ul>' + lines(['플레이 ' + (cg.played || 0) + '판']) + '</ul>',
-      function () { launch('cove.cards'); }));
+    w.push({ cls: 'mr-w mr-cards', act: function () { launch('cove.cards'); }, html: '<h3>짝꿍 카드 <small>' + (cg.played || 0) + '판</small></h3><div class="mr-trophy">' +
+      '<svg viewBox="0 0 64 64"><path d="M18 8h28v12a14 14 0 0 1-28 0z" fill="#fbbf24"/><path d="M18 12H9a9 9 0 0 0 11 13M46 12h9a9 9 0 0 1-11 13" fill="none" stroke="#fbbf24" stroke-width="4"/><path d="M28 34h8v10h-8z" fill="#f59e0b"/><rect x="20" y="44" width="24" height="7" rx="2" fill="#b45309"/></svg>' +
+      '<div>' + [['3x4', '쉬움'], ['4x4', '보통'], ['4x5', '어려움']].map(function (l) { var x = best[l[0]];
+        return '<span class="' + (x ? '' : 'dim') + '"><b>' + l[1] + '</b>' + (x ? x.moves + '번 · ' + fmtSecs(x.secs) : '기록 없음') + '</span>'; }).join('') + '</div></div>' });
 
-    // permissions
-    var kids = isKids(pr);
-    cards.push(meCard('잠금 · 권한', '<b class="me-big">' + (pr.id === master().id ? '마스터' : kids ? '키즈' : '일반') + '</b><ul>' + lines([
-      pr.id === master().id ? 'PIN, 프로필, 잠금을 관리해요' : kids ? '허용 앱 ' + (pr.allow || []).length + '개 · 꾸미기 ' + (pr.kidsLook !== false ? '허용' : '막음') : '모든 앱을 쓸 수 있어요',
-      '이 프로필로 바꿀 때 PIN · ' + (pr.lockIn ? '켜짐' : '꺼짐'),
-      kids ? '나갈 때 PIN이 필요해요' : '', '잠금 PIN · ' + (hasPin() ? '설정됨' : '없음')]) + '</ul>',
-      function () { openPanel('profset'); }));
-
-    meItems = [{ act: function () { openPanel('profset'); } }, { act: function () { openSwitcher(); } }].concat(cards);
-    meSel = Math.max(0, Math.min(meItems.length - 1, meSel));
-    var badges = profileBadges(pr) || '일반';
-    $('meHead').innerHTML = avatarHtml(pr, 'big') + '<div class="me-who"><h2>' + esc(pr.name) + '</h2><p>' + esc(badges) + ' · 프로필 ' + (ROOT.profiles.indexOf(pr) + 1) + ' / ' + ROOT.profiles.length + '</p></div>' +
-      '<div class="me-btns"><span class="me-btn' + (meSel === 0 ? ' cfocus' : '') + '">아이콘 · 이름 · 색 바꾸기</span><span class="me-btn' + (meSel === 1 ? ' cfocus' : '') + '">다른 프로필로</span></div>';
-    $('meGrid').innerHTML = cards.map(function (c, i) {
-      return '<div class="me-card' + (meSel === i + 2 ? ' cfocus' : '') + '" style="' + c.style + '"><h3>' + c.title + '</h3>' + c.body + '</div>';
-    }).join('');
+    meItems = w;
+    meSel = Math.max(0, Math.min(w.length - 1, meSel));
+    var bgImg = P.bg && (P.bg.type === 'preset' || P.bg.type === 'photo') ? 'url(&quot;' + bgUrl(P.bg) + '&quot;)' : 'none';
+    var html = function (i) { var x = w[i]; return '<div class="' + x.cls + (i === meSel ? ' cfocus' : '') + '" data-mi="' + i + '">' + x.html + '</div>'; };
+    $('meHead').innerHTML = '';
+    $('meGrid').innerHTML = '<div class="mr-bg" style="--pc:' + esc(pr.color) + ';background-image:linear-gradient(120deg,' + hexA(pr.color, .38) + ',rgba(8,10,16,.9) 50%,rgba(8,10,16,.94)),' + bgImg + '"></div>' +
+      '<div class="mr-col left">' + hero + '<div class="mr-btns">' + html(0) + html(1) + '</div>' + html(2) + '</div>' +
+      '<div class="mr-col mid">' + html(3) + html(4) + '</div>' +
+      '<div class="mr-col right">' + html(5) + html(6) + html(7) + '</div>';
   }
   function meKey(k) {
-    var n = meItems.length - 2, cols = 4;
     if (k === 'back') { closeMe(); return; }
-    if (k === 'ok') { var it = meItems[meSel]; if (it) fromMe(it.act); return; }
-    if (meSel < 2) {
-      if (k === 'left') meSel = 0; else if (k === 'right') meSel = 1; else if (k === 'down') meSel = 2;
-    } else {
-      var i = meSel - 2;
-      if (k === 'left' && i % cols > 0) i--;
-      else if (k === 'right' && i % cols < cols - 1 && i + 1 < n) i++;
-      else if (k === 'up') { if (i < cols) { meSel = 0; renderMe(); return; } i -= cols; }
-      else if (k === 'down' && i + cols < n) i += cols;
-      meSel = i + 2;
-    }
-    renderMe();
+    if (k === 'ok' || k === 'longok') { var it = meItems[meSel]; if (it) fromMe(it.act); return; }
+    var els = Array.prototype.slice.call(document.querySelectorAll('#meGrid [data-mi]'));
+    var cur = els[meSel], next = cur && nearest(els, cur, k);
+    if (next) { meSel = +next.getAttribute('data-mi'); renderMe(); }
   }
 
 
