@@ -2371,14 +2371,19 @@
         act: function () { twice('nopin', function () { ROOT.pinHash = ''; savePrefs(); render(); toast('PIN을 껐어요'); }); } }] : []);
     if (grp === 'study') {
       st = studyStatus();
-      return [
-        { name: '평가 모드 시작', sub: !st.configured ? '먼저 아래 QR로 평가 서버를 연결해요' : !st.kit ? '평가 키트를 받는 중이에요. 잠시 뒤 다시 눌러요' : '대기 화면이 열리고, 참가자 · 평가자 폰을 QR로 연결해요', action: true,
+      // two separate entries, as in TV Home: getting ready (features · plans) and running it with participants
+      var studyRow = function (mode, name, ready) {
+        return { name: name, sub: !st.configured ? '먼저 아래 QR로 평가 서버를 연결해요' : !st.kit ? '평가 키트를 받는 중이에요. 잠시 뒤 다시 눌러요' : ready, action: true,
           act: function () {
             if (!SN) { toast('TV에서만 할 수 있어요'); return; }
             if (!st.configured) { toast('먼저 폰으로 QR을 찍어 평가 서버를 연결해 주세요'); return; }
             if (!window.TVStudy) { loadKit(st.kit); SN.studyRefresh(); toast('평가 키트를 준비하는 중이에요. 잠시 뒤 다시 눌러 주세요'); return; }
-            closePanelQuiet(); window.TVStudy.open();
-          } },
+            closePanelQuiet(); window.TVStudy.open(mode ? '@prep' : undefined);
+          } };
+      };
+      return [
+        studyRow('prep', 'A. 평가 준비 · 기능과 계획', '기능을 TV에서 써 보고, 계획을 설계하며 참가자 화면을 리허설해요 (기록 안 함)'),
+        studyRow('', 'B. 평가 진행 · 참가자', '평가를 고르면 참가자 대기 화면이 떠요 · 결과가 기록돼요'),
         { name: '평가 서버', sub: st.configured ? '연결됨 · 바꾸려면 아래 QR' : '폰으로 아래 QR을 찍어 주소와 업로드 키를 넣어요', val: st.configured ? '연결됨' : '연결 안 됨' },
         { name: '평가 키트', sub: '평가 화면 · 폰 페이지 묶음 (평가 서버에서 받아요, 앱 업데이트 없이 바뀌어요)', val: st.kit || '없음', action: true,
           act: function () { if (SN) { SN.studyRefresh(); toast('새 평가 키트가 있는지 확인해요'); } } }
