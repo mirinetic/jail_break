@@ -108,6 +108,8 @@ class StudyKit(private val activity: MainActivity) {
             else { val (c, t) = call(url(), key(), "/api/feature-state", String(body, Charsets.UTF_8)); if (c == 200) { fetchCatalog(); json(200, t) } else json(502, """{"error":"cloud $c"}""") }
         method == "POST" && path == "/api/study/proto-clear" ->
             if (!pinOk(uri)) json(403, """{"error":"pin"}""") else json(200, JSONObject().put("freed", protoClear()).toString())
+        method == "GET" && path == "/api/study/stored" -> if (pinOk(uri)) json(200, storedSummary()) else json(403, """{"error":"pin"}""")
+        method == "POST" && path == "/api/study/stored-clear" -> if (pinOk(uri)) json(200, storedClear(uri.getQueryParameter("study").orEmpty())) else json(403, """{"error":"pin"}""")
         method == "GET" && path == "/api/study/results" ->
             if (pinOk(uri)) Reply(200, "application/json; charset=utf-8", results().toByteArray()) else json(403, """{"error":"pin"}""")
         else -> null
@@ -211,6 +213,31 @@ class StudyKit(private val activity: MainActivity) {
         else { File(File(files, "study-requests").apply { mkdirs() }, "$id.json").writeText(json); if (configured()) queue("req-$id.json", "request", o); id }
     } catch (e: Exception) { null }
     private fun results(): String = File(files, "studies").listFiles { f -> f.name.endsWith(".json") }?.sortedBy { it.name }.orEmpty().joinToString(",", "[", "]") { it.readText() }
+
+    /** 데이터 관리: results kept on this TV, per study, and how many still wait for the cloud. */
+    fun storedSummary(): String {
+        val by = LinkedHashMap<String, IntArray>()   // study -> [sessions, waiting]
+        File(files, "studies").listFiles { f -> f.name.endsWith(".json") }?.forEach { f ->
+            try { val id = JSONObject(f.readText()).optString("study", "?"); by.getOrPut(id) { IntArray(2) }[0]++ } catch (_: Exception) {}
+        }
+        outbox().listFiles { x -> x.name.endsWith(".json") && !x.name.startsWith("def-") && !x.name.startsWith("req-") && !x.name.startsWith("fb-") }?.forEach { f ->
+            try { val id = JSONObject(f.readText()).optJSONObject("study")?.optString("id") ?: "?"; by.getOrPut(id) { IntArray(2) }[1]++ } catch (_: Exception) {}
+        }
+        val arr = JSONArray()
+        for ((id, c) in by) arr.put(JSONObject().put("study", id).put("n", c[0]).put("waiting", c[1]))
+        return JSONObject().put("studies", arr).put("cloud", configured()).toString()
+    }
+    /** Deletes one study's results from this TV — only when none of them still waits for the cloud. */
+    fun storedClear(study: String): String {
+        val waiting = outbox().listFiles { x -> x.name.endsWith(".json") && !x.name.startsWith("def-") && !x.name.startsWith("req-") && !x.name.startsWith("fb-") }
+            ?.count { try { JSONObject(it.readText()).optJSONObject("study")?.optString("id") == study } catch (e: Exception) { false } } ?: 0
+        if (waiting > 0) return JSONObject().put("ok", false).put("message", "아직 클라우드에 안 올라간 결과가 ${waiting}건 있어요. 인터넷 연결 뒤 다시 해 주세요").toString()
+        var n = 0
+        File(files, "studies").listFiles { f -> f.name.endsWith(".json") }?.forEach { f ->
+            try { if (JSONObject(f.readText()).optString("study") == study && f.delete()) n++ } catch (_: Exception) {}
+        }
+        return JSONObject().put("ok", true).put("deleted", n).toString()
+    }
 
     /** Sends what is waiting, oldest first; tells the page how many sessions are left ('tvhome-study-upload'). */
     fun flush() {
