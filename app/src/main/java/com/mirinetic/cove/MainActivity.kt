@@ -33,6 +33,10 @@ class MainActivity : Activity() {
     lateinit var calendars: CalendarFetcher
         private set
 
+    /** 사용자 평가 (the 평가 키트 from the study server). */
+    lateinit var study: StudyKit
+        private set
+
     /** The phone remote server, so the settings screen can show whether it is running. */
     var remote: RemoteServer? = null
         private set
@@ -40,6 +44,8 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private var okDown = false
     private var okLong = false
+    private var backDown = false
+    private var backLong = false
 
     private val packageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -61,7 +67,8 @@ class MainActivity : Activity() {
         apps = AppRepository(this)
         updater = Updater(this)
         calendars = CalendarFetcher(this)
-        val content = LocalContent(this, apps, store)
+        study = StudyKit(this)
+        val content = LocalContent(this, apps, store, study)
 
         web = WebView(this).apply {
             setBackgroundColor(Color.BLACK)
@@ -82,6 +89,7 @@ class MainActivity : Activity() {
                     request.url.host != LocalContent.HOST
             }
             addJavascriptInterface(Bridge(this@MainActivity), "CoveNative")
+            addJavascriptInterface(study.Bridge(), "StudyNative")
         }
         setContentView(web)
         hideSystemUi()
@@ -89,6 +97,7 @@ class MainActivity : Activity() {
         web.requestFocus()
 
         remote = RemoteServer(this).also { it.start() }
+        study.refresh()   // newest 평가 키트 and feature list, if a study server is set up
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -104,6 +113,11 @@ class MainActivity : Activity() {
             registerReceiver(packageReceiver, filter)
             registerReceiver(installReceiver, installFilter)
         }
+    }
+
+    /** Runs JavaScript in the page as is (the 평가 키트's events). Safe to call from any thread. */
+    fun pageJs(code: String) {
+        runOnUiThread { if (::web.isInitialized) web.evaluateJavascript(code, null) }
     }
 
     /** Runs a line of JavaScript in the home screen page. Safe to call from any thread. */
@@ -145,6 +159,15 @@ class MainActivity : Activity() {
                     okDown = false
                     okLong = false
                 }
+            }
+            return true
+        }
+        // During 평가 모드, Back also acts on release, so holding it can open the participant's menu ("longback").
+        if (key == "back" && ::study.isInitialized && study.active) {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> if (event.repeatCount == 0) { backDown = true; backLong = false }
+                    else if (backDown && !backLong) { backLong = true; js("Cove.key('longback',0)") }
+                KeyEvent.ACTION_UP -> { if (backDown && !backLong) js("Cove.key('back',0)"); backDown = false; backLong = false }
             }
             return true
         }

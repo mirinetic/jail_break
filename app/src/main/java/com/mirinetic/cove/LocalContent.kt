@@ -16,6 +16,7 @@ class LocalContent(
     private val context: Context,
     private val apps: AppRepository,
     private val store: Store,
+    private val study: StudyKit,
 ) {
     companion object {
         const val HOST = "cove.local"
@@ -43,6 +44,9 @@ class LocalContent(
                 path.startsWith("/banner/") -> bytes("image/png", apps.image("banner", path.removePrefix("/banner/")))
                 path.startsWith("/icon/") -> bytes("image/png", apps.image("icon", path.removePrefix("/icon/")))
                 path.startsWith("/glyph/") -> bytes("image/png", apps.image("glyph", path.removePrefix("/glyph/")))
+                // the 평가 키트 (downloaded) and the study data it reads: Cove's feature list, the kit's study files
+                path.startsWith("/kit/") -> study.kitFile(path.removePrefix("/kit/"))?.let { ok(mimeOf(it.name), it.inputStream()) } ?: notFound()
+                path.startsWith("/studies/") -> study.page(path)?.takeIf { it.code == 200 }?.let { ok(mimeOf(path), java.io.ByteArrayInputStream(it.body)) } ?: notFound()
                 path.startsWith("/photo/") -> {
                     val file = store.photoFile(path.removePrefix("/photo/").removeSuffix(".jpg"))
                     if (file == null) notFound() else ok("image/jpeg", file.inputStream())

@@ -6,6 +6,9 @@
   'use strict';
 
   var N = window.CoveNative || null;
+  var SN = window.StudyNative || null;   // 사용자 평가 (the 평가 키트's native side)
+  // Study signals: what the evaluated features just did (only heard while 평가 모드 runs)
+  function sig(name, data) { if (window.TVStudy) window.TVStudy.signal(name, data || {}); }
 
   // ---------- catalogue ----------
   var PRESETS = [
@@ -1826,7 +1829,8 @@
     if (!pr || id === ROOT.current) return;
     var needPin = hasPin() && !isAdmin() && (id === master().id || pr.lockIn || isKids());
     if (needPin) {
-      openPin({ mode: 'check', title: isKids() ? '키즈 프로필에서 나가기' : '"' + pr.name + '" 프로필 열기', onOk: function () { doSwitch(id, quiet); } });
+      sig('cove.pin.ask', { why: 'switch' });
+      openPin({ mode: 'check', title: isKids() ? '키즈 프로필에서 나가기' : '"' + pr.name + '" 프로필 열기', onOk: function () { sig('cove.pin.ok', { why: 'switch' }); doSwitch(id, quiet); } });
       return;
     }
     doSwitch(id, quiet);
@@ -1836,6 +1840,7 @@
     unlockedUntil = 0;   // grown-up access never carries over to another profile
     ROOT.current = id;
     P = current().prefs;
+    sig('cove.profile.switch', { id: id, kind: current().kind || 'normal', master: id === master().id });
     lastFocus.home = null;
     moving = null;
     savePrefs();
@@ -2123,6 +2128,7 @@
     var list = ROOT.profiles;
     sw = { row: 0, i: Math.max(0, list.indexOf(current())), b: 0 };
     $('switcher').hidden = false;
+    sig('cove.switcher.open');
     renderSwitcher();
   }
   function closeSwitcher(quiet) { sw = null; $('switcher').hidden = true; if (!quiet) restoreFocus('home'); }
@@ -2317,7 +2323,7 @@
   // profiles get one "마스터 메뉴 열기" row instead, which asks for the PIN.
   var SET_GROUPS = [
     ['remote', '폰 리모컨', null], ['time', '시간 · 지역', 'admin'], ['ambient', '화면 보호기 · 대기 화면', 'adult'], ['calendar', '캘린더', 'adult'],
-    ['family', '가족 · 프로필', 'admin'], ['system', '시스템', 'admin'], ['about', '업데이트 · 정보', null]
+    ['family', '가족 · 프로필', 'admin'], ['system', '시스템', 'admin'], ['study', '사용자 평가', 'admin'], ['about', '업데이트 · 정보', null]
   ];
   function setSummary(id) {
     var st;
@@ -2326,6 +2332,7 @@
     if (id === 'ambient') { var a = ambSettings(); return '대기 화면 ' + labelOf(AMB_IDLE, a.idle) + ' · 넘김 ' + labelOf(AMB_INTERVALS, a.interval); }
     if (id === 'calendar') { var n = calData().subs.length; return n ? '구독 캘린더 ' + n + '개' : '구독 캘린더 없음'; }
     if (id === 'family') return ROOT.profiles.length + '명 · 마스터 ' + master().name + ' · PIN ' + (hasPin() ? '있음' : '없음');
+    if (id === 'study') { st = studyStatus(); return !st.configured ? '평가 서버 연결 필요 · 폰으로 QR' : st.kit ? '평가 키트 준비됨 · 평가 모드 시작' : '평가 키트를 받는 중…'; }
     if (id === 'system') { st = overrideStatus(); return '홈 버튼 전환 ' + (!st.service ? '권한 필요' : st.enabled ? '켜짐' : '일시 중지'); }
     return (N ? N.version() : '미리보기') + (update && update.ok && update.available ? ' · 새 버전 ' + update.latestName : '');
   }
@@ -2362,6 +2369,21 @@
         act: function () { openPin({ mode: 'new' }); } }
     ].concat(hasPin() ? [{ name: 'PIN 끄기', sub: '모든 잠금이 풀려요', danger: true, action: true, val: armed === 'nopin' ? '한 번 더 누르면 끄기' : '',
         act: function () { twice('nopin', function () { ROOT.pinHash = ''; savePrefs(); render(); toast('PIN을 껐어요'); }); } }] : []);
+    if (grp === 'study') {
+      st = studyStatus();
+      return [
+        { name: '평가 모드 시작', sub: !st.configured ? '먼저 아래 QR로 평가 서버를 연결해요' : !st.kit ? '평가 키트를 받는 중이에요. 잠시 뒤 다시 눌러요' : '대기 화면이 열리고, 참가자 · 평가자 폰을 QR로 연결해요', action: true,
+          act: function () {
+            if (!SN) { toast('TV에서만 할 수 있어요'); return; }
+            if (!st.configured) { toast('먼저 폰으로 QR을 찍어 평가 서버를 연결해 주세요'); return; }
+            if (!window.TVStudy) { loadKit(st.kit); SN.studyRefresh(); toast('평가 키트를 준비하는 중이에요. 잠시 뒤 다시 눌러 주세요'); return; }
+            closePanelQuiet(); window.TVStudy.open();
+          } },
+        { name: '평가 서버', sub: st.configured ? '연결됨 · 바꾸려면 아래 QR' : '폰으로 아래 QR을 찍어 주소와 업로드 키를 넣어요', val: st.configured ? '연결됨' : '연결 안 됨' },
+        { name: '평가 키트', sub: '평가 화면 · 폰 페이지 묶음 (평가 서버에서 받아요, 앱 업데이트 없이 바뀌어요)', val: st.kit || '없음', action: true,
+          act: function () { if (SN) { SN.studyRefresh(); toast('새 평가 키트가 있는지 확인해요'); } } }
+      ];
+    }
     if (grp === 'system') {
       st = overrideStatus();
       return [
@@ -2537,6 +2559,23 @@
       '<p>폰 카메라로 QR을 찍으면 리모컨이 열려요.</p><b>' + esc(addr) + '</b>' + status + '<div>' + tips + '</div>' + ips + '</div></div>';
   }
 
+  function studyStatus() { try { return SN ? JSON.parse(SN.studyStatus()) : { configured: false, kit: '', setup: '', qr: '' }; } catch (e) { return { configured: false, kit: '' }; } }
+  function studyBlock() {
+    var st = studyStatus();
+    return '<div class="pair"><div class="qr">' + (st.qr || '') + '</div><div class="diag"><p>' + (st.configured ? '평가 서버를 바꾸려면' : '처음 한 번,') + ' 폰으로 QR을 찍어 평가 서버 주소와 업로드 키를 넣어요.</p>' +
+      '<div>평가는 TV Home과 같은 평가 서버 · 대시보드로 모여요. 평가 화면은 평가 키트로 받아서 Cove 앱 크기는 그대로예요.</div></div></div>';
+  }
+  // The 평가 키트: a script from the study server, kept on this TV (files/kit). Loaded once it is there.
+  var kitLoaded = '';
+  function loadKit(ver) {
+    if (!ver || kitLoaded || window.TVStudy) return;
+    kitLoaded = ver;
+    var s = document.createElement('script');
+    s.src = '/kit/study-kit.js?v=' + encodeURIComponent(ver);
+    s.onload = function () { if (window.TVStudy) window.TVStudy.onHome = function () { window.Cove.home(); }; };
+    s.onerror = function () { kitLoaded = ''; };
+    document.body.appendChild(s);
+  }
   function helpBlock() {
     var pkg = N ? N.selfPackage() : 'com.mirinetic.cove';
     return '<div class="help"><div><b>왜 꺼지나요?</b> Downloader나 USB로 설치한 앱은 안드로이드 13부터 접근성 권한이 막혀요. 켜자마자 다시 꺼진다면 이 경우예요.</div>' +
@@ -2563,6 +2602,7 @@
       : panel.type === 'allow' ? '허용 앱 · ' + ((profileById(panel.target) || current()).name) : titles[panel.type][1];
     $('pExtra').innerHTML = panel.confirm ? '<div class="help"><b>바꾼 내용을 저장할까요?</b> 저장하지 않으면 바꾸기 전으로 돌아가요.</div>'
       : panel.type === 'setgrp' && panel.grp === 'remote' ? remoteBlock()
+      : panel.type === 'setgrp' && panel.grp === 'study' ? studyBlock()
       : panel.type === 'setgrp' && panel.grp === 'system' && helpOpen ? helpBlock()
       : panel.type === 'usage' ? '<div class="help">프로필마다 앱을 얼마나 썼는지 보고, 하루 사용 시간을 정해요. Cove 미니 앱은 정확히, TV 앱은 Cove로 돌아오기까지의 시간으로 어림잡아요.</div>'
       : panel.type === 'ambient' ? '<div class="help"><div><b>TV 화면 보호기 목록에 Cove가 없나요?</b> 일부 Google TV는 이 메뉴를 숨겨 둬요. PC나 폰에서 ADB로 한 번 설정하면 돼요:</div><code>adb shell settings put secure screensaver_components com.mirinetic.cove/.CoveDream</code></div>'
@@ -3303,7 +3343,10 @@
   }
 
   // ---------- keys ----------
-  function key(k) {
+  function key(k, rep) {
+    // 평가 모드 first: its screens, menus and a new feature open full screen take the remote
+    if (window.TVStudy && window.TVStudy.active() && window.TVStudy.key(k, rep || 0)) return;
+    if (k === 'longback') k = 'back';
     if (wake()) return;
     if (pinState) { pinKey(k); return; }
     if (window.CoveKeyboard.isOpen()) { window.CoveKeyboard.key(k); return; }
@@ -3372,8 +3415,15 @@
     base = 'me';
     $('me').hidden = false;
     renderMe();
+    sig('cove.me.open', { again: !!again });
   }
-  function closeMe() { base = 'home'; $('me').hidden = true; restoreFocus('home'); }
+  // which card of 나의 프로필 (for study signals)
+  function meCard(it) {
+    if (!it) return '';
+    var m = /mr-(usage|home|cal|memo|cin|cards|island)/.exec(it.cls);
+    return m ? m[1] : it.html === '프로필 설정' ? 'profset' : it.html === '다른 프로필' ? 'switch' : 'other';
+  }
+  function closeMe() { sig('cove.me.close'); base = 'home'; $('me').hidden = true; restoreFocus('home'); }
   // Opens another screen from a card; Back there comes back here.
   function fromMe(fn) { returnMe = true; $('me').hidden = true; base = 'home'; fn(); if (base === 'home' && !panel && !pinState) { returnMe = false; openMe(true); } }
   // Another screen opening on top of 나의 프로필 (voice, a PIN that let a card through): Back returns here.
@@ -3503,7 +3553,7 @@
   var ME_COLS = [[[0, 1], [2]], [[3], [4]], [[5], [8], [6, 7]]];
   function meKey(k) {
     if (k === 'back') { closeMe(); return; }
-    if (k === 'ok' || k === 'longok') { var it = meItems[meSel]; if (it) fromMe(it.act); return; }
+    if (k === 'ok' || k === 'longok') { var it = meItems[meSel]; if (it) { sig('cove.me.go', { card: meCard(it) }); fromMe(it.act); } return; }
     var box = function (i) { var e = document.querySelector('#meGrid [data-mi="' + i + '"]'); return e ? e.getBoundingClientRect() : null; };
     var c, r, j;
     ME_COLS.forEach(function (col, ci) { col.forEach(function (row, ri) { var x = row.indexOf(meSel); if (x >= 0) { c = ci; r = ri; j = x; } }); });
@@ -3530,7 +3580,7 @@
         if (best) next = step > 0 ? best[0] : best[best.length - 1];
       }
     }
-    if (next !== null && next !== undefined) { meSel = next; renderMe(); }
+    if (next !== null && next !== undefined) { meSel = next; renderMe(); sig('cove.me.focus', { card: meCard(meItems[meSel]) }); }
   }
 
 
@@ -3845,6 +3895,8 @@
     key: key,
     say: say,
     calFetched: calFetched,
+    // a new 평가 키트 arrived: used right away when none is loaded yet (a newer one replaces it at the next start)
+    kitReady: function (ver) { loadKit(ver); if (panel && panel.type === 'setgrp') renderPanel(); },
     feedFetched: feedFetched,
     memo: function (text, color) { addMemo(text, color); },
     textResult: textResult,
@@ -3942,4 +3994,5 @@
   render();
   syncCalendars(true);
   setInterval(tick, 10000);
+  if (SN) loadKit(studyStatus().kit);   // 사용자 평가, when a 평가 키트 is already on this TV
 })();

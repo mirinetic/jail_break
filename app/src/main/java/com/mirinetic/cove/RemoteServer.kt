@@ -121,7 +121,16 @@ class RemoteServer(private val activity: MainActivity) {
                 when {
                     method == "GET" && (path == "/" || path == "/remote") ->
                         send(out, 200, "text/html; charset=utf-8", activity.assets.open("www/remote.html").use { it.readBytes() })
+                    // 사용자 평가: the setup page (study server address + key), then the kit's pages
+                    method == "GET" && path == "/study-setup" ->
+                        send(out, 200, "text/html; charset=utf-8", activity.assets.open("www/study-setup.html").use { it.readBytes() })
+                    method == "GET" && activity.study.page(path) != null -> activity.study.page(path)!!.let { send(out, it.code, it.type, it.body) }
                     !paired -> json(out, 403, """{"error":"pair"}""")
+                    path.startsWith("/api/study/") -> {
+                        val body = if (length in 1..524_288) ByteArray(length).also { DataInputStream(input).readFully(it) } else ByteArray(0)
+                        val r = activity.study.api(method, path, uri, body)
+                        if (r == null) json(out, 404, """{"error":"not found"}""") else send(out, r.code, r.type, r.body)
+                    }
                     method == "POST" && path == "/api/key" -> {
                         val key = uri.getQueryParameter("k").orEmpty()
                         if (key in KEYS) activity.js("Cove.key('$key',0)")
@@ -200,7 +209,7 @@ class RemoteServer(private val activity: MainActivity) {
 
     private fun send(out: OutputStream, code: Int, type: String, body: ByteArray) {
         val reason = when (code) {
-            200 -> "OK"; 400 -> "Bad Request"; 403 -> "Forbidden"; 404 -> "Not Found"; 413 -> "Payload Too Large"
+            200 -> "OK"; 400 -> "Bad Request"; 403 -> "Forbidden"; 404 -> "Not Found"; 413 -> "Payload Too Large"; 502 -> "Bad Gateway"; 503 -> "Service Unavailable"
             else -> "Error"
         }
         val head = "HTTP/1.1 $code $reason\r\n" +
