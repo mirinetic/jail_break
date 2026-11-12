@@ -93,6 +93,28 @@ class Bridge(private val activity: MainActivity) {
         activity.store.overrideOn = on
     }
 
+    /**
+     * Closes Cove and shows the TV's own home screen. Cove is a launcher, so Back never does this; it is a
+     * settings action. With the home button override on, the next Home press brings Cove back (unless
+     * keepOff is true, which also switches the override off).
+     */
+    @JavascriptInterface
+    fun exit(keepOff: Boolean) {
+        if (keepOff) activity.store.overrideOn = false
+        activity.store.exitUntil = android.os.SystemClock.uptimeMillis() + 4000
+        activity.runOnUiThread {
+            val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            @Suppress("DEPRECATION")
+            val stock = activity.packageManager.queryIntentActivities(home, 0)
+                .map { it.activityInfo }
+                .firstOrNull { it.packageName != activity.packageName && it.packageName != "com.android.settings" && it.packageName != "com.android.tv.settings" }
+            try {
+                if (stock != null) activity.startActivity(Intent(home).setClassName(stock.packageName, stock.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: Exception) { /* nothing else to show: just close */ }
+            activity.finishAndRemoveTask()
+        }
+    }
+
     @JavascriptInterface
     fun openAccessibility() = startScreen(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 

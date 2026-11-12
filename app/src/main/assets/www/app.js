@@ -2398,7 +2398,7 @@
         { name: '권한이 켜지지 않을 때', sub: '안드로이드 "제한된 설정" 안내', val: helpOpen ? '닫기' : '보기', action: true, act: function () { helpOpen = !helpOpen; renderPanel(); } },
         { name: 'Cove 앱 정보 열기', sub: '여기서 "제한된 설정 허용"을 찾아요', action: true, act: function () { if (N) N.appInfo(N.selfPackage()); else toast('TV에서만 열 수 있어요'); } },
         { name: 'TV 설정 열기', action: true, act: function () { if (N) N.openTvSettings(); else toast('TV에서만 열 수 있어요'); } }
-      ];
+      ].concat(exitRows(st));
     }
     return [
       { need: 'admin', name: '업데이트 확인', sub: '새 버전이 있으면 바로 설치해요', val: updateLabel(), action: true,
@@ -2408,7 +2408,26 @@
           else { update = { phase: 'checking' }; renderPanel(); N.checkUpdate(); }
         } },
       { name: '버전', val: N ? N.version() : '미리보기' }
-    ];
+    ].concat(exitRows(overrideStatus()));
+  }
+
+  // Cove is the TV's home, so Back never closes it; closing is a settings action that shows the TV's own home.
+  function exitRows(st) {
+    var back = st.service && st.enabled;
+    function go(off) {
+      if (!N || !N.exit) { toast('TV에서만 종료할 수 있어요'); return; }
+      try { if (SN && SN.studyFlush) SN.studyFlush(); } catch (e) {}
+      N.exit(!!off);
+    }
+    return [
+      { need: 'admin', id: 'exit', name: 'Cove 종료 (앱 닫기)', danger: true, action: true,
+        sub: back ? 'TV 기본 홈으로 나가요 · 홈 버튼을 누르면 다시 Cove가 열려요' : 'TV 기본 홈으로 나가요 · 앱 목록에서 Cove를 누르면 다시 열려요',
+        val: armed === 'exit' ? '한 번 더 누르면 종료' : '',
+        act: function () { twice('exit', function () { go(false); }); } }
+    ].concat(back ? [{ need: 'admin', id: 'exitoff', name: 'Cove 종료 + 홈 버튼 전환 끄기', danger: true, action: true,
+        sub: '홈 버튼도 TV 기본 홈으로 · 다시 쓰려면 Cove를 열고 시스템 → 홈 버튼으로 Cove 열기',
+        val: armed === 'exitoff' ? '한 번 더 누르면 종료' : '',
+        act: function () { twice('exitoff', function () { go(true); }); } }] : []);
   }
 
   function rowsFor(type) {
@@ -3885,6 +3904,7 @@
     // remote keys
     var dirs = [['위', 'up'], ['아래', 'down'], ['왼쪽', 'left'], ['오른쪽', 'right'], ['선택', 'ok'], ['확인', 'ok'], ['뒤로', 'back']];
     for (var d = 0; d < dirs.length; d++) if (t === dirs[d][0] || t === dirs[d][0] + '로') { key(dirs[d][1]); return; }
+    if (has(t, ['종료', '앱 닫기', '꺼 줘', '꺼줘']) && has(t, ['cove', '코브', '앱'])) { openPanel('setgrp', { grp: 'about', back: { type: 'settings', id: 'about' } }); toast('여기서 Cove 종료를 두 번 누르면 닫혀요'); done('종료'); return; }
     if (has(t, ['설정'])) { openPanel('settings'); done('설정'); return; }
 
     toast('🎙 "' + raw + '" 명령을 이해하지 못했어요');

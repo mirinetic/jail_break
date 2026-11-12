@@ -48,8 +48,10 @@ class HomeOverrideService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
         if (homes.isEmpty()) refreshHomes()
         if (pkg !in homes) return
-        if (!Store(this).overrideOn) return
+        val store = Store(this)
+        if (!store.overrideOn) return
         val now = SystemClock.uptimeMillis()
+        if (now < store.exitUntil) return   // Cove was just closed on purpose: let the TV's own home stay
         if (now - lastJump < 700) return
         lastJump = now
         startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

@@ -31,6 +31,13 @@ class Store(context: Context) {
         }
 
     /** Whether the accessibility service should bring Cove back over the stock home screen. */
+    /** Until this time (uptime ms) the home button override lets the stock home screen stay: Cove was just closed. */
+    var exitUntil: Long
+        get() = sp.getLong("exitUntil", 0L)
+        set(value) {
+            sp.edit().putLong("exitUntil", value).apply()
+        }
+
     var overrideOn: Boolean
         get() = sp.getBoolean("override", true)
         set(value) {
