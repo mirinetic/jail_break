@@ -100,6 +100,18 @@ class StudyKit(private val activity: MainActivity) {
             if (!pinOk(uri)) json(403, """{"error":"pin"}""")
             else if (!configured()) json(503, """{"error":"no cloud"}""")
             else { val (c, t) = call(url(), key(), "/api/features"); if (c == 200) json(200, JSONObject(t).put("protoBytes", protoBytes()).toString()) else json(502, """{"error":"cloud $c"}""") }
+        path.startsWith("/api/study/ai/") ->   // AI 작업 큐 (TV Home studies/ai-jobs.md): the evaluator's pages ask and decide through the TV
+            if (!pinOk(uri)) json(403, """{"error":"pin"}""")
+            else if (!configured()) json(503, """{"error":"no cloud"}""")
+            else {
+                val sub = path.removePrefix("/api/study/ai")
+                if (!Regex("^/jobs(/[A-Za-z0-9_-]{1,64}/decide)?$").matches(sub)) json(404, """{"error":"not found"}""")
+                else {
+                    val qs = uri.queryParameterNames.filter { it != "t" && it != "pin" }.joinToString("&") { "$it=" + java.net.URLEncoder.encode(uri.getQueryParameter(it).orEmpty(), "UTF-8") }
+                    val (c, t) = call(url(), key(), "/api/ai$sub" + (if (qs.isEmpty()) "" else "?$qs"), if (method == "POST") String(body, Charsets.UTF_8) else null)
+                    if (c == 0) json(503, """{"error":"offline"}""") else json(c, t)
+                }
+            }
         method == "GET" && path == "/api/study/feedback" ->
             if (!pinOk(uri)) json(403, """{"error":"pin"}""")
             else { val (c, t) = call(url(), key(), "/api/feedback"); if (c == 200) json(200, t) else json(502, """{"error":"cloud $c"}""") }
