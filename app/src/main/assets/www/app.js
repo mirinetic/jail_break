@@ -3910,6 +3910,7 @@
     var dirs = [['위', 'up'], ['아래', 'down'], ['왼쪽', 'left'], ['오른쪽', 'right'], ['선택', 'ok'], ['확인', 'ok'], ['뒤로', 'back']];
     for (var d = 0; d < dirs.length; d++) if (t === dirs[d][0] || t === dirs[d][0] + '로') { key(dirs[d][1]); return; }
     if (has(t, ['종료', '앱 닫기', '꺼 줘', '꺼줘']) && has(t, ['cove', '코브', '앱'])) { openPanel('setgrp', { grp: 'about', back: { type: 'settings', id: 'about' } }); toast('여기서 Cove 종료를 두 번 누르면 닫혀요'); done('종료'); return; }
+    if (has(t, ['평가 준비', '평가 설계', '평가 진행', '사용자 평가']) && window.TVStudy && may('admin')) { var prep = has(t, ['준비', '설계']); closePanelQuiet(); window.TVStudy.open(prep ? '@prep' : undefined); done(prep ? '평가 준비' : '평가 진행'); return; }
     if (has(t, ['설정'])) { openPanel('settings'); done('설정'); return; }
 
     toast('🎙 "' + raw + '" 명령을 이해하지 못했어요');
