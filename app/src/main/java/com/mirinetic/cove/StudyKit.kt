@@ -105,10 +105,11 @@ class StudyKit(private val activity: MainActivity) {
             else if (!configured()) json(503, """{"error":"no cloud"}""")
             else {
                 val sub = path.removePrefix("/api/study/ai")
-                if (!Regex("^/jobs(/[A-Za-z0-9_-]{1,64}/decide)?$").matches(sub)) json(404, """{"error":"not found"}""")
+                if (!Regex("^/(jobs|proposals)(/[A-Za-z0-9_-]{1,64}/decide)?$").matches(sub)) json(404, """{"error":"not found"}""")
                 else {
                     val qs = uri.queryParameterNames.filter { it != "t" && it != "pin" }.joinToString("&") { "$it=" + java.net.URLEncoder.encode(uri.getQueryParameter(it).orEmpty(), "UTF-8") }
                     val (c, t) = call(url(), key(), "/api/ai$sub" + (if (qs.isEmpty()) "" else "?$qs"), if (method == "POST") String(body, Charsets.UTF_8) else null)
+                    if (c == 200 && sub.startsWith("/proposals/")) fetchCatalog()   // an approved category joins the catalog
                     if (c == 0) json(503, """{"error":"offline"}""") else json(c, t)
                 }
             }
