@@ -117,7 +117,7 @@ class StudyKit(private val activity: MainActivity) {
             else { val (c, t) = call(url(), key(), "/api/feedback"); if (c == 200) json(200, t) else json(502, """{"error":"cloud $c"}""") }
         method == "POST" && path == "/api/study/feature-state" ->
             if (!pinOk(uri)) json(403, """{"error":"pin"}""")
-            else { val (c, t) = call(url(), key(), "/api/feature-state", String(body, Charsets.UTF_8)); if (c == 200) { fetchCatalog(); json(200, t) } else json(502, """{"error":"cloud $c"}""") }
+            else { val (c, t) = call(url(), key(), "/api/feature-state", String(body, Charsets.UTF_8)); if (c == 200) { fetchCatalog(); json(200, t) } else if (c in 400..499) json(c, t) else json(502, """{"error":"cloud $c"}""") }
         method == "POST" && path == "/api/study/proto-clear" ->
             if (!pinOk(uri)) json(403, """{"error":"pin"}""") else json(200, JSONObject().put("freed", protoClear()).toString())
         method == "GET" && path == "/api/study/stored" -> if (pinOk(uri)) json(200, storedSummary()) else json(403, """{"error":"pin"}""")
