@@ -1,0 +1,29 @@
+name: Clean old build files (오래된 빌드 결과 파일 정리)
+# 앱 설치 파일은 Releases(v1.0.N · latest)에 따로 보관된다. Actions의 결과 파일(artifacts)은 그 사본이라
+# 가장 최근 것 하나만 남기고 지운다. 계정의 Actions 저장 공간(무료 0.5GB)이 차면 새 빌드 결과를 못 올리기 때문.
+# Actions 탭 → 이 작업 → Run workflow 로 실행.
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete all but the newest artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | [.created_at, .id, .size_in_bytes, .name] | @tsv' | sort -r > all.tsv
+          echo "artifacts: $(wc -l < all.tsv)"
+          tail -n +2 all.tsv > old.tsv
+          freed=0; n=0
+          while IFS=$'\t' read -r at id size name; do
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}" && { freed=$((freed + size)); n=$((n + 1)); echo "deleted ${name} (${at})"; }
+          done < old.tsv
+          echo "kept: $(head -n 1 all.tsv | cut -f4)"
+          echo "deleted ${n} files, freed $((freed / 1048576)) MB"
+          echo "지운 결과 파일 ${n}개 · 비운 공간 $((freed / 1048576)) MB · 남긴 것: $(head -n 1 all.tsv | cut -f4)" >> "$GITHUB_STEP_SUMMARY"

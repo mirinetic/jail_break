@@ -67,6 +67,7 @@ jobs:
           path: |
             Cove.apk
             version.json
+          retention-days: 3   # 설치 파일은 Releases에 따로 보관됨. 이건 사본이라 3일 뒤 지움(Actions 저장 공간 절약)
 
       - name: Keep this version (v1.0.N release)
         env:
